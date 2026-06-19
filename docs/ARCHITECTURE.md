@@ -2,6 +2,7 @@
 
 > Status: proposal for the **June 22–28, 2026** development workshop. Owner: Jared.
 > This is a draft to react to and edit, not a final spec. Scope is a **workshop MVP** — it must run live for a week of development, not survive a tour.
+> **2026-06-19:** A multi-station redesign supersedes parts of §1–§6 (number-based identity, body-scan as identity token, altar gate, persona seam, AI choreography, dispatcher) — see `docs/superpowers/specs/2026-06-19-multi-station-architecture-design.md`. Reconcile this document into that design during Tier 0 implementation.
 
 ## 1. The shape of the thing
 
@@ -237,6 +238,14 @@ Maintained here — **no separate questions file**. Add to this section as new q
 - Continue the bespoke-model path, or is flagship + strong prompting acceptable for now?
 - Do you have corpora we can use as few-shot / retrieval / future training data — transcripts of children, elders, mystics, or the collaborators' own writing?
 - Is there per-Oracle reference text that defines how each one should sound?
+
+**Multi-station revision (2026-06-19 spec)** — from `docs/superpowers/specs/2026-06-19-multi-station-architecture-design.md` §15
+- **Numbering hardware** — what assigns the analog ticket number, and can it stay purely analog? Decides whether globally-unique integers hold or a day/session namespace is needed.
+- **Presence capture** — does waiting-room registration stay operator-keyed, or do we add a `/waiting` self-serve kiosk / integrate the dispenser?
+- **Choreography feed routing** — dancers' in-ears, a public loudspeaker, or both? (The channel is built either way; this is output routing.)
+- **Dispatcher knob values** — warm-up pool size `K`, `T_warmup`, `T_max` (anti-starvation), `T_noshow`, `T_stale` (per station), check-in grace window — set defaults, tune in rehearsal.
+- **Choreography agent model** — confirm Sonnet 4.6 vs. another tier for the second live loop.
+- **No-show automation** — keep `T_noshow` operator-flagged, or auto-re-pool like `T_stale`?
 
 ## 13. Risks
 - **Latency** in the voice loop (STT + LLM + TTS stacked). Mitigate with streaming + prompt-cache pre-warm + a faster model on the Oracle turn.
