@@ -1,14 +1,16 @@
 import { useState } from "react";
-import type { VisitorProfile } from "@channelers/shared";
+import type { VisitorProfile, Station } from "@channelers/shared";
 import { api } from "../lib/api";
 
-/** The shared "enter your number" gate. Registers (create-or-fetch) and hands the
- *  resolved record up. Used by /intake, /bodyscan, and /altar (spec §3–§4). */
+/** The shared "enter your number" gate. Without `station` it registers (create-or-fetch);
+ *  with `station` it checks in (permissive — moves the visitor in_progress at that station). */
 export function NumberGate({
   title,
+  station,
   onResolved,
 }: {
   title: string;
+  station?: Station;
   onResolved: (visitor: VisitorProfile) => void;
 }) {
   const [value, setValue] = useState("");
@@ -24,7 +26,8 @@ export function NumberGate({
     setBusy(true);
     setError(null);
     try {
-      onResolved(await api.register(n));
+      const visitor = station ? (await api.checkin(n, station)).record : await api.register(n);
+      onResolved(visitor);
     } catch (e) {
       setError(String(e));
     } finally {
