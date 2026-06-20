@@ -13,6 +13,12 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — Tier 3 Task 3.10: Wire station check-in + presence into `/intake`, `/bodyscan`, `/altar`
+- **What:** Added `useStationPresence` hook call (as first line of each component body, before early `return`) and `station` prop to `<NumberGate>` in all three station screens. With `station` set, NumberGate checks the visitor in (`in_progress@station`) rather than just registering. Hook placed unconditionally before the `if (!visitor)` early return in all three components to comply with Rules of Hooks. `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (69 modules, 383 kB JS). Manual browser end-to-end smoke pending human verification.
+- **Why:** Task 3.10 of the Tier 3 build — connects station screens to the dispatcher so presence LEDs light up and visitor check-in moves them to `in_progress@station`.
+- **Files/areas:** `apps/stage/src/routes/Intake.tsx`, `apps/stage/src/routes/BodyScan.tsx`, `apps/stage/src/routes/Altar.tsx`.
+- **Docs touched:** this changelog.
+
 ## 2026-06-20 — Tier 3 Task 3.9: Stage `/console` master overseer overhaul (3 panels)
 - **What:** Rewrote `apps/stage/src/routes/Console.tsx` — the read-only monitor becomes the master overseer with three panels: (1) Flow funnel (registered/intake/pose/oracleReady/channelling/done counts) + per-station LEDs and occupancy from live `dispatch.state`; (2) Visitors table with inline controls (set persona dropdown, unlock pose-verify, re-pool, remove); (3) Active sessions list with reclaim/end buttons + a 50-entry scrolling event log. Subscribes to `roster`, `dispatch.state`, and `event` WS broadcasts. Auto-refreshes visitor list every 2s and on relevant events. Removed unused `useRef` import from the spec (unused import lint). `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (68 modules, 383 kB JS). Manual browser smoke pending human verification.
 - **Why:** Task 3.9 of the Tier 3 build — consolidates all operator controls into the single `/console` screen so the stage manager can manage visitor flow, persona assignment, and active sessions without leaving the page.
