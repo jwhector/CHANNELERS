@@ -41,11 +41,15 @@ export const PoseVector = z.object({
 });
 export type PoseVector = z.infer<typeof PoseVector>;
 
+/** The three dispatchable stations (spec §4). */
+export const Station = z.enum(["intake", "bodyscan", "altar"]);
+export type Station = z.infer<typeof Station>;
+
 /** Transient dispatch location — a visitor is in exactly one place at a time (spec §3.2).
  *  Tier 1 only ever uses "waiting"/"in_progress"; "called" is Tier 3 (the dispatcher). */
 export const VisitorLocation = z.object({
   state: z.enum(["waiting", "called", "in_progress"]),
-  station: z.enum(["intake", "bodyscan", "altar"]).optional(),
+  station: Station.optional(),
   since: z.string(),
 });
 export type VisitorLocation = z.infer<typeof VisitorLocation>;

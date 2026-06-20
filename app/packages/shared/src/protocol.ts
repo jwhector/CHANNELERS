@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ShowEvent } from "./events";
+import { Station } from "./schemas";
 
 /**
  * Live divination protocol over the /ws socket.
@@ -19,6 +20,7 @@ export const WsClientMsg = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session.say"), sessionId: z.string(), text: z.string() }),
   z.object({ kind: z.literal("session.rejoin"), sessionId: z.string() }),
   z.object({ kind: z.literal("session.end"), sessionId: z.string() }),
+  z.object({ kind: z.literal("station.hello"), station: Station }),
 ]);
 export type WsClientMsg = z.infer<typeof WsClientMsg>;
 
@@ -29,6 +31,57 @@ export type SessionSummary = {
   visitorName: string;
   archetype: string;
   turns: number;
+};
+
+/** ── Dispatcher state (Tier 3) — broadcast on the dispatch.state channel, screens-only ── */
+
+/** A review flag the operator sees on a row (spec §10). */
+export type DispatchFlag = {
+  type: "no-show" | "walk-up" | "auto-reaped";
+  /** Present for auto-reaped: "stale" | "superseded" | "station-offline". */
+  reason?: string;
+  since: string;
+};
+
+/** One station's capacity + who currently holds a slot (called/in_progress/pending). */
+export type DispatchSlot = {
+  station: Station;
+  capacity: number;
+  occupants: { id: string; number: number; state: "called" | "in_progress" | "pending"; since: string }[];
+};
+
+/** A waiting visitor in the callable pool. */
+export type DispatchQueueEntry = {
+  id: string;
+  number: number;
+  name?: string;
+  /** Stations this visitor is eligible to be called to right now (spec §3.3). */
+  eligible: Station[];
+  waitingSince: string;
+  flags: DispatchFlag[];
+};
+
+/** A pending (awaiting confirm) or called (on the board) assignment. */
+export type DispatchCall = {
+  id: string;
+  number: number;
+  station: Station;
+  since: string;
+  flags?: DispatchFlag[];
+};
+
+export type DispatchState = {
+  slots: Record<Station, DispatchSlot>;
+  /** Waiting + eligible visitors (the pool). */
+  queue: DispatchQueueEntry[];
+  /** Assigned, awaiting operator confirm. */
+  pending: DispatchCall[];
+  /** Called → shown on /board. */
+  board: DispatchCall[];
+  /** Station-screen online indicators (from station.hello connections). */
+  stations: Record<Station, boolean>;
+  /** False during the warm-up window (spec §9 — the deliberate early delay). */
+  warmedUp: boolean;
 };
 
 /** Server → client messages. The server constructs these, so a plain union is enough. */
@@ -57,4 +110,5 @@ export type WsServerMsg =
   | { kind: "oracle.done"; sessionId: string; text: string }
   | { kind: "session.ended"; sessionId: string }
   | { kind: "session.error"; sessionId?: string; visitorId?: string; message: string }
-  | { kind: "roster"; sessions: SessionSummary[] };
+  | { kind: "roster"; sessions: SessionSummary[] }
+  | { kind: "dispatch.state"; state: DispatchState };
