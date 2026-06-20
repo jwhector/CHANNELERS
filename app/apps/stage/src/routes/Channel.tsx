@@ -47,7 +47,12 @@ export function Channel() {
   const { connected, send } = useBrainSocket((m: WsServerMsg) => {
     switch (m.kind) {
       case "event":
-        if (m.event.type === "visitor.submitted" || m.event.type === "seeds.ready") {
+        if (
+          m.event.type === "visitor.submitted" ||
+          m.event.type === "seeds.ready" ||
+          m.event.type === "oracle.selected" ||
+          m.event.type === "divination.ended"
+        ) {
           void refresh();
         }
         break;
