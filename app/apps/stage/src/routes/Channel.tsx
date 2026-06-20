@@ -17,7 +17,7 @@ type Line = { role: "visitor" | "oracle"; text: string };
  * Only messages tagged with mySessionId are applied — parallel sessions on other devices
  * don't bleed through.
  */
-export function Station() {
+export function Channel() {
   const [visitors, setVisitors] = useState<VisitorProfile[]>([]);
   const [roster, setRoster] = useState<SessionSummary[]>([]);
   const [claiming, setClaiming] = useState<string | null>(null); // visitorId being claimed
@@ -170,9 +170,6 @@ export function Station() {
   function toggleMic() {
     const rec = recRef.current;
     if (!rec?.supported) return;
-    // #region agent log
-    fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',location:'Station.tsx:toggleMic',message:'mic toggle',data:{listening,hasSession:!!mySessionIdRef.current,supported:rec.supported},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
     if (listening) {
       rec.stop();
       setListening(false);
@@ -188,7 +185,9 @@ export function Station() {
   }
 
   const busyVisitorIds = new Set(roster.map((s) => s.visitorId));
-  const available = visitors.filter((v) => !busyVisitorIds.has(v.id));
+  const isOracleReady = (v: VisitorProfile) =>
+    !!v.personaAt && !!v.poseVerifiedAt && !v.sessionEndAt;
+  const available = visitors.filter((v) => isOracleReady(v) && !busyVisitorIds.has(v.id));
   const display = live || teleprompter;
 
   // ── In-session mode ──────────────────────────────────────────────────────────
@@ -267,17 +266,17 @@ export function Station() {
         <p className="dim">
           {visitors.length === 0
             ? "No visitors yet — waiting for intake submissions."
-            : "All visitors are currently being channelled."}
+            : "No one is oracle-ready yet (needs pose verify + persona at the altar)."}
         </p>
       )}
       <ul className="visitors">
         {available.map((v) => {
-          const archId = v.survey.archetype ?? ARCHETYPES[0].id;
+          const archId = v.archetype ?? ARCHETYPES[0].id;
           const isClaiming = claiming === v.id;
           return (
             <li key={v.id}>
               <div className="row">
-                <strong>{v.survey.name || "(no name)"}</strong>
+                <strong>{v.survey?.name || "(no name)"}</strong>
                 <span className="dim">{archetypeLabel(archId)}</span>
                 <button
                   className="submit"

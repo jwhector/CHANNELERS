@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-19 — /channel: oracle-ready lobby, archetype from record, drop debug fetch (Task 1.5)
+
+- **What:** Created `apps/stage/src/routes/Channel.tsx` from `Station.tsx` with three changes: (a) renamed export to `Channel`; (b) lobby now filters to oracle-ready visitors only (`!!v.personaAt && !!v.poseVerifiedAt && !v.sessionEndAt`) and reads archetype from `v.archetype` (top-level record) instead of `v.survey.archetype`; (c) deleted the debug `fetch` block (`#region agent log`) from `toggleMic`. Deleted `Station.tsx` via `git rm`. Updated `App.tsx`: replaced `Station` import with `Channel`, updated `SCREENS` from `["intake","bodyscan","altar","station","console","souvenir"]` to `["intake","bodyscan","altar","channel","console","souvenir"]`, swapped `/station` route for `/channel`. Fixed `Console.tsx` minimally for the new `VisitorProfile` shape: `v.survey.name` → `v.survey?.name`, `v.survey.archetype` → `v.archetype`. All four packages typecheck clean (0 errors); stage build succeeds.
+- **Why:** Capstone Tier 1 task — makes the whole stage green. `/channel` now shows only visitors who have completed all ritual steps (intake → bodyscan → altar). Archetype lives on the record since Task 1.4 moved it there. Debug fetch was leftover instrumentation from hypothesis testing.
+- **Files/areas:** `apps/stage/src/routes/Channel.tsx` (new), `apps/stage/src/routes/Station.tsx` (deleted), `apps/stage/src/routes/Console.tsx` (minimal compile fix), `apps/stage/src/App.tsx` (route wiring).
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-19 — /altar: pose verify + persona select + poseUI de-dup (Task 1.4)
 
 - **What:** Created `/altar` route (`apps/stage/src/routes/Altar.tsx`) — gates on `NumberGate`, validates the visitor's held pose against the enrolled template (sustained still+similar hold via `poseSimilarity`/`motionMetric`, with a Manual-unlock override), lets the operator pick an oracle persona from the three `ARCHETYPES`, and shows "ORACLE READY" when both steps are done. Each action POSTs to the brain (`api.verifyPose`, `api.setPersona`). Also extracted shared pose-drawing helpers into `apps/stage/src/components/poseUI.tsx` (exports `Bar` and `drawSkeleton`), and refactored `BodyScan.tsx` to import from `poseUI` instead of duplicating local `Bar`/`draw` implementations. Wired `/altar` in `App.tsx` (import, SCREENS, Route).

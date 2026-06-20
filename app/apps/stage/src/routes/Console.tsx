@@ -66,9 +66,9 @@ export function Console() {
         {waiting.map((v) => (
           <li key={v.id}>
             <div className="row">
-              <strong>{v.survey.name || "(no name)"}</strong>
+              <strong>{v.survey?.name || "(no name)"}</strong>
               <span className="dim">
-                {v.survey.archetype ? archetypeLabel(v.survey.archetype) : "no oracle chosen"}
+                {v.archetype ? archetypeLabel(v.archetype) : "no oracle chosen"}
               </span>
               <code>{v.id.slice(0, 8)}</code>
             </div>
