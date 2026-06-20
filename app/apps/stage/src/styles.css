@@ -99,3 +99,38 @@ pre {
   border-radius: 6px; padding: 10px 12px; cursor: pointer; font: inherit;
 }
 .mic.on { border-color: var(--accent); color: var(--accent); }
+
+/* ── Pose scan station ── */
+.posestage {
+  position: relative; width: 100%; max-width: 640px; aspect-ratio: 16 / 9;
+  background: #000; border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  /* Mirror like a mirror so movement reads naturally; landmarks track with it. */
+  transform: scaleX(-1);
+}
+.posestage video, .posestage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.posestage canvas { object-fit: cover; }
+.posestage video { object-fit: cover; }
+.poseflash {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(60, 255, 122, 0.16); color: #3cff7a; font-size: 40px; font-weight: 700;
+  transform: scaleX(-1); /* un-mirror the text */ letter-spacing: 0.05em;
+}
+/* Body not fully framed: flag the camera view red so the visitor self-corrects. */
+.posestage.unframed { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 24px rgba(255, 90, 60, 0.35); }
+.framehint {
+  position: absolute; inset: auto 0 0 0; padding: 14px 18px;
+  background: rgba(255, 90, 60, 0.85); color: #fff; font-size: 18px; font-weight: 600;
+  text-align: center; transform: scaleX(-1); /* un-mirror the text */
+}
+.posebars { margin: 18px 0; display: grid; gap: 10px; }
+.bar { display: grid; grid-template-columns: 120px 1fr 64px; align-items: center; gap: 10px; font-size: 13px; }
+.bar .track { height: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--accent); transition: width 60ms linear; }
+.bar .fill.good { background: #3cff7a; }
+.bar .val { color: var(--dim); text-align: right; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 16px 0; }
+.tuners { display: grid; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.tuner { display: grid; grid-template-columns: 160px 1fr 56px; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); }
+.jointgrid { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 12px; }
+.jointgrid th, .jointgrid td { text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--line); }
+.jointgrid th:first-child, .jointgrid td:first-child { text-align: left; color: var(--dim); }

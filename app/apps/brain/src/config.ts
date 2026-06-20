@@ -7,10 +7,10 @@ loadEnv({ path: "../../.env" });
 export const config = {
   host: process.env.HOST ?? "127.0.0.1",
   port: Number(process.env.PORT ?? 8787),
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-  transformModel: process.env.TRANSFORM_MODEL ?? "claude-opus-4-8",
-  // Live loop favours latency — Sonnet over Opus (ARCHITECTURE.md §5.3). Configurable.
-  oracleModel: process.env.ORACLE_MODEL ?? "claude-sonnet-4-6",
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  transformModel: process.env.TRANSFORM_MODEL ?? "gpt-4o",
+  // Both default to gpt-4o; override per-role via env (ARCHITECTURE.md §5.3).
+  oracleModel: process.env.ORACLE_MODEL ?? "gpt-4o",
   osc: {
     enabled: process.env.OSC_ENABLED === "true",
     host: process.env.OSC_HOST ?? "127.0.0.1",

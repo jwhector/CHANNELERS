@@ -1,18 +1,30 @@
-import type { SurveyResponse, VisitorProfile, Seeds } from "@channelers/shared";
+import type { SurveyResponse, VisitorProfile, PoseVector } from "@channelers/shared";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return (await res.json()) as T;
 }
 
+const post = <T>(url: string, body?: unknown) =>
+  fetch(url, {
+    method: "POST",
+    // Only declare a JSON body when we actually send one — a bare
+    // content-type: application/json with an empty body makes Fastify
+    // reject the request (FST_ERR_CTP_EMPTY_JSON_BODY).
+    headers: body === undefined ? undefined : { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }).then((r) => json<T>(r));
+
 export const api = {
   listVisitors: () => fetch("/api/visitors").then((r) => json<VisitorProfile[]>(r)),
-  submitSurvey: (survey: SurveyResponse) =>
-    fetch("/api/visitors", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(survey),
-    }).then((r) => json<VisitorProfile>(r)),
-  generateSeeds: (id: string) =>
-    fetch(`/api/visitors/${id}/seeds`, { method: "POST" }).then((r) => json<Seeds>(r)),
+  register: (number: number) => post<VisitorProfile>("/api/register", { number }),
+  getByNumber: (number: number) =>
+    fetch(`/api/visitors/by-number/${number}`).then((r) => json<VisitorProfile>(r)),
+  submitIntake: (id: string, survey: SurveyResponse) =>
+    post<VisitorProfile>(`/api/visitors/${id}/intake`, { survey }),
+  enrollPose: (id: string, template: PoseVector) =>
+    post<VisitorProfile>(`/api/visitors/${id}/pose`, { template }),
+  setPersona: (id: string, archetype: string) =>
+    post<VisitorProfile>(`/api/visitors/${id}/persona`, { archetype }),
+  verifyPose: (id: string) => post<VisitorProfile>(`/api/visitors/${id}/verify`),
 };

@@ -1,7 +1,7 @@
 # CHANNELERS — System Architecture (v0.1 draft)
 
-> Status: proposal for the **June 22–28, 2026** development workshop. Owner: Jared.
-> This is a draft to react to and edit, not a final spec. Scope is a **workshop MVP** — it must run live for a week of development, not survive a tour.
+> Status: **current architecture** as of 2026-06-19. Owner: Jared. Scope: **workshop MVP** (June 22–28, 2026).
+> **2026-06-19:** The multi-station redesign IS the current architecture. **Tier 0 (identity/state foundation) + Tier 1 (single-visitor path: register → intake → bodyscan → altar → channel) are implemented.** Tier 2 (AI choreography feed) and Tier 3 (dispatcher/board/waiting-room console) are designed but not built. Full design rationale and decision log: `docs/superpowers/specs/2026-06-19-multi-station-architecture-design.md`. §3–§6 of this document are reconciled to the implemented reality.
 
 ## 1. The shape of the thing
 
@@ -11,7 +11,7 @@ One local service — the **Show Brain** — owns visitor data and all AI calls,
        INTAKE                        SHOW BRAIN (the hub)               PERFORMERS / OUTPUT
  ┌──────────────────┐         ┌────────────────────────────┐       ┌─────────────────────┐
  │ Intake app       │  submit │ • visitor profiles (DB)    │ seeds │ Oracle performer     │
- │ (tablets/kiosks) │────────▶│ • transform (Claude):      │──────▶│  earpiece (TTS) /    │
+ │ (tablets/kiosks) │────────▶│ • transform (OpenAI):      │──────▶│  earpiece (TTS) /    │
  │  + vibe-phrase Qs│         │     intake → music seed    │       │  hidden teleprompter │
  │                  │         │     intake → dance score   │       ├─────────────────────┤
  │ Scan stations:   │  events │     intake → oracle persona│ OSC/  │ Anna  (music rig)    │
@@ -33,7 +33,7 @@ Three flows pass through it:
 - **TypeScript end-to-end.** CV runs in-browser (no Python sidecar).
 - **Loose coupling via OSC/WebSocket.** Anna and Jeff subscribe to show events; they never call into the Brain's internals.
 - **Human-in-the-loop.** AI proposes; the operator and performers dispose. Nothing the AI emits goes straight to the audience unmediated.
-- **Offline-resilient.** Venue wifi is unreliable. The Brain runs locally; only Claude/STT/TTS calls leave the machine, and each degrades gracefully (cached fallback lines, manual override) if an API call fails mid-show.
+- **Offline-resilient.** Venue wifi is unreliable. The Brain runs locally; only OpenAI/STT/TTS calls leave the machine, and each degrades gracefully (cached fallback lines, manual override) if an API call fails mid-show.
 - **MVP for the workshop.** Favor the smallest thing that's performable live over the complete thing.
 
 ## 3. Repo layout (pnpm workspace)
@@ -41,13 +41,15 @@ Three flows pass through it:
 ```
 channelers/
   apps/
-    brain/      Fastify + ws + node-osc + @anthropic-ai/sdk   — the hub
+    brain/      Fastify + ws + node-osc + openai               — the hub
     stage/      Vite + React + TypeScript                     — all screens, role-based routes:
-                  /intake    visitor kiosk (survey + vibe-phrase pickers + oracle chooser)
-                  /scan      CV scan station (pose + fiducial)
-                  /station   performer page: lobby → claim visitor → teleprompter (unified)
+                  /intake    visitor kiosk: number gate → data-only survey → handoff to Physical Challenge
+                  /bodyscan  pose identity token enrollment (enroll self-invented pose → poseTemplate)
+                  /altar     pose verify + persona pick → oracle-ready
+                  /channel   performer page: lobby of oracle-ready visitors → teleprompter (renamed from /station)
                   /console   stage-manager monitor (read-only: active sessions + waiting queue)
                   /souvenir  QR takeaway
+                  -- Tier 3 (designed, not built): /waiting /board /dispatch (dispatcher screens)
   packages/
     shared/     zod schemas + TS types + the OSC/event contract
     oracles/    persona prompt templates (child / AI-on-drugs / tree / …)
@@ -55,29 +57,64 @@ channelers/
 
 > Alternative: Next.js for `stage`. Recommendation is the Vite + standalone Fastify split — the WebSocket/OSC server has a cleaner lifecycle as its own long-lived process, and the kiosk screens are a plain SPA.
 
-## 4. Data model (zod-first, sketch)
+## 4. Data model (zod-first)
+
+Source of truth: `packages/shared/src/schemas.ts`.
 
 ```ts
-// packages/shared
+// packages/shared/src/schemas.ts (authoritative — this is a summary)
 type VibePhrase = { axis: "vulnerability" | "tension" | "hopefulness"; choice: string }
 
+/** No `archetype` field — oracle is chosen at the altar, not during intake. */
 type SurveyResponse = {
   name: string
   freeText: Record<string, string>     // "something you recently lost", "are you tender?", …
   phrases: VibePhrase[]                 // the three close-relationship phrase pickers
-  archetype?: string                    // oracle the visitor chose at end of intake
 }
 
+/** Self-invented biometric identity token enrolled at /bodyscan. */
+type PoseVector = { angles: number[]; weights: number[] }
+
+/** Transient dispatch location. "called" state is Tier 3 (dispatcher, not yet built). */
+type VisitorLocation = {
+  state: "waiting" | "called" | "in_progress"
+  station?: "intake" | "bodyscan" | "altar"
+  since: string
+}
+
+type VisitorProfile = {
+  id: string
+  /** Human ticket number — the cross-station lookup key. */
+  number: number
+  /** Optional: absent for a just-registered visitor; present once intake is completed. */
+  survey?: SurveyResponse
+  /** Oracle archetype — chosen at the altar (POST /api/visitors/:id/persona), NOT during intake. */
+  archetype?: string
+  /** Enrolled pose identity token (body-scan station). */
+  poseTemplate?: PoseVector
+  /** Legacy scan results (retained for back-compat; not used by the new station flow). */
+  scans: ScanResult[]
+  location: VisitorLocation
+  createdAt: string       // = registeredAt
+  intakeAt?: string
+  poseAt?: string
+  personaAt?: string
+  poseVerifiedAt?: string
+  sessionStartAt?: string
+  sessionEndAt?: string
+}
+
+/** Legacy CV scan result — retained for /scan back-compat, not used by new station flow. */
 type ScanResult =
   | { kind: "pose";     archetypeGuess: string; keypoints: number[][]; confidence: number }
   | { kind: "fiducial"; cards: { id: number; slot: number }[] }
-
-type VisitorProfile = { id: string; survey: SurveyResponse; scans: ScanResult[]; createdAt: string }
 
 type MusicSeed   = { mood: string; tempoBpm: number; key: string; lyricThemes: string[]; synthPalette: string[] }
 type DanceScore  = { qualities: string[]; spatial: string; spiritAnimalShape: string; cues: string[] }
 type OraclePersona = { archetype: string; systemPrompt: string; openingLine: string }
 
+/** Seeds.persona is deprecated in the new flow — persona is built fresh in divination.start
+ *  from the visitor's top-level `archetype` field (set at the altar). Music seed still applies. */
 type Seeds = { music: MusicSeed; dance: DanceScore; persona: OraclePersona }
 
 // the bus envelope every subscriber sees
@@ -94,12 +131,12 @@ type ShowEvent =
 ## 5. The pipeline
 
 ### 5.1 Intake capture
-Custom kiosk app, themed as the DMV-void. Renders the existing intake questions (`intake.md`): name, free-text absurdist prompts, and the three "State of vulnerability / tension / hopefulness" phrase pickers. On submit it writes a `VisitorProfile` and emits `visitor.submitted`. The two "Physical Challenge" stations feed in as `ScanResult`s (§6).
+Custom kiosk app, themed as the DMV-void. Gates on a **number entry** (the visitor's ticket number, which creates-or-fetches a `VisitorProfile`). Renders the data-only intake questions (`intake.md`): name, free-text absurdist prompts, and the three "State of vulnerability / tension / hopefulness" phrase pickers. **No scan placeholders, no oracle picker** — those steps are separate stations. On submit, `POST …/intake` attaches the `SurveyResponse`, emits `visitor.submitted`, and fires the music-seed transform (fire-and-forget). The screen then directs the visitor to **proceed to the Physical Challenge** (the body-scan station). The body-scan is its own station (`/bodyscan`), not a form field.
 
 ### 5.2 Transform (intake → seeds)
-A Claude call per visitor turns the profile into the three seeds, using **structured outputs** (`output_config.format` with a json_schema) so the result is guaranteed-parseable `Seeds` — no fragile prompt parsing.
+An OpenAI call per visitor turns the profile into the three seeds.
 
-- Model: **Opus 4.8** (`claude-opus-4-8`), adaptive thinking, `effort: "high"`. Latency doesn't matter here (it's pre-divination prep), and quality does.
+- Model: **gpt-4o** (`config.transformModel`, default `gpt-4o`; configurable via `TRANSFORM_MODEL`). Structured outputs (`response_format` json_schema) are available but not yet wired — the transform currently prompts for JSON and validates with zod, falling back to a deterministic stub on any miss or when no `OPENAI_API_KEY` is set.
 - The music seed → Anna; the dance score → Jane/the dancers; the persona → the live loop.
 
 ### 5.3 Live divination (the earpiece loop)
@@ -107,17 +144,17 @@ The visitor speaks → STT → the Oracle persona LLM → text/TTS to the perfor
 - **Whisper** — performer hears TTS in-ear and repeats/interprets.
 - **Teleprompter** — performer reads the streamed text off a hidden screen and improvises.
 
-**Session model:** the brain holds **multiple concurrent sessions**, one per visitor, keyed by `sessionId`. A `roster` broadcast keeps every connected screen up to date. Performers use `/station`: lobby lists available visitors (with their pre-chosen oracle); one tap claims a visitor and drops directly into the teleprompter. Session messages carry `sessionId` so parallel streams don't bleed across screens.
+**Session model:** the brain holds **multiple concurrent sessions**, one per visitor, keyed by `sessionId`. A `roster` broadcast keeps every connected screen up to date. Performers use `/channel`: the lobby lists **oracle-ready visitors** only (those who have completed intake + bodyscan + altar: `personaAt` set + `poseVerifiedAt` set + no active `sessionEndAt`); one tap claims a visitor and drops directly into the teleprompter. Session messages carry `sessionId` so parallel streams don't bleed across screens.
 
 **Session liveness & recovery:** a session's lifetime is bound to its owning performer's connection, not just to an explicit `session.end`. The client persists its `{sessionId, visitorId}` handle (localStorage) and on every (re)connect sends `session.rejoin`; the brain replies `session.resumed` with the full history + teleprompter so a page refresh or transient socket blip transparently re-attaches. When a performer's socket drops, the brain starts a grace timer (`SESSION_GRACE_MS`, ~90s) and reaps the orphan if no one re-attaches — so an abandoned tab frees the visitor instead of stranding it "being channelled" forever. The lobby's active-session rows also expose manual **Reclaim** / **End** controls as a backstop. (`/console` stays read-only.)
 
-**Archetype assignment:** the visitor chooses their own oracle at the end of intake. The performer just channels whoever they claim — no archetype selection on their end.
+**Archetype assignment (persona seam):** the oracle persona is chosen at the **altar** (`POST /api/visitors/:id/persona`), after the visitor has verified their pose. The performer's `/channel` lobby shows the archetype already set; there is no oracle selection on the performer's end. `divination.start` reads the record's top-level `archetype` field and guards on missing `survey` or missing `archetype` before starting a session.
 
-Engineering notes (grounded against the Claude API reference):
-- **Stream** the response (`messages.stream`) so the performer hears words as they generate — TTFT is everything in a live loop.
-- **Prompt-cache the stable prefix** (persona system prompt + the visitor's intake profile); keep only the latest utterance after the last cache breakpoint. **Pre-warm** the cache (`max_tokens: 0`) the moment an Oracle is selected, so the first reply has low latency.
-- **Model is a latency/quality decision** — flagged for Jared, not silently chosen. Opus 4.8 is the default brain; **Sonnet 4.6** or **Haiku 4.5** are materially faster/cheaper for the real-time loop. Recommendation: prototype the Oracle on Sonnet 4.6 (fast, 1M context, characterful enough), keep Opus 4.8 for the transforms.
-- For lowest TTFT in the loop, disable thinking on the Oracle turn (or keep it minimal) — the persona doesn't need to deliberate, it needs to speak.
+Engineering notes (grounded against the OpenAI API reference):
+- **Stream** the response (`chat.completions.create({stream:true})`) iterated with `for await ... chunk.choices[0].delta.content` so the performer hears words as they generate — TTFT is everything in a live loop.
+- **OpenAI caches identical prompt prefixes automatically** — no manual cache step or pre-warm needed.
+- **Both default to gpt-4o** (configurable); for a lower-latency live loop, a smaller model like **gpt-4o-mini** can be set via `ORACLE_MODEL`.
+- gpt-4o has no separate thinking parameter — no special flag needed to keep the Oracle turn fast.
 
 ### 5.4 Output integration
 - **Anna (music):** the Brain hands her the `MusicSeed` (lyrics + tempo/key/palette) over WebSocket — rendered on a simple "now generating for visitor N" panel she reads from, and/or pushed as OSC for her rig.
@@ -137,9 +174,13 @@ The enemy isn't "AI" — the show is *about* transactional AI — it's the **hel
 
 ## 6. The human QR code
 
-The bridge between the body and the system — and the two intake "scanning stations." All in-browser TypeScript:
+The bridge between the body and the system. All in-browser TypeScript:
 
-- **Pose scan** (Station 1, "take the shape of your spirit animal") — **MediaPipe Tasks for Web** (`@mediapipe/tasks-vision`) on a webcam. Match the held pose against a small library of shape templates, emit `scan.pose` with the best guess + confidence. This is the live trigger.
+- **Pose identity token** (`/bodyscan` + `/altar`) — **MediaPipe Tasks for Web** (`@mediapipe/tasks-vision`, Pose Landmarker) on a webcam. The pose is a **self-invented biometric identity token**, not an archetype classification. Each frame's 33 landmarks reduce to an **angle vector** (`PoseVector = { angles, weights }`) — one interior angle per joint, weighted by landmark visibility — which is translation/scale/identity-invariant by construction. Matching = weighted angular distance; "holding still" = low frame-to-frame angular motion.
+  - **Enroll at `/bodyscan`:** the visitor invents a pose and holds it to lock a `PoseVector` template. The template is persisted as `poseTemplate` on the `VisitorProfile` via `POST /api/visitors/:id/pose`. Functional debug view: skeleton overlay, motion/hold telemetry bars. The hold only counts while the **whole body is in frame** — measured by `bodyCoverage` (mean per-joint visibility); when it falls short the camera view turns red with a "step into frame" prompt so the visitor self-corrects (the gate uses hysteresis — `isBodyFramed`, enter/exit thresholds — so the warning can't strobe at the boundary). Previously a partial framing silently failed to register and the visitor had no idea why.
+  - **Verify at `/altar`:** the visitor returns to their pose; the altar matches the live vector against the stored `poseTemplate`. On a successful sustained hold (still AND similar), `POST /api/visitors/:id/verify` stamps `poseVerifiedAt`. The operator also picks the oracle persona at the altar (`POST /api/visitors/:id/persona`). Both steps complete → visitor is oracle-ready.
+  - **Iteration 2 (pre-authored archetype poses) is cancelled.** The token is semantically opaque — it proves identity ("you are who you enrolled as"), not archetype ("your pose looks like X"). The pose has no `archetypeGuess`; archetype is chosen by the operator at the altar.
+  - *Robustness note:* single-camera 2.5D — the `z`/depth axis is noisy; we match on the 2D silhouette. The real risk is venue **lighting + full-body framing**, not the model. Framing is now surfaced to the visitor at `/bodyscan` (red "step into frame" overlay); lighting is still on the operator.
 - **Fiducial cards** (Station 2, "place the images in their correct place") — printed **ArUco/AprilTag** cards read via `js-aruco2` / OpenCV.js. The arrangement → `scan.fiducial`. Robust, theatrical, trivial to detect.
 - **Souvenir QR** (the takeaway) — at the end, mint a stylized QR fused with the visitor's silhouette, linking to *their* generated artifact (song/transcript). The silhouette is decorative; the QR encodes a real URL. Thematic payoff: *you've been reduced to a scannable code.*
 
@@ -235,8 +276,16 @@ Maintained here — **no separate questions file**. Add to this section as new q
 - Do you have corpora we can use as few-shot / retrieval / future training data — transcripts of children, elders, mystics, or the collaborators' own writing?
 - Is there per-Oracle reference text that defines how each one should sound?
 
+**Multi-station revision (2026-06-19 spec)** — from `docs/superpowers/specs/2026-06-19-multi-station-architecture-design.md` §15
+- **Numbering hardware** — what assigns the analog ticket number, and can it stay purely analog? Decides whether globally-unique integers hold or a day/session namespace is needed.
+- **Presence capture** — does waiting-room registration stay operator-keyed, or do we add a `/waiting` self-serve kiosk / integrate the dispenser?
+- **Choreography feed routing** — dancers' in-ears, a public loudspeaker, or both? (The channel is built either way; this is output routing.)
+- **Dispatcher knob values** — warm-up pool size `K`, `T_warmup`, `T_max` (anti-starvation), `T_noshow`, `T_stale` (per station), check-in grace window — set defaults, tune in rehearsal.
+- **Choreography agent model** — confirm gpt-4o vs. gpt-4o-mini (or another model) for the second live loop.
+- **No-show automation** — keep `T_noshow` operator-flagged, or auto-re-pool like `T_stale`?
+
 ## 13. Risks
-- **Latency** in the voice loop (STT + LLM + TTS stacked). Mitigate with streaming + prompt-cache pre-warm + a faster model on the Oracle turn.
+- **Latency** in the voice loop (STT + LLM + TTS stacked). Mitigate with streaming (OpenAI caches prompt prefixes automatically) + a faster model on the Oracle turn (e.g. gpt-4o-mini via `ORACLE_MODEL`).
 - **Live API failure.** Pre-generate fallback Oracle lines and allow the operator to inject a manual line.
 - **Noisy room** wrecking STT. Close mic + push-to-talk on the performer side.
 - **Scope creep** vs the 2-week window — keep one persona and one full path working before breadth.

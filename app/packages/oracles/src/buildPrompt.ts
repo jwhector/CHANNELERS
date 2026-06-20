@@ -1,4 +1,4 @@
-import type { VisitorProfile, OraclePersona } from "@channelers/shared";
+import type { VisitorProfile, SurveyResponse, OraclePersona } from "@channelers/shared";
 import { PERSONAS, type Persona } from "./personas";
 import { ANTI_SLOP_INSTRUCTION } from "./denylist";
 
@@ -7,8 +7,7 @@ import { ANTI_SLOP_INSTRUCTION } from "./denylist";
  * In the live loop this prefix is stable per session, so it's the natural thing to
  * prompt-cache (ARCHITECTURE.md §5.3) — only the latest utterance changes per turn.
  */
-export function buildSystemPrompt(persona: Persona, profile: VisitorProfile): string {
-  const { survey } = profile;
+export function buildSystemPrompt(persona: Persona, survey: SurveyResponse): string {
   const facts = [
     `Name: ${survey.name}`,
     ...Object.entries(survey.freeText).map(([k, v]) => `${k}: ${v}`),
@@ -36,9 +35,10 @@ export function buildSystemPrompt(persona: Persona, profile: VisitorProfile): st
 export function buildPersona(personaId: string, profile: VisitorProfile): OraclePersona {
   const persona = PERSONAS[personaId];
   if (!persona) throw new Error(`unknown persona: ${personaId}`);
+  if (!profile.survey) throw new Error("visitor has no intake survey");
   return {
     archetype: persona.id,
-    systemPrompt: buildSystemPrompt(persona, profile),
+    systemPrompt: buildSystemPrompt(persona, profile.survey),
     openingLine: persona.opening,
   };
 }

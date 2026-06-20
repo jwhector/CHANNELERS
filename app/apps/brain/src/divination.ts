@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { buildPersona } from "@channelers/oracles";
-import { ARCHETYPES, type OraclePersona, type WsClientMsg, type WsServerMsg } from "@channelers/shared";
+import { type OraclePersona, type WsClientMsg, type WsServerMsg } from "@channelers/shared";
 import { store } from "./store";
 import { config } from "./config";
 import type { Bus } from "./bus";
@@ -95,6 +95,7 @@ export function registerDivination(bus: Bus): void {
     if (!session) return;
     clearReap(sessionId);
     sessions.delete(sessionId);
+    store.markSessionEnd(session.visitorId);
     bus.publish({ type: "divination.ended", profileId: session.visitorId });
     bus.broadcast({ kind: "session.ended", sessionId });
     bus.broadcast(rosterMsg());
@@ -106,16 +107,22 @@ export function registerDivination(bus: Bus): void {
       reply({ kind: "session.error", visitorId, message: "unknown visitor" });
       return;
     }
+    if (!visitor.survey) {
+      reply({ kind: "session.error", visitorId, message: "visitor has not completed intake" });
+      return;
+    }
+    if (!visitor.archetype) {
+      reply({ kind: "session.error", visitorId, message: "no oracle selected yet" });
+      return;
+    }
 
-    // One divination per visitor at a time.
     const already = [...sessions.values()].find((s) => s.visitorId === visitorId);
     if (already) {
       reply({ kind: "session.error", visitorId, message: "visitor already in a divination" });
       return;
     }
 
-    // Archetype comes from the visitor's own intake choice; fall back to first archetype.
-    const archetypeId = visitor.survey.archetype ?? ARCHETYPES[0].id;
+    const archetypeId = visitor.archetype;
     let persona: OraclePersona;
     try {
       persona = buildPersona(archetypeId, visitor);
@@ -134,6 +141,7 @@ export function registerDivination(bus: Bus): void {
       ownerConn: connId,
     };
     sessions.set(session.id, session);
+    store.markSessionStart(visitorId);
 
     bus.publish({ type: "oracle.selected", profileId: visitorId, archetype: archetypeId });
     bus.publish({ type: "divination.started", profileId: visitorId });
@@ -213,21 +221,31 @@ export function registerDivination(bus: Bus): void {
 }
 
 async function streamReply(session: Session, onDelta: (chunk: string) => void): Promise<string> {
-  if (!config.anthropicApiKey) return fallbackStream(session, onDelta);
+  if (!config.openaiApiKey) return fallbackStream(session, onDelta);
 
-  const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic({ apiKey: config.anthropicApiKey });
+  const { default: OpenAI } = await import("openai");
+  const client = new OpenAI({ apiKey: config.openaiApiKey });
 
-  const stream = client.messages.stream({
+  // OpenAI puts the system prompt in the messages array (no separate `system` param).
+  const stream = await client.chat.completions.create({
     model: config.oracleModel,
-    max_tokens: 300,
+    max_completion_tokens: 300,
     temperature: 1,
-    system: session.persona.systemPrompt,
-    messages: session.history.map((t) => ({ role: t.role, content: t.content })),
+    stream: true,
+    messages: [
+      { role: "system", content: session.persona.systemPrompt },
+      ...session.history.map((t) => ({ role: t.role, content: t.content })),
+    ],
   });
-  stream.on("text", (textDelta: string) => onDelta(textDelta));
-  const final = await stream.finalMessage();
-  return final.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
+  let full = "";
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) {
+      full += delta;
+      onDelta(delta);
+    }
+  }
+  return full;
 }
 
 async function fallbackStream(session: Session, onDelta: (chunk: string) => void): Promise<string> {

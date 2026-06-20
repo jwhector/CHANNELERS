@@ -13,6 +13,166 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-19 — /bodyscan: warn when the body isn't fully in frame
+- **What:** `/bodyscan` now gives user-facing feedback when the visitor isn't framed head-to-toe. Added `bodyCoverage(vec)` (mean per-joint visibility) and `isBodyFramed(coverage, wasFramed)` (hysteresis: enter `0.65` / exit `0.55`) to `apps/stage/src/lib/pose/angles.ts`. `BodyScan.tsx` tracks the framed flag per frame (incl. the no-body case) and uses it as the record-hold gate; when not framed the camera view gets a red highlight + a "Step back so your whole body — head to toe — is in frame." overlay (un-mirrored like `.poseflash`). The hysteresis band stops the warning strobing at the threshold.
+- **Why:** The hold timer's old `bodyVisible` gate (`mean weight > 0.5`) silently refused to register a held pose whenever the legs were out of frame — the common webcam case — with **no on-screen explanation**. Visitors held a pose and nothing happened. The design (ARCHITECTURE §6) already flagged full-body framing as the real CV risk; it just had no feedback affordance.
+- **Files/areas:** `apps/stage/src/lib/pose/angles.ts` (new predicates), `apps/stage/src/routes/BodyScan.tsx` (framing state + gate + overlay), `apps/stage/src/styles.css` (`.posestage.unframed`, `.framehint`).
+- **Docs touched:** this changelog; ARCHITECTURE.md §6 (enroll bullet + robustness note).
+
+---
+
+## 2026-06-19 — Switch LLM provider: Anthropic Claude → OpenAI
+- **What:** The brain's LLM provider is now OpenAI. `@anthropic-ai/sdk` → `openai`; `ANTHROPIC_API_KEY` → `OPENAI_API_KEY`; models default to `gpt-4o` for both the intake→seeds transform and the live oracle loop (configurable via `TRANSFORM_MODEL`/`ORACLE_MODEL`). `transform.ts` uses `chat.completions.create`; `divination.ts` streams via `chat.completions.create({stream:true})`. The offline fallback (no key → stub seeds / word-by-word oracle) is unchanged.
+- **Why:** Project decision to use OpenAI GPT models instead of Claude.
+- **Files/areas:** `apps/brain/{config,transform,divination}.ts`, `apps/brain/package.json`, `app/.env.example`; docs (ARCHITECTURE.md §1/§5, root+docs+app CLAUDE.md).
+- **Docs touched:** this changelog; CLAUDE.md (×3); ARCHITECTURE.md.
+
+---
+
+## 2026-06-19 — Fix /altar verifyPose 400 (empty JSON body)
+
+- **What:** In `apps/stage/src/lib/api.ts`, the `post` helper now omits the `content-type: application/json` header when called with no body (it already omitted the body itself). Previously it always set the JSON content-type, so the bodyless `verifyPose` POST sent `Content-Type: application/json` with an empty body.
+- **Why:** Fastify's JSON content-type parser rejects an empty body when `content-type: application/json` is declared, throwing `FST_ERR_CTP_EMPTY_JSON_BODY` (HTTP 400). This broke pose verification on `/altar` — the `/api/visitors/:id/verify` endpoint reads only `req.params` and expects no body. `verifyPose` was the only bodyless POST, so it was the only call affected.
+- **Files/areas:** `apps/stage/src/lib/api.ts` (`post` helper).
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — Reconcile architecture/reference docs to implemented multi-station Tier 0+1
+
+- **What:** Doc-only edits to reconcile three reference files to the implemented multi-station reality (no code touched). Updated `docs/ARCHITECTURE.md` §3–§6: status pointer now states Tier 0+1 are implemented / Tier 2+3 not built; §3 route list updated to `/intake /bodyscan /altar /channel /console /souvenir` (Tier 3 `/waiting /board /dispatch` noted as designed, not built); §4 data model updated to current `VisitorProfile` shape (number-keyed, optional survey, top-level archetype, poseTemplate, milestone timestamps), `SurveyResponse` with no archetype, added `PoseVector`/`VisitorLocation`, noted `Seeds.persona` deprecated; §5.1 rewritten as number-gate → data-only form → Physical Challenge handoff; §5.3 `/station` → `/channel`, lobby filters to oracle-ready visitors, archetype assignment paragraph updated to altar persona seam; §6 pose section rewritten as self-invented identity token (enroll at `/bodyscan`, verify at `/altar`, iteration-2 archetype-pose plan cancelled). Updated `app/CLAUDE.md` route list and descriptions. Updated `docs/CLAUDE.md` `/station` → `/channel` in the stateful-resource-recovery convention anecdote.
+- **Why:** Tier 0+1 implementation diverged significantly from the pre-redesign docs; docs needed to reflect the built reality before the workshop.
+- **Files/areas:** `docs/ARCHITECTURE.md` (§3–§6), `app/CLAUDE.md`, `docs/CLAUDE.md`.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — /channel lobby: refresh on oracle.selected + divination.ended (fix)
+
+- **What:** In `apps/stage/src/routes/Channel.tsx`, extended the WS `event` handler to also call `refresh()` on `oracle.selected` and `divination.ended` events (previously only `visitor.submitted` and `seeds.ready` triggered a refresh). Also corrected a stale CHANGELOG description in the Task 0.5 entry (the divination guards test description now accurately reflects the real ws-based integration test).
+- **Why:** A visitor becomes oracle-ready when `oracle.selected` fires (altar sets persona + verifies pose); the divination ends on `divination.ended`. Without refreshing on these events, the /channel lobby would not show a newly-ready visitor or drop a finished one — a manual page reload was required in the single-visitor path. `oracle.selected` and `divination.ended` are valid `ShowEvent` literals confirmed in `packages/shared/src/events.ts`.
+- **Files/areas:** `apps/stage/src/routes/Channel.tsx` (event handler), `docs/CHANGELOG.md` (Task 0.5 description fix).
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — /channel: oracle-ready lobby, archetype from record, drop debug fetch (Task 1.5)
+
+- **What:** Created `apps/stage/src/routes/Channel.tsx` from `Station.tsx` with three changes: (a) renamed export to `Channel`; (b) lobby now filters to oracle-ready visitors only (`!!v.personaAt && !!v.poseVerifiedAt && !v.sessionEndAt`) and reads archetype from `v.archetype` (top-level record) instead of `v.survey.archetype`; (c) deleted the debug `fetch` block (`#region agent log`) from `toggleMic`. Deleted `Station.tsx` via `git rm`. Updated `App.tsx`: replaced `Station` import with `Channel`, updated `SCREENS` from `["intake","bodyscan","altar","station","console","souvenir"]` to `["intake","bodyscan","altar","channel","console","souvenir"]`, swapped `/station` route for `/channel`. Fixed `Console.tsx` minimally for the new `VisitorProfile` shape: `v.survey.name` → `v.survey?.name`, `v.survey.archetype` → `v.archetype`. All four packages typecheck clean (0 errors); stage build succeeds.
+- **Why:** Capstone Tier 1 task — makes the whole stage green. `/channel` now shows only visitors who have completed all ritual steps (intake → bodyscan → altar). Archetype lives on the record since Task 1.4 moved it there. Debug fetch was leftover instrumentation from hypothesis testing.
+- **Files/areas:** `apps/stage/src/routes/Channel.tsx` (new), `apps/stage/src/routes/Station.tsx` (deleted), `apps/stage/src/routes/Console.tsx` (minimal compile fix), `apps/stage/src/App.tsx` (route wiring).
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — /altar: pose verify + persona select + poseUI de-dup (Task 1.4)
+
+- **What:** Created `/altar` route (`apps/stage/src/routes/Altar.tsx`) — gates on `NumberGate`, validates the visitor's held pose against the enrolled template (sustained still+similar hold via `poseSimilarity`/`motionMetric`, with a Manual-unlock override), lets the operator pick an oracle persona from the three `ARCHETYPES`, and shows "ORACLE READY" when both steps are done. Each action POSTs to the brain (`api.verifyPose`, `api.setPersona`). Also extracted shared pose-drawing helpers into `apps/stage/src/components/poseUI.tsx` (exports `Bar` and `drawSkeleton`), and refactored `BodyScan.tsx` to import from `poseUI` instead of duplicating local `Bar`/`draw` implementations. Wired `/altar` in `App.tsx` (import, SCREENS, Route).
+- **Why:** Tier 1 altar station — this is the visitor's final step before channelling: prove they are who they enrolled as (pose match), then pick the oracle persona the performer will embody. Extracting `poseUI` was a pre-flight de-duplication decision to avoid `Bar`/`drawSkeleton` existing in two places; BodyScan behavior is unchanged.
+- **Files/areas:** `apps/stage/src/routes/Altar.tsx` (new), `apps/stage/src/components/poseUI.tsx` (new), `apps/stage/src/routes/BodyScan.tsx` (refactored — shared helpers), `apps/stage/src/App.tsx` (route wiring).
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — /scan → /bodyscan: number gate, enroll-only, persist pose template (Task 1.3)
+
+- **What:** Created `apps/stage/src/routes/BodyScan.tsx` — gates on `NumberGate`, runs the pose CV pipeline (camera + MediaPipe skeleton overlay), records the visitor's invented shape (hold-to-lock), and on lock POSTs the `PoseVector` via `api.enrollPose`. The verify/match loop from the old `Scan.tsx` is gone (verification happens at the altar in a later task). Deleted `apps/stage/src/routes/Scan.tsx` (`git rm`). Updated `App.tsx`: replaced `import { Scan }` with `import { BodyScan }`, updated `SCREENS` from `["intake","scan",...]` to `["intake","bodyscan",...]`, swapped `<Route path="/scan">` for `<Route path="/bodyscan">`.
+- **Why:** Tier 1 station split — bodyscan is enroll-only; match/verify belongs to the altar route (Task 1.5+). Wrapping in `NumberGate` gives each station consistent visitor identity without re-implementing number capture.
+- **Files/areas:** `apps/stage/src/routes/BodyScan.tsx` (new), `apps/stage/src/routes/Scan.tsx` (deleted), `apps/stage/src/App.tsx` (route wiring).
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — Survey trim + Intake rework: number gate, data-only form, physical-challenge handoff (Task 1.2)
+
+- **What:** Trimmed `packages/shared/src/survey.ts` — removed the two `scan` SurveyField kinds (pose/fiducial) and the `oracle` kind, plus their three corresponding entries from the `SURVEY` array. The eight content fields (name, tender, shoeSize, lost, ssn, three phrase pickers) are unchanged. Rewrote `apps/stage/src/routes/Intake.tsx`: now gates on `NumberGate` (enter visitor number → resolve `VisitorProfile`), renders only text/longtext/phrase fields (no scan placeholders, no oracle picker), submits via `api.submitIntake(visitor.id, survey)`, and shows "Number N — proceed to the Physical Challenge when called." on completion. `SurveyResponse` no longer includes `archetype` (removed in Tier 0); Intake does not set it.
+- **Why:** Spec §3–§6 moved scan stations and oracle choice out of the intake form; the intake route should be purely a data-collection form with a physical-world handoff message. The number gate makes cross-station visitor identity consistent (same pattern as /bodyscan and /altar).
+- **Files/areas:** `packages/shared/src/survey.ts` (trimmed), `apps/stage/src/routes/Intake.tsx` (rewritten).
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — Stage API client + shared NumberGate (Task 1.1)
+
+- **What:** Rewrote `apps/stage/src/lib/api.ts` to target the Tier 0 brain endpoints: removed old `submitSurvey`/`generateSeeds`, added `register`, `getByNumber`, `submitIntake`, `enrollPose`, `setPersona`, `verifyPose` (all returning `Promise<VisitorProfile>`), kept `listVisitors`. Added new `apps/stage/src/components/NumberGate.tsx`: a shared "enter your number" gate that calls `api.register` and hands the resolved `VisitorProfile` up via `onResolved` callback; used by `/intake`, `/bodyscan`, `/altar` in later tasks.
+- **Why:** Tier 1 stage UI needs a correctly-typed API layer matching the brain's actual endpoint paths, and a reusable identity gate component so each station route doesn't re-implement number capture.
+- **Files/areas:** `apps/stage/src/lib/api.ts` (rewritten), `apps/stage/src/components/NumberGate.tsx` (new).
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — Divination: archetype from record, guard missing survey/persona, stamp session (Task 0.5)
+
+- **What:** Made `packages/oracles/src/buildPrompt.ts` survey-safe: `buildSystemPrompt` now takes a concrete `SurveyResponse` (not a `VisitorProfile`), and `buildPersona` guards `if (!profile.survey) throw`. Updated `apps/brain/src/divination.ts` `start()` to read `visitor.archetype` (top-level field, was `visitor.survey.archetype`), guard missing `survey` and `archetype` with `session.error` replies, and call `store.markSessionStart(visitorId)` after the session map entry is written. Added `store.markSessionEnd(session.visitorId)` in `reap()` immediately after `sessions.delete`. Removed now-unused `ARCHETYPES` import from `divination.ts`. Added a guard test to `apps/brain/test/endpoints.test.ts` (describes "divination guards"): opens a real WebSocket client, sends `session.start`, and asserts the two `session.error` guard replies — "visitor has not completed intake" (bare visitor, no survey) and "no oracle selected yet" (visitor with survey but no archetype). Brain/oracles/shared all typecheck clean; stage is the only remaining residual (Tier 1).
+- **Why:** `survey` is optional post-schema-rewrite and `archetype` moved to top-level on `VisitorProfile`; the old code would throw at runtime on any visitor who hadn't completed intake. Session stamping enables the console/dispatcher to show live session state.
+- **Files/areas:** `packages/oracles/src/buildPrompt.ts`, `apps/brain/src/divination.ts`, `apps/brain/test/endpoints.test.ts`.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — Brain endpoints: register/intake/pose/persona/verify + injectable app factory (Task 0.4)
+
+- **What:** Extracted `buildApp()` from `apps/brain/src/index.ts` into a new `apps/brain/src/app.ts` so tests can use Fastify `app.inject()` without binding a port. Slimmed `index.ts` to just `buildApp()` + `listen`. Added five new station endpoints: `POST /api/register` (create-or-fetch by number), `GET /api/visitors/by-number/:number`, `POST /api/visitors/:id/intake` (attach survey, fire music-seed transform fire-and-forget, emit `visitor.submitted` + async `seeds.ready`), `POST /api/visitors/:id/pose`, `POST /api/visitors/:id/persona` (emits `oracle.selected`), `POST /api/visitors/:id/verify`. Removed the legacy `POST /api/visitors` (full-survey create); preserved `/scan`, `/seeds`, `/demo/echo`, `/stt`, `/health`. Guarded `transform.ts` for the now-optional `survey` field (`stubSeeds` uses `?.`, transform short-circuits with stub when `!profile.survey`). Added `zod` as a direct dependency to `@channelers/brain`. Added `apps/brain/test/endpoints.test.ts` (5 tests, all green).
+- **Why:** Multi-station flow requires identity established at the kiosk before intake; the station endpoints are the HTTP interface each station POSTs to. `buildApp()` extraction enables integration tests without a live server.
+- **Files/areas:** `apps/brain/src/app.ts` (new), `apps/brain/src/index.ts` (slimmed), `apps/brain/src/transform.ts` (survey guard), `apps/brain/test/endpoints.test.ts` (new), `apps/brain/package.json` (added zod).
+- **Docs touched:** this changelog.
+- **Residual typecheck failures (pre-existing, not introduced here):** `apps/brain/src/divination.ts` (reads `visitor.survey.archetype`, old shape), `packages/oracles/src/buildPrompt.ts` (same pattern), `apps/stage/src/routes/*.tsx` — all fixed in Tasks 0.5 / Tier 1.
+
+---
+
+## 2026-06-19 — Number-indexed store with registration, upsert, and state stamps (Task 0.3)
+
+- **What:** Rewrote `apps/brain/src/store.ts`. The old store had a single `create(survey)` entry point; the new store is built around `register(number)` — a create-or-fetch keyed on the human ticket number via a `byNumber: Map<number, string>` index. Added upsert helpers that stamp milestone timestamps: `upsertSurvey` (sets `intakeAt`), `setPoseTemplate` (sets `poseAt`), `setArchetype` (sets `personaAt`), `setPoseVerified` (sets `poseVerifiedAt`), `setLocation`, `markSessionStart`/`markSessionEnd`. Preserved the legacy `addScan` method (still called by the existing `/scan` route). Added `apps/brain/test/store.test.ts` with 6 tests covering registration idempotency, upserts, and unknown-id handling.
+- **Why:** The multi-station flow (spec §3.1) requires visitors to be born on first touch by number, not after intake completes. State stamping enables the console/dispatcher to track which milestone each visitor has passed. The `byNumber` index is the cross-station lookup key.
+- **Files/areas:** `apps/brain/src/store.ts` (rewrite), `apps/brain/test/store.test.ts` (new). Expected downstream typecheck failures (not new): `apps/brain/src/index.ts` (calls `store.create`), `apps/brain/src/divination.ts`, `apps/brain/src/transform.ts`, `apps/stage/src/routes/*.tsx`, `packages/oracles/src/buildPrompt.ts` — all fixed in Tasks 0.4–0.5.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — Shared schema: number-keyed VisitorProfile + PoseVector + location (Task 0.2)
+
+- **What:** Reshaped the core data model in `packages/shared/src/schemas.ts`. `VisitorProfile` gains a human ticket `number` (the cross-station lookup key), `survey` becomes optional (a visitor is registered before intake), `archetype` moves from `SurveyResponse` to the top-level record, and the profile gains a persisted `poseTemplate` (a `PoseVector`), a transient `location` (`VisitorLocation`), and milestone timestamps (`intakeAt`, `poseAt`, `personaAt`, `poseVerifiedAt`, `sessionStartAt`, `sessionEndAt`). Added exports: `PoseVector`, `VisitorLocation`. Intentionally breaks downstream consumers that used the old shape — those are fixed in subsequent tasks.
+- **Why:** The multi-station architecture (spec §3.1/3.2/5) requires identity across stations via ticket number, not UUID; pose is now an identity token enrolled at the body-scan station; archetype is an altar choice not an intake field. Schema is the foundation for all following Tier 1 tasks.
+- **Files/areas:** `packages/shared/src/schemas.ts` (modified), `apps/brain/test/schema.test.ts` (new schema test via TDD). Downstream breakage (expected, to be fixed by later tasks): `apps/brain/src/{store,divination,transform}.ts`, `apps/stage/src/routes/{Console,Intake,Station}.tsx`, `packages/oracles/src/buildPrompt.ts`.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — Vitest harness for brain package (Task 0.1)
+
+- **What:** Added vitest test runner to `apps/brain`. New scripts `test` (`vitest run`) and `test:watch` (`vitest`), `vitest ^2.1.8` devDependency, `vitest.config.ts` (node environment, `test/**/*.test.ts` glob), and a smoke test that confirms `1+1=2`. `pnpm --filter @channelers/brain test` now passes.
+- **Why:** All Tier 0 brain tasks (identity store, divination, etc.) depend on a working test harness. This is the foundation step before any brain logic is written.
+- **Files/areas:** `apps/brain/package.json`, `apps/brain/vitest.config.ts` (new), `apps/brain/test/smoke.test.ts` (new), `pnpm-lock.yaml`.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-19 — Multi-station architecture design spec (planning)
+
+- **What:** Design spec for the multi-station performance flow — number-based identity across waiting-room → intake → body-scan → altar → channel; pose promoted to a self-invented **identity token** (enroll → verify, no archetype classification); a low-tech swappable **persona seam** (chosen at the altar, not intake); a hybrid **AI-choreography** layer (intake+archetype first pass → live per-turn agent on its own feed); and an app-managed **dispatcher** (randomized + anti-starvation) with `/board` + `/dispatch` + a master `/console`. Removes the oracle pick and the Physical-Challenge placeholders from intake (the original ask) — now Tier 1 of a 4-tier build (0: identity/state · 1: single-visitor path · 2: choreography · 3: logistics).
+- **Why:** A team meeting reframed the show into distinct stations with an analog ticket-number identity and added live-generated choreography. The single-path flow (oracle chosen during intake, UUID-only identity) no longer fits.
+- **Files/areas:** `docs/superpowers/specs/2026-06-19-multi-station-architecture-design.md` (new). Planned changes span `apps/stage` routes, `apps/brain` (store/divination/transform/new dispatcher), `packages/shared` (schemas/protocol), `packages/oracles`.
+- **Docs touched:** this changelog; `docs/ARCHITECTURE.md` (§12 open questions + status pointer).
+
+---
+
+## 2026-06-11 — Pose scan station, iteration 1 (self-recorded round-trip)
+
+- **What:** Built the first working pose-capture prototype at `/scan` (was a TODO placeholder). MediaPipe Tasks-for-Web (`@mediapipe/tasks-vision`, Pose Landmarker `full`) on the webcam → 33 landmarks → an **angle-vector** pose representation → capture-then-match. UX: start camera → "strike a pose and hold it" (hold ~3.5s while still) → template locks in → "return to your shape" → hold ~1.5s while still AND similar → "✓ MATCH". Functional debug view: live skeleton overlay, motion/similarity/hold telemetry bars, a per-joint live-vs-template table, and live-tunable thresholds (stillness, match, hold durations).
+- **Why:** De-risk the §6 "human QR code" body-scan with the smallest thing that proves the core tech. Key reframe: this is pose **matching**, not **classification** — no model training/dataset, just geometry on the landmarks. Joint angles are translation/scale/identity-invariant by construction, so "same shape" survives the visitor standing elsewhere or being a different size. Record and detect are the same "hold a qualifying state for N seconds" state machine; only the predicate differs (record = still; detect = still AND matches template). The angle-vector motion metric *is* the deviation detection (hold timer advances only while motion < threshold, resets on movement).
+- **Files/areas:**
+  - `apps/stage/src/lib/pose/landmarks.ts` (new) — BlazePose indices, the 8 measured joints, draw connections.
+  - `apps/stage/src/lib/pose/angles.ts` (new) — `landmarksToAngles`, `angleDistance` (weighted by visibility), `poseSimilarity`, `motionMetric`. Pure/React-free.
+  - `apps/stage/src/lib/pose/usePoseLandmarker.ts` (new) — wraps MediaPipe + webcam; WASM/model from CDN (vendor locally later for offline).
+  - `apps/stage/src/routes/Scan.tsx` (rewritten) — state machine (ready→record→watch→matched), skeleton canvas, debug telemetry + tuners.
+  - `apps/stage/src/styles.css` — pose-station styles. `apps/stage/package.json` — `@mediapipe/tasks-vision` dep.
+- **Output already fits the contract:** matched template → `archetypeGuess`, similarity → `confidence`, landmarks → `keypoints` of the existing `PoseScan` schema. Not wired to the brain yet — fully self-contained in-browser, as scoped for iteration 1.
+- **Next (iteration 2):** swap the self-recorded template for a small library of pre-authored archetype poses (the real "match your spirit animal" flow); then POST `scan` + emit `scan.pose`.
+- **Verified:** `pnpm -r typecheck` clean; stage production build clean (MediaPipe WASM loads at runtime from CDN, bundle stays ~113 kB gz). Live camera/matching behavior not yet hands-on tested.
+- **Docs touched:** `docs/CHANGELOG.md`, `docs/ARCHITECTURE.md` §6.
+
+---
+
 ## 2026-06-10 — Fix STT: brain-side Whisper for all browsers
 
 - **What:** All browsers now use brain-side STT: `MediaRecorder` → WAV in-browser → `POST /api/stt` → local Whisper on Node. Fixed brain `transcribeWav()` to pass a `Float32Array` directly (Node has no `AudioContext`; file-path input was causing 500s). Removed browser `@xenova/transformers` (had crashed the whole site with `registerBackend` under Vite).

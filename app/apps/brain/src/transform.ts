@@ -7,7 +7,7 @@ import { config } from "./config";
  * buildPersona() from @channelers/oracles once an archetype is chosen.
  */
 function stubSeeds(profile: VisitorProfile): Seeds {
-  const lost = profile.survey.freeText.lost ?? "something nameless";
+  const lost = profile.survey?.freeText.lost ?? "something nameless";
   return {
     music: {
       mood: "fluorescent melancholy",
@@ -31,27 +31,33 @@ function stubSeeds(profile: VisitorProfile): Seeds {
 }
 
 /**
- * Intake → seeds. Uses Claude when a key is present, else the stub.
- * TODO: switch to the SDK's structured-output (json_schema) mode for guaranteed shape;
+ * Intake → seeds. Uses OpenAI when a key is present, else the stub.
+ * TODO: switch to OpenAI structured outputs (response_format json_schema) for guaranteed shape;
  * for now we prompt for JSON and validate with zod, falling back to the stub on any miss.
  */
 export async function transform(profile: VisitorProfile): Promise<Seeds> {
-  if (!config.anthropicApiKey) return stubSeeds(profile);
+  if (!profile.survey) return stubSeeds(profile); // nothing to transform pre-intake
+  if (!config.openaiApiKey) return stubSeeds(profile);
   try {
-    const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const client = new Anthropic({ apiKey: config.anthropicApiKey });
-    const msg = await client.messages.create({
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey: config.openaiApiKey });
+    const completion = await client.chat.completions.create({
       model: config.transformModel,
-      max_tokens: 1024,
-      system:
-        "You convert an absurdist DMV-style intake survey into JSON 'seeds' for a performance. " +
-        "Return ONLY JSON of this shape: " +
-        "{ music:{ mood, tempoBpm, key, lyricThemes[], synthPalette[] }, " +
-        "dance:{ qualities[], spatial, spiritAnimalShape, cues[] }, " +
-        "persona:{ archetype, systemPrompt, openingLine } }.",
-      messages: [{ role: "user", content: JSON.stringify(profile.survey) }],
+      max_completion_tokens: 1024,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You convert an absurdist DMV-style intake survey into JSON 'seeds' for a performance. " +
+            "Return ONLY JSON of this shape: " +
+            "{ music:{ mood, tempoBpm, key, lyricThemes[], synthPalette[] }, " +
+            "dance:{ qualities[], spatial, spiritAnimalShape, cues[] }, " +
+            "persona:{ archetype, systemPrompt, openingLine } }.",
+        },
+        { role: "user", content: JSON.stringify(profile.survey) },
+      ],
     });
-    const text = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
+    const text = completion.choices[0]?.message?.content ?? "";
     const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
     const parsed = Seeds.safeParse(json);
     return parsed.success ? parsed.data : stubSeeds(profile);
