@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { buildPersona } from "@channelers/oracles";
-import { ARCHETYPES, type OraclePersona, type WsClientMsg, type WsServerMsg } from "@channelers/shared";
+import { type OraclePersona, type WsClientMsg, type WsServerMsg } from "@channelers/shared";
 import { store } from "./store";
 import { config } from "./config";
 import type { Bus } from "./bus";
@@ -95,6 +95,7 @@ export function registerDivination(bus: Bus): void {
     if (!session) return;
     clearReap(sessionId);
     sessions.delete(sessionId);
+    store.markSessionEnd(session.visitorId);
     bus.publish({ type: "divination.ended", profileId: session.visitorId });
     bus.broadcast({ kind: "session.ended", sessionId });
     bus.broadcast(rosterMsg());
@@ -106,16 +107,22 @@ export function registerDivination(bus: Bus): void {
       reply({ kind: "session.error", visitorId, message: "unknown visitor" });
       return;
     }
+    if (!visitor.survey) {
+      reply({ kind: "session.error", visitorId, message: "visitor has not completed intake" });
+      return;
+    }
+    if (!visitor.archetype) {
+      reply({ kind: "session.error", visitorId, message: "no oracle selected yet" });
+      return;
+    }
 
-    // One divination per visitor at a time.
     const already = [...sessions.values()].find((s) => s.visitorId === visitorId);
     if (already) {
       reply({ kind: "session.error", visitorId, message: "visitor already in a divination" });
       return;
     }
 
-    // Archetype comes from the visitor's own intake choice; fall back to first archetype.
-    const archetypeId = visitor.survey.archetype ?? ARCHETYPES[0].id;
+    const archetypeId = visitor.archetype;
     let persona: OraclePersona;
     try {
       persona = buildPersona(archetypeId, visitor);
@@ -134,6 +141,7 @@ export function registerDivination(bus: Bus): void {
       ownerConn: connId,
     };
     sessions.set(session.id, session);
+    store.markSessionStart(visitorId);
 
     bus.publish({ type: "oracle.selected", profileId: visitorId, archetype: archetypeId });
     bus.publish({ type: "divination.started", profileId: visitorId });

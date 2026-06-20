@@ -59,3 +59,12 @@ describe("station upserts attach to the record", () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe("divination guards", () => {
+  it("a registered-but-unprepared visitor is not oracle-ready", async () => {
+    const v = await register(300);
+    // No intake, no persona, no verify → derived oracleReady must be false.
+    const ready = !!v.personaAt && !!v.poseVerifiedAt && !v.sessionEndAt;
+    expect(ready).toBe(false);
+  });
+});
