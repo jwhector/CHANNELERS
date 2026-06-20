@@ -7,7 +7,7 @@ import { config } from "./config";
  * buildPersona() from @channelers/oracles once an archetype is chosen.
  */
 function stubSeeds(profile: VisitorProfile): Seeds {
-  const lost = profile.survey.freeText.lost ?? "something nameless";
+  const lost = profile.survey?.freeText.lost ?? "something nameless";
   return {
     music: {
       mood: "fluorescent melancholy",
@@ -36,6 +36,7 @@ function stubSeeds(profile: VisitorProfile): Seeds {
  * for now we prompt for JSON and validate with zod, falling back to the stub on any miss.
  */
 export async function transform(profile: VisitorProfile): Promise<Seeds> {
+  if (!profile.survey) return stubSeeds(profile); // nothing to transform pre-intake
   if (!config.anthropicApiKey) return stubSeeds(profile);
   try {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
