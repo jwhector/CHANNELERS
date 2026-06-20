@@ -8,7 +8,10 @@ async function json<T>(res: Response): Promise<T> {
 const post = <T>(url: string, body?: unknown) =>
   fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    // Only declare a JSON body when we actually send one — a bare
+    // content-type: application/json with an empty body makes Fastify
+    // reject the request (FST_ERR_CTP_EMPTY_JSON_BODY).
+    headers: body === undefined ? undefined : { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   }).then((r) => json<T>(r));
 

@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-19 — Fix /altar verifyPose 400 (empty JSON body)
+
+- **What:** In `apps/stage/src/lib/api.ts`, the `post` helper now omits the `content-type: application/json` header when called with no body (it already omitted the body itself). Previously it always set the JSON content-type, so the bodyless `verifyPose` POST sent `Content-Type: application/json` with an empty body.
+- **Why:** Fastify's JSON content-type parser rejects an empty body when `content-type: application/json` is declared, throwing `FST_ERR_CTP_EMPTY_JSON_BODY` (HTTP 400). This broke pose verification on `/altar` — the `/api/visitors/:id/verify` endpoint reads only `req.params` and expects no body. `verifyPose` was the only bodyless POST, so it was the only call affected.
+- **Files/areas:** `apps/stage/src/lib/api.ts` (`post` helper).
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-19 — Reconcile architecture/reference docs to implemented multi-station Tier 0+1
 
 - **What:** Doc-only edits to reconcile three reference files to the implemented multi-station reality (no code touched). Updated `docs/ARCHITECTURE.md` §3–§6: status pointer now states Tier 0+1 are implemented / Tier 2+3 not built; §3 route list updated to `/intake /bodyscan /altar /channel /console /souvenir` (Tier 3 `/waiting /board /dispatch` noted as designed, not built); §4 data model updated to current `VisitorProfile` shape (number-keyed, optional survey, top-level archetype, poseTemplate, milestone timestamps), `SurveyResponse` with no archetype, added `PoseVector`/`VisitorLocation`, noted `Seeds.persona` deprecated; §5.1 rewritten as number-gate → data-only form → Physical Challenge handoff; §5.3 `/station` → `/channel`, lobby filters to oracle-ready visitors, archetype assignment paragraph updated to altar persona seam; §6 pose section rewritten as self-invented identity token (enroll at `/bodyscan`, verify at `/altar`, iteration-2 archetype-pose plan cancelled). Updated `app/CLAUDE.md` route list and descriptions. Updated `docs/CLAUDE.md` `/station` → `/channel` in the stateful-resource-recovery convention anecdote.
