@@ -13,6 +13,12 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — Tier 3 Task 3.9: Stage `/console` master overseer overhaul (3 panels)
+- **What:** Rewrote `apps/stage/src/routes/Console.tsx` — the read-only monitor becomes the master overseer with three panels: (1) Flow funnel (registered/intake/pose/oracleReady/channelling/done counts) + per-station LEDs and occupancy from live `dispatch.state`; (2) Visitors table with inline controls (set persona dropdown, unlock pose-verify, re-pool, remove); (3) Active sessions list with reclaim/end buttons + a 50-entry scrolling event log. Subscribes to `roster`, `dispatch.state`, and `event` WS broadcasts. Auto-refreshes visitor list every 2s and on relevant events. Removed unused `useRef` import from the spec (unused import lint). `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (68 modules, 383 kB JS). Manual browser smoke pending human verification.
+- **Why:** Task 3.9 of the Tier 3 build — consolidates all operator controls into the single `/console` screen so the stage manager can manage visitor flow, persona assignment, and active sessions without leaving the page.
+- **Files/areas:** `apps/stage/src/routes/Console.tsx` (rewrite).
+- **Docs touched:** this changelog.
+
 ## 2026-06-20 — Tier 3 Task 3.8: Stage `/dispatch` lobby-operator interface
 - **What:** Created `apps/stage/src/routes/Dispatch.tsx` — the lobby-operator console. Lets the operator register visitor arrivals by ticket number, confirm or skip pending calls, watch called visitors on the board with dwell timers, inspect slot occupancy per station (with per-station online LED), and manage the queue (manual assign/remove). Subscribes to live `dispatch.state` WS broadcasts via `useBrainSocket`, loads initial state from `api.dispatch.state()` on mount, and refreshes dwell timers every second via `setInterval`. Reuses existing CSS classes (`void`, `console`, `dispatch`, `field`, `arrivals`, `visitors`, `row`, `dim`, `led`/`led on`, `submit`, `end`, `choice`, `error`). Added `Dispatch` import + `/dispatch` route to `apps/stage/src/App.tsx`; added `"dispatch"` to the `SCREENS` tuple. `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (68 modules, 380 kB JS). Manual browser smoke pending human verification.
 - **Why:** Task 3.8 of the Tier 3 dispatcher build — the primary operator interface for managing visitor flow through stations during a show.
