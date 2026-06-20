@@ -97,4 +97,22 @@ export const store = {
     if (v) v.scans.push(scan);
     return v;
   },
+  /** Stamp a milestone timestamp directly (operator "mark-complete" backstop, spec §10). */
+  stampMilestone(
+    id: string,
+    field: "intakeAt" | "poseAt" | "personaAt" | "poseVerifiedAt" | "sessionStartAt" | "sessionEndAt",
+  ): VisitorRecord | undefined {
+    const v = visitors.get(id);
+    if (!v) return undefined;
+    v[field] = now();
+    return v;
+  },
+  /** Remove a record entirely (operator "remove", spec §10). Frees the number for reuse. */
+  remove(id: string): boolean {
+    const v = visitors.get(id);
+    if (!v) return false;
+    visitors.delete(id);
+    byNumber.delete(v.number);
+    return true;
+  },
 };
