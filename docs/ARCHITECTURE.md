@@ -148,7 +148,7 @@ The visitor speaks → STT → the Oracle persona LLM → text/TTS to the perfor
 
 **Session model:** the brain holds **multiple concurrent sessions**, one per visitor, keyed by `sessionId`. A `roster` broadcast keeps every connected screen up to date. Performers use `/channel`: the lobby lists **oracle-ready visitors** only (those who have completed intake + bodyscan + altar: `personaAt` set + `poseVerifiedAt` set + no active `sessionEndAt`); one tap claims a visitor and drops directly into the teleprompter. Session messages carry `sessionId` so parallel streams don't bleed across screens.
 
-**Session liveness & recovery:** a session's lifetime is bound to its owning performer's connection, not just to an explicit `session.end`. The client persists its `{sessionId, visitorId}` handle (localStorage) and on every (re)connect sends `session.rejoin`; the brain replies `session.resumed` with the full history + teleprompter so a page refresh or transient socket blip transparently re-attaches. When a performer's socket drops, the brain starts a grace timer (`SESSION_GRACE_MS`, ~90s) and reaps the orphan if no one re-attaches — so an abandoned tab frees the visitor instead of stranding it "being channelled" forever. The lobby's active-session rows also expose manual **Reclaim** / **End** controls as a backstop. (`/console` stays read-only.)
+**Session liveness & recovery:** a session's lifetime is bound to its owning performer's connection, not just to an explicit `session.end`. The client persists its `{sessionId, visitorId}` handle (localStorage) and on every (re)connect sends `session.rejoin`; the brain replies `session.resumed` with the full history + teleprompter so a page refresh or transient socket blip transparently re-attaches. When a performer's socket drops, the brain starts a grace timer (`SESSION_GRACE_MS`, ~90s) and reaps the orphan if no one re-attaches — so an abandoned tab frees the visitor instead of stranding it "being channelled" forever. The lobby's active-session rows also expose manual **Reclaim** / **End** controls as a backstop — now mirrored on the `/console` master overseer (§11).
 
 **Archetype assignment (persona seam):** the oracle persona is chosen at the **altar** (`POST /api/visitors/:id/persona`), after the visitor has verified their pose. The performer's `/channel` lobby shows the archetype already set; there is no oracle selection on the performer's end. `divination.start` reads the record's top-level `archetype` field and guards on missing `survey` or missing `archetype` before starting a session.
 
@@ -301,7 +301,7 @@ Maintained here — **no separate questions file**. Add to this section as new q
 **Venue & hardware**
 - How many tablets/kiosks for intake? Webcam(s) for the scan stations? A projector for Jeff?
 - How many visitors / performers run concurrently? (The session map supports N; the real constraint is TTS earpiece feeds and performer count.)
-- Who watches the `/console` monitor during the show?
+- Who operates the `/console` master overseer (and the `/dispatch` lobby station) during the show?
 
 **TTS & the earpiece** — *we're building this regardless of Anna/Jeff*
 - What in-ear receiver system do the performers use (brand/model)? How does audio reach it — wireless IEM, IFB/Comtek, or phone + earbuds?
