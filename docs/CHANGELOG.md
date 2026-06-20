@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-19 — /altar: pose verify + persona select + poseUI de-dup (Task 1.4)
+
+- **What:** Created `/altar` route (`apps/stage/src/routes/Altar.tsx`) — gates on `NumberGate`, validates the visitor's held pose against the enrolled template (sustained still+similar hold via `poseSimilarity`/`motionMetric`, with a Manual-unlock override), lets the operator pick an oracle persona from the three `ARCHETYPES`, and shows "ORACLE READY" when both steps are done. Each action POSTs to the brain (`api.verifyPose`, `api.setPersona`). Also extracted shared pose-drawing helpers into `apps/stage/src/components/poseUI.tsx` (exports `Bar` and `drawSkeleton`), and refactored `BodyScan.tsx` to import from `poseUI` instead of duplicating local `Bar`/`draw` implementations. Wired `/altar` in `App.tsx` (import, SCREENS, Route).
+- **Why:** Tier 1 altar station — this is the visitor's final step before channelling: prove they are who they enrolled as (pose match), then pick the oracle persona the performer will embody. Extracting `poseUI` was a pre-flight de-duplication decision to avoid `Bar`/`drawSkeleton` existing in two places; BodyScan behavior is unchanged.
+- **Files/areas:** `apps/stage/src/routes/Altar.tsx` (new), `apps/stage/src/components/poseUI.tsx` (new), `apps/stage/src/routes/BodyScan.tsx` (refactored — shared helpers), `apps/stage/src/App.tsx` (route wiring).
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-19 — /scan → /bodyscan: number gate, enroll-only, persist pose template (Task 1.3)
 
 - **What:** Created `apps/stage/src/routes/BodyScan.tsx` — gates on `NumberGate`, runs the pose CV pipeline (camera + MediaPipe skeleton overlay), records the visitor's invented shape (hold-to-lock), and on lock POSTs the `PoseVector` via `api.enrollPose`. The verify/match loop from the old `Scan.tsx` is gone (verification happens at the altar in a later task). Deleted `apps/stage/src/routes/Scan.tsx` (`git rm`). Updated `App.tsx`: replaced `import { Scan }` with `import { BodyScan }`, updated `SCREENS` from `["intake","scan",...]` to `["intake","bodyscan",...]`, swapped `<Route path="/scan">` for `<Route path="/bodyscan">`.

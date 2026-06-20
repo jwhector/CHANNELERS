@@ -1,11 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import { Intake } from "./routes/Intake";
 import { BodyScan } from "./routes/BodyScan";
+import { Altar } from "./routes/Altar";
 import { Console } from "./routes/Console";
 import { Station } from "./routes/Station";
 import { Souvenir } from "./routes/Souvenir";
 
-const SCREENS = ["intake", "bodyscan", "station", "console", "souvenir"] as const;
+const SCREENS = ["intake", "bodyscan", "altar", "station", "console", "souvenir"] as const;
 
 export function App() {
   return (
@@ -14,6 +15,7 @@ export function App() {
         <Route path="/" element={<Home />} />
         <Route path="/intake" element={<Intake />} />
         <Route path="/bodyscan" element={<BodyScan />} />
+        <Route path="/altar" element={<Altar />} />
         <Route path="/station" element={<Station />} />
         <Route path="/console" element={<Console />} />
         <Route path="/souvenir" element={<Souvenir />} />

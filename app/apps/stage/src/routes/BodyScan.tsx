@@ -2,9 +2,10 @@ import { useCallback, useRef, useState } from "react";
 import type { VisitorProfile } from "@channelers/shared";
 import { usePoseLandmarker } from "../lib/pose/usePoseLandmarker";
 import { landmarksToAngles, motionMetric, type PoseVector } from "../lib/pose/angles";
-import { CONNECTIONS, type Landmark } from "../lib/pose/landmarks";
+import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
 import { NumberGate } from "../components/NumberGate";
+import { Bar, drawSkeleton } from "../components/poseUI";
 
 type Phase = "ready" | "record" | "saving" | "enrolled";
 
@@ -29,24 +30,6 @@ function Enroll({ visitor }: { visitor: VisitorProfile }) {
 
   const setPhaseBoth = (p: Phase) => { phaseRef.current = p; setPhase(p); };
 
-  const draw = (lms: Landmark[] | null) => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (!lms) return;
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(231,227,218,0.7)";
-    for (const [i, j] of CONNECTIONS) {
-      const a = lms[i], b = lms[j];
-      if (!a || !b) continue;
-      ctx.beginPath();
-      ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
-      ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
-      ctx.stroke();
-    }
-  };
-
   async function persist(vec: PoseVector) {
     setPhaseBoth("saving");
     try {
@@ -64,7 +47,7 @@ function Enroll({ visitor }: { visitor: VisitorProfile }) {
     if (canvas && video && video.videoWidth && canvas.width !== video.videoWidth) {
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
     }
-    draw(lms);
+    drawSkeleton(canvasRef.current, lms);
     if (!lms) { holdStartRef.current = null; prevVecRef.current = null; setMotion(1); return; }
 
     const vec = landmarksToAngles(lms);
@@ -133,16 +116,6 @@ function Enroll({ visitor }: { visitor: VisitorProfile }) {
         </>
       )}
     </main>
-  );
-}
-
-function Bar({ label, value, text, good }: { label: string; value: number; text: string; good: boolean }) {
-  return (
-    <div className="bar">
-      <span>{label}</span>
-      <div className="track"><div className={`fill${good ? " good" : ""}`} style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }} /></div>
-      <span className="val">{text}</span>
-    </div>
   );
 }
 
