@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — Tier 3 Task 3.8: Stage `/dispatch` lobby-operator interface
+- **What:** Created `apps/stage/src/routes/Dispatch.tsx` — the lobby-operator console. Lets the operator register visitor arrivals by ticket number, confirm or skip pending calls, watch called visitors on the board with dwell timers, inspect slot occupancy per station (with per-station online LED), and manage the queue (manual assign/remove). Subscribes to live `dispatch.state` WS broadcasts via `useBrainSocket`, loads initial state from `api.dispatch.state()` on mount, and refreshes dwell timers every second via `setInterval`. Reuses existing CSS classes (`void`, `console`, `dispatch`, `field`, `arrivals`, `visitors`, `row`, `dim`, `led`/`led on`, `submit`, `end`, `choice`, `error`). Added `Dispatch` import + `/dispatch` route to `apps/stage/src/App.tsx`; added `"dispatch"` to the `SCREENS` tuple. `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (68 modules, 380 kB JS). Manual browser smoke pending human verification.
+- **Why:** Task 3.8 of the Tier 3 dispatcher build — the primary operator interface for managing visitor flow through stations during a show.
+- **Files/areas:** `apps/stage/src/routes/Dispatch.tsx` (new), `apps/stage/src/App.tsx`.
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-20 — Tier 3 Task 3.7: Stage `/board` public call display
 - **What:** Created `apps/stage/src/routes/Board.tsx` — a public lobby display that shows the `board` array (`#N → STATION`) from `dispatch.state`. Subscribes to live updates via `useBrainSocket` (filters `m.kind === "dispatch.state"`), loads initial state via `api.dispatch.state()` on mount, and shows a connection LED. Added `Board` import + `/board` route to `apps/stage/src/App.tsx`; added `"board"` to the `SCREENS` tuple (Home nav link). `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (67 modules, 376 kB JS). Manual browser smoke pending human verification.
 - **Why:** Task 3.7 of the Tier 3 dispatcher build — the public call-display board. Shows visitors which number is being called to which station, updating in real time.
