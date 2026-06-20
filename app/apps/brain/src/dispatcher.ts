@@ -158,7 +158,10 @@ export function createDispatcher(
     return true;
   }
   function assign(visitorId: string, station: Station): boolean {
-    if (!store.get(visitorId)) return false;
+    const v = store.get(visitorId);
+    // Only assign a waiting visitor — prevents double-booking a slot if the visitor
+    // is already called or in_progress (e.g. via a stray API call or autoConfirm path).
+    if (!v || v.location.state !== "waiting") return false;
     pending.set(visitorId, { station, since: nowIso() });
     if (knobs.autoConfirm) confirm(visitorId);
     broadcastState();

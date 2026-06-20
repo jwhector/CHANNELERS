@@ -198,6 +198,21 @@ describe("operator actions", () => {
     expect(store.get(r.id)).toBeUndefined();
     d.stop();
   });
+  it("assign returns false for an in_progress visitor and true for a waiting visitor", () => {
+    const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0 }, autoStart: false });
+    // Put a visitor in_progress
+    const r = d.checkin(NUM(), "intake").record;
+    expect(store.get(r.id)?.location.state).toBe("in_progress");
+    // assign on an in_progress visitor must be rejected (no double-booking)
+    expect(d.assign(r.id, "intake")).toBe(false);
+    expect(store.get(r.id)?.location.state).toBe("in_progress");
+    expect(d.snapshot().pending.some((p) => p.id === r.id)).toBe(false);
+    // assign on a fresh waiting visitor succeeds
+    const w = store.register(NUM());
+    expect(d.assign(w.id, "bodyscan")).toBe(true);
+    expect(d.snapshot().pending.some((p) => p.id === w.id)).toBe(true);
+    d.stop();
+  });
   it("recall refreshes since for a called visitor and returns false for unknown id", () => {
     const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0 }, autoStart: false });
     store.register(NUM());
