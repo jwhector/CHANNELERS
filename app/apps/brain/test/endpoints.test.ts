@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../src/app";
 import type { FastifyInstance } from "fastify";
+import WebSocket from "ws";
 
 let app: FastifyInstance;
 beforeAll(async () => { app = await buildApp(); await app.ready(); });
@@ -61,10 +62,70 @@ describe("station upserts attach to the record", () => {
 });
 
 describe("divination guards", () => {
-  it("a registered-but-unprepared visitor is not oracle-ready", async () => {
-    const v = await register(300);
-    // No intake, no persona, no verify → derived oracleReady must be false.
-    const ready = !!v.personaAt && !!v.poseVerifiedAt && !v.sessionEndAt;
-    expect(ready).toBe(false);
+  // A separate listening app so we can open a real WebSocket connection.
+  // The process-global store is shared, so use numbers (9301, 9302) that
+  // don't collide with any other test in this file.
+  let gApp: FastifyInstance;
+  let gPort: number;
+
+  beforeAll(async () => {
+    gApp = await buildApp();
+    await gApp.listen({ host: "127.0.0.1", port: 0 });
+    gPort = (gApp.server.address() as { port: number }).port;
+  });
+
+  afterAll(async () => {
+    await gApp.close();
+  });
+
+  /** Open a ws client, send one session.start command, and resolve with the
+   *  first session.error message received (or reject after 3 s). */
+  function sendAndAwaitError(visitorId: string): Promise<{ kind: string; visitorId?: string; message: string }> {
+    return new Promise((resolve, reject) => {
+      const sock = new WebSocket(`ws://127.0.0.1:${gPort}/ws`);
+      const timer = setTimeout(() => {
+        sock.close();
+        reject(new Error("timeout waiting for session.error"));
+      }, 3000);
+      sock.on("open", () => sock.send(JSON.stringify({ kind: "session.start", visitorId })));
+      sock.on("message", (raw) => {
+        const msg = JSON.parse(raw.toString());
+        if (msg.kind === "session.error") {
+          clearTimeout(timer);
+          sock.close();
+          resolve(msg);
+        }
+      });
+      sock.on("error", (e) => {
+        clearTimeout(timer);
+        reject(e);
+      });
+    });
+  }
+
+  it("visitor with no survey gets 'visitor has not completed intake'", async () => {
+    // Register via inject (shares the same in-process store as gApp).
+    const res = await gApp.inject({ method: "POST", url: "/api/register", payload: { number: 9301 } });
+    const v = res.json() as any;
+
+    const err = await sendAndAwaitError(v.id);
+    expect(err.kind).toBe("session.error");
+    expect(err.message).toBe("visitor has not completed intake");
+  });
+
+  it("visitor WITH a survey but NO archetype gets 'no oracle selected yet'", async () => {
+    const res = await gApp.inject({ method: "POST", url: "/api/register", payload: { number: 9302 } });
+    const v = res.json() as any;
+
+    // Post an intake survey so the visitor passes the first guard.
+    await gApp.inject({
+      method: "POST",
+      url: `/api/visitors/${v.id}/intake`,
+      payload: { survey: { name: "TestUser", freeText: {}, phrases: [] } },
+    });
+
+    const err = await sendAndAwaitError(v.id);
+    expect(err.kind).toBe("session.error");
+    expect(err.message).toBe("no oracle selected yet");
   });
 });
