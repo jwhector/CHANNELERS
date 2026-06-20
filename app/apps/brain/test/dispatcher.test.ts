@@ -111,3 +111,105 @@ describe("anti-starvation", () => {
     expect(picked).toContain(old.id);
   });
 });
+
+const STALE = { K: 1, warmupMs: 0, staleMs: 300_000, noShowMs: 90_000, graceMs: 20_000, tickMs: 5_000 };
+
+describe("check-in (permissive + reconcile)", () => {
+  it("places the visitor in_progress at the station and flags an uncalled walk-up", () => {
+    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
+    const n = NUM();
+    const { record } = d.checkin(n, "bodyscan");
+    expect(store.get(record.id)?.location).toMatchObject({ state: "in_progress", station: "bodyscan" });
+    const q = d.snapshot();
+    const slot = q.slots.bodyscan.occupants.find((o) => o.id === record.id);
+    expect(slot?.state).toBe("in_progress");
+    d.stop();
+  });
+
+  it("auto-supersedes the prior occupant of a 1-slot station", () => {
+    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
+    const a = d.checkin(NUM(), "altar").record;
+    const b = d.checkin(NUM(), "altar").record;
+    expect(store.get(a.id)?.location.state).toBe("waiting"); // a walked off
+    expect(store.get(b.id)?.location).toMatchObject({ state: "in_progress", station: "altar" });
+    d.stop();
+  });
+});
+
+describe("recovery reconciliation", () => {
+  it("T_stale reaps an in_progress visitor with no completion", () => {
+    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
+    const r = d.checkin(NUM(), "bodyscan").record;
+    vi.setSystemTime(new Date("2026-06-20T00:06:00.000Z")); // +6min > staleMs(5min)
+    d.kick();
+    expect(store.get(r.id)?.location.state).toBe("waiting");
+    d.stop();
+  });
+
+  it("flags a no-show by default (no auto-repool)", () => {
+    const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0 }, autoStart: false });
+    store.register(NUM());
+    d.kick();
+    const p = d.snapshot().pending[0];
+    d.confirm(p.id); // now called
+    vi.setSystemTime(new Date("2026-06-20T00:02:00.000Z")); // +2min > noShowMs
+    d.kick();
+    expect(store.get(p.id)?.location.state).toBe("called"); // NOT repooled
+    expect(d.snapshot().board[0]?.flags?.some((fl) => fl.type === "no-show")).toBe(true);
+    d.stop();
+  });
+
+  it("auto-repools a no-show when noShowAutoRepool is on", () => {
+    const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0, noShowAutoRepool: true }, autoStart: false });
+    store.register(NUM());
+    d.kick();
+    const p = d.snapshot().pending[0];
+    d.confirm(p.id);
+    vi.setSystemTime(new Date("2026-06-20T00:02:00.000Z"));
+    d.kick();
+    expect(store.get(p.id)?.location.state).toBe("waiting");
+    d.stop();
+  });
+});
+
+describe("operator actions", () => {
+  it("repool returns a called visitor to waiting", () => {
+    const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0 }, autoStart: false });
+    store.register(NUM());
+    d.kick();
+    const p = d.snapshot().pending[0];
+    d.confirm(p.id);
+    expect(d.repool(p.id)).toBe(true);
+    expect(store.get(p.id)?.location.state).toBe("waiting");
+    d.stop();
+  });
+  it("markComplete stamps the milestone and frees the slot", () => {
+    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
+    const r = d.checkin(NUM(), "intake").record;
+    expect(d.markComplete(r.id, "intake")).toBe(true);
+    expect(store.get(r.id)?.intakeAt).toBeTruthy();
+    expect(store.get(r.id)?.location.state).toBe("waiting");
+    d.stop();
+  });
+  it("remove deletes the record", () => {
+    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
+    const r = d.checkin(NUM(), "intake").record;
+    expect(d.remove(r.id)).toBe(true);
+    expect(store.get(r.id)).toBeUndefined();
+    d.stop();
+  });
+});
+
+describe("station identity (online LED + detector 3)", () => {
+  it("station.hello marks a station online; disconnect after grace reaps its in_progress occupant", () => {
+    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
+    f.fireCommand({ kind: "station.hello", station: "bodyscan" }, "conn-A");
+    expect(d.snapshot().stations.bodyscan).toBe(true);
+    const r = d.checkin(NUM(), "bodyscan").record;
+    f.fireDisconnect("conn-A"); // last screen for bodyscan dropped → grace timer
+    expect(d.snapshot().stations.bodyscan).toBe(false);
+    vi.advanceTimersByTime(STALE.graceMs + 10);
+    expect(store.get(r.id)?.location.state).toBe("waiting"); // reaped
+    d.stop();
+  });
+});

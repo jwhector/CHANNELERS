@@ -118,14 +118,29 @@ export function createDispatcher(
       }
     }
   }
-  /** Placeholder until Task 3.4 — completion/no-show/stale reconciliation lives here. */
   function reconcile(): void {
-    // Return finished in_progress visitors to the pool so their slot frees.
-    for (const v of store.list()) {
+    const visitors = store.list();
+    // in_progress: completion frees the slot; otherwise T_stale auto-reap (detector 2).
+    for (const v of visitors) {
       if (v.location.state !== "in_progress" || !v.location.station) continue;
       if (completionMilestoneSet(v, v.location.station)) {
         store.setLocation(v.id, { state: "waiting", since: nowIso() });
         pending.delete(v.id);
+      } else if (ageMs(v.location.since) > knobs.staleMs) {
+        store.setLocation(v.id, { state: "waiting", since: nowIso() });
+        addFlag(v.id, { type: "auto-reaped", reason: "stale", since: nowIso() });
+      }
+    }
+    // called: no-show past T_noshow → flag (or auto-repool if the knob is on).
+    for (const v of visitors) {
+      if (v.location.state !== "called") continue;
+      if (ageMs(v.location.since) <= knobs.noShowMs) continue;
+      if (knobs.noShowAutoRepool) {
+        pending.delete(v.id);
+        store.setLocation(v.id, { state: "waiting", since: nowIso() });
+        addFlag(v.id, { type: "auto-reaped", reason: "no-show", since: nowIso() });
+      } else {
+        addFlag(v.id, { type: "no-show", since: nowIso() });
       }
     }
     if (knobs.autoConfirm) for (const id of [...pending.keys()]) confirm(id);
@@ -223,8 +238,105 @@ export function createDispatcher(
     bus.broadcast({ kind: "dispatch.state", state: snapshot() });
   }
 
+  function checkin(num: number, station: Station): { record: VisitorRecord; superseded: number[] } {
+    const record = store.getByNumber(num) ?? store.register(num);
+    const wasCalledHere = record.location.state === "called" && record.location.station === station;
+    store.setLocation(record.id, { state: "in_progress", station, since: nowIso() });
+    pending.delete(record.id);
+    clearFlags(record.id);
+    if (!wasCalledHere) addFlag(record.id, { type: "walk-up", since: nowIso() });
+
+    // Auto-supersede (detector 1): keep the station within capacity by re-pooling the oldest.
+    const superseded: number[] = [];
+    const here = store
+      .list()
+      .filter(
+        (v) =>
+          v.location.state === "in_progress" && v.location.station === station && v.id !== record.id,
+      )
+      .sort((a, b) => Date.parse(a.location.since) - Date.parse(b.location.since)); // oldest first
+    const overBy = here.length + 1 - knobs.slots[station];
+    for (const old of here.slice(0, Math.max(0, overBy))) {
+      store.setLocation(old.id, { state: "waiting", since: nowIso() });
+      addFlag(old.id, { type: "auto-reaped", reason: "superseded", since: nowIso() });
+      superseded.push(old.number);
+    }
+    kick();
+    return { record, superseded };
+  }
+
+  function recall(visitorId: string): boolean {
+    const v = store.get(visitorId);
+    if (!v || v.location.state !== "called" || !v.location.station) return false;
+    store.setLocation(visitorId, { state: "called", station: v.location.station, since: nowIso() });
+    clearFlags(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function repool(visitorId: string): boolean {
+    const v = store.get(visitorId);
+    if (!v) return false;
+    pending.delete(visitorId);
+    store.setLocation(visitorId, { state: "waiting", since: nowIso() });
+    clearFlags(visitorId);
+    kick();
+    return true;
+  }
+
+  function markComplete(visitorId: string, station: Station): boolean {
+    const v = store.get(visitorId);
+    if (!v) return false;
+    const field =
+      station === "intake" ? "intakeAt" : station === "bodyscan" ? "poseAt" : "sessionEndAt";
+    store.stampMilestone(visitorId, field);
+    pending.delete(visitorId);
+    store.setLocation(visitorId, { state: "waiting", since: nowIso() });
+    clearFlags(visitorId);
+    kick();
+    return true;
+  }
+
+  function remove(visitorId: string): boolean {
+    pending.delete(visitorId);
+    flags.delete(visitorId);
+    const ok = store.remove(visitorId);
+    if (ok) kick();
+    return ok;
+  }
+
+  // station.hello → connId↦station; drives the online LED and detector 3 (socket-drop reap).
+  function handleCommand(cmd: WsClientMsg, connId: string): void {
+    if (cmd.kind !== "station.hello") return;
+    stationConns.set(connId, cmd.station);
+    const t = offlineTimers.get(cmd.station);
+    if (t) { clearTimeout(t); offlineTimers.delete(cmd.station); }
+    broadcastState();
+  }
+  function handleDisconnect(connId: string): void {
+    const station = stationConns.get(connId);
+    if (!station) return;
+    stationConns.delete(connId);
+    if (stationOnline(station)) { broadcastState(); return; } // another screen still up
+    const timer = setTimeout(() => {
+      offlineTimers.delete(station);
+      if (stationOnline(station)) return; // came back within grace
+      for (const v of store.list()) {
+        if (v.location.state === "in_progress" && v.location.station === station) {
+          store.setLocation(v.id, { state: "waiting", since: nowIso() });
+          addFlag(v.id, { type: "auto-reaped", reason: "station-offline", since: nowIso() });
+        }
+      }
+      kick();
+    }, knobs.graceMs);
+    offlineTimers.set(station, timer);
+    broadcastState();
+  }
+
   // ── lifecycle ──
   bus.onConnect((reply) => reply({ kind: "dispatch.state", state: snapshot() }));
+  bus.onCommand((cmd, _reply, connId) => handleCommand(cmd, connId));
+  bus.onDisconnect((connId) => handleDisconnect(connId));
 
   let tick: ReturnType<typeof setInterval> | null = null;
   if (opts.autoStart !== false) tick = setInterval(() => evaluate(), knobs.tickMs);
@@ -234,18 +346,14 @@ export function createDispatcher(
     offlineTimers.clear();
   }
 
-  // checkin/recall/repool/markComplete/remove + station identity are added in Task 3.4.
-  function notImplemented(): never {
-    throw new Error("dispatcher: method added in Task 3.4");
-  }
   return {
-    checkin: notImplemented,
+    checkin,
     confirm,
     assign,
-    recall: notImplemented,
-    repool: notImplemented,
-    markComplete: notImplemented,
-    remove: notImplemented,
+    recall,
+    repool,
+    markComplete,
+    remove,
     clearFlags,
     snapshot,
     kick,
