@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — Tier 3 Task 3.2: Dispatcher knob config + store stampMilestone/remove
+- **What:** Added `config.dispatcher` block to `apps/brain/src/config.ts` — 9 env-overridable numeric knobs (`K`, `warmupMs`, `maxWaitMs`, `noShowMs`, `staleMs`, `graceMs`, `tickMs`) plus 2 boolean flags (`autoConfirm`, `noShowAutoRepool`) and a `slots` record for per-station capacity. All values read from `process.env` with rehearsal-fast defaults. Added `store.stampMilestone(id, field)` (operator mark-complete backstop, stamps any milestone field to `now()`) and `store.remove(id): boolean` (deletes record + frees number index) to `apps/brain/src/store.ts`. Tests appended to `apps/brain/test/store.test.ts` (TDD: 3 tests RED → GREEN); full typecheck passes clean.
+- **Why:** Dispatcher engine (Task 3.3+) needs tuneable thresholds without code changes, and store manipulation primitives for no-show reaping and operator removes.
+- **Files/areas:** `apps/brain/src/config.ts`, `apps/brain/src/store.ts`, `apps/brain/test/store.test.ts`.
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-20 — Tier 3 Task 3.1: Station enum, station.hello, DispatchState types
 - **What:** Added shared `Station` zod enum (`["intake","bodyscan","altar"]`) to `packages/shared/src/schemas.ts`, replacing the inline `z.enum([...])` in `VisitorLocation`. Added `station.hello` variant to `WsClientMsg` discriminated union. Added `DispatchFlag`, `DispatchSlot`, `DispatchQueueEntry`, `DispatchCall`, `DispatchState` TypeScript types and `dispatch.state` variant to `WsServerMsg` in `packages/shared/src/protocol.ts`. New tests appended to `apps/brain/test/schema.test.ts` (TDD: RED then GREEN).
 - **Why:** First additive step of the Tier 3 dispatcher build — establishes the shared vocabulary consumed by all Tier 3 tasks (dispatcher logic, operator screens). Purely additive; all existing consumers still compile.
