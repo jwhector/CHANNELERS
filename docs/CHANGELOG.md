@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — Tier 3 Task 3.5: Bus multiplex; wire dispatcher + checkin/dispatch endpoints
+- **What:** Multiplexed the `Bus` class: replaced three single-slot fields (`onCmd`, `onConnectHook`, `onDisconnectHook`) with arrays and removed `setCommandHandler`. All three now append hooks so multiple subsystems can subscribe without clobbering each other. Updated `divination.ts` (`setCommandHandler` → `onCommand`). Wired `createDispatcher(bus)` into `app.ts` right after `registerDivination(bus)` with an `onClose` lifecycle hook for cleanup. Added `dispatcher.kick()` to `/api/register`, `/api/visitors/:id/intake`, and `/api/visitors/:id/pose` so slot fills are triggered immediately on relevant writes. Added six new HTTP endpoints: `POST /api/checkin`, `GET /api/dispatch`, and `POST /api/dispatch/{confirm,assign,recall,repool,complete,remove}`. Appended TDD tests: `dispatch endpoints` (check-in 200, bad-station 400, repool → waiting) and `WS broadcasts coexist` (new socket gets both `roster` and `dispatch.state` — proves the bus multiplex). TDD: RED → GREEN; all 45 brain tests pass; `pnpm -r typecheck` clean (0 errors, 4 packages). Pre-existing divination tests (including the WS session guards) still pass — confirming Tier 1 regression-free.
+- **Why:** Task 3.5 of the Tier 3 dispatcher build. Integration step: connects the dispatcher engine (Tasks 3.3–3.4) to the running brain and exposes the operator API.
+- **Files/areas:** `apps/brain/src/bus.ts`, `apps/brain/src/divination.ts`, `apps/brain/src/app.ts`, `apps/brain/test/endpoints.test.ts`.
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-20 — Tier 3 Task 3.4: Dispatcher recovery — check-in, no-show, stale, supersede, station identity
 - **What:** Filled all `notImplemented` stubs in `apps/brain/src/dispatcher.ts`. Replaced the placeholder `reconcile()` with the full version: T_stale auto-reap (detector 2), no-show flag/auto-repool, autoConfirm. Added real `checkin()` (permissive create-or-fetch + in_progress, auto-supersede over-capacity occupants, walk-up flag), `recall()` (refresh called.since + clear flags), `repool()` (→ waiting), `markComplete()` (stamp milestone + free slot), `remove()` (drop from store). Added `handleCommand` (station.hello → connId↦station mapping, online LED, clears grace timer) and `handleDisconnect` (detector 3: if last screen for a station drops, sets grace timer; on expiry reaps all in_progress occupants at that station). Wired both with `bus.onCommand`/`bus.onDisconnect`. Deleted `notImplemented` function entirely. Appended 9 new unit tests (TDD: RED → GREEN); all 16 dispatcher tests pass; `pnpm -r typecheck` clean (0 errors, 4 packages).
 - **Why:** Task 3.4 of the Tier 3 dispatcher build. Completes the recovery layer: operator check-in, no-show handling, stale-occupant reaping, auto-supersede, and station socket-drop liveness.
