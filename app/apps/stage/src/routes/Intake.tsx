@@ -2,8 +2,10 @@ import { useState } from "react";
 import { SURVEY, type SurveyResponse, type VibeAxis, type VisitorProfile } from "@channelers/shared";
 import { api } from "../lib/api";
 import { NumberGate } from "../components/NumberGate";
+import { useStationPresence } from "../lib/useStationPresence";
 
 export function Intake() {
+  useStationPresence("intake");
   const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
   const [name, setName] = useState("");
   const [freeText, setFreeText] = useState<Record<string, string>>({});
@@ -11,7 +13,7 @@ export function Intake() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!visitor) return <NumberGate title="Intake" onResolved={setVisitor} />;
+  if (!visitor) return <NumberGate title="Intake" station="intake" onResolved={setVisitor} />;
 
   async function submit() {
     if (!visitor) return;

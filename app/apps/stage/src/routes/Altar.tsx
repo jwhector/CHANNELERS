@@ -6,10 +6,12 @@ import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
 import { NumberGate } from "../components/NumberGate";
 import { Bar, drawSkeleton } from "../components/poseUI";
+import { useStationPresence } from "../lib/useStationPresence";
 
 export function Altar() {
+  useStationPresence("altar");
   const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
-  if (!visitor) return <NumberGate title="Altar" onResolved={setVisitor} />;
+  if (!visitor) return <NumberGate title="Altar" station="altar" onResolved={setVisitor} />;
   return <Gate visitor={visitor} />;
 }
 
