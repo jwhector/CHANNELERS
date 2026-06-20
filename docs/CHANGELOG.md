@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — Tier 3 Task 3.3: Dispatcher engine — eligibility, warm-up, anti-starvation, confirm
+- **What:** Created `apps/brain/src/dispatcher.ts` with `createDispatcher(bus, opts)` — the core dispatch engine. Implements: eligibility predicate (intake/bodyscan/altar gate by milestone), warm-up gate (pool ≥ K OR T_warmup elapsed), anti-starvation (visitors waiting > T_max are priority-picked), slot fill per-station, `confirm()` (pending → called), `assign()` (operator manual assign), `snapshot()`/`broadcastState()`, and bus lifecycle wiring (`onConnect` sends current state). Recovery methods (`checkin`/`recall`/`repool`/`markComplete`/`remove`) left as `notImplemented()` stubs per plan — Task 3.4 replaces them. Added `store.clear()` test-isolation helper to `apps/brain/src/store.ts`. Created `apps/brain/test/dispatcher.test.ts` with 7 unit tests against a fake bus (TDD: RED → GREEN). Full suite: 31/31 pass; `pnpm -r typecheck` clean.
+- **Why:** Task 3.3 of the Tier 3 dispatcher build. Establishes the engine core needed by operator screens and the stage.
+- **Files/areas:** `apps/brain/src/dispatcher.ts` (new), `apps/brain/test/dispatcher.test.ts` (new), `apps/brain/src/store.ts` (added `clear()`).
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-20 — Tier 3 Task 3.2: Dispatcher knob config + store stampMilestone/remove
 - **What:** Added `config.dispatcher` block to `apps/brain/src/config.ts` — 9 env-overridable numeric knobs (`K`, `warmupMs`, `maxWaitMs`, `noShowMs`, `staleMs`, `graceMs`, `tickMs`) plus 2 boolean flags (`autoConfirm`, `noShowAutoRepool`) and a `slots` record for per-station capacity. All values read from `process.env` with rehearsal-fast defaults. Added `store.stampMilestone(id, field)` (operator mark-complete backstop, stamps any milestone field to `now()`) and `store.remove(id): boolean` (deletes record + frees number index) to `apps/brain/src/store.ts`. Tests appended to `apps/brain/test/store.test.ts` (TDD: 3 tests RED → GREEN); full typecheck passes clean.
 - **Why:** Dispatcher engine (Task 3.3+) needs tuneable thresholds without code changes, and store manipulation primitives for no-show reaping and operator removes.
