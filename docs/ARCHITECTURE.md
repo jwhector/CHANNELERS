@@ -11,7 +11,7 @@ One local service — the **Show Brain** — owns visitor data and all AI calls,
        INTAKE                        SHOW BRAIN (the hub)               PERFORMERS / OUTPUT
  ┌──────────────────┐         ┌────────────────────────────┐       ┌─────────────────────┐
  │ Intake app       │  submit │ • visitor profiles (DB)    │ seeds │ Oracle performer     │
- │ (tablets/kiosks) │────────▶│ • transform (Claude):      │──────▶│  earpiece (TTS) /    │
+ │ (tablets/kiosks) │────────▶│ • transform (OpenAI):      │──────▶│  earpiece (TTS) /    │
  │  + vibe-phrase Qs│         │     intake → music seed    │       │  hidden teleprompter │
  │                  │         │     intake → dance score   │       ├─────────────────────┤
  │ Scan stations:   │  events │     intake → oracle persona│ OSC/  │ Anna  (music rig)    │
@@ -33,7 +33,7 @@ Three flows pass through it:
 - **TypeScript end-to-end.** CV runs in-browser (no Python sidecar).
 - **Loose coupling via OSC/WebSocket.** Anna and Jeff subscribe to show events; they never call into the Brain's internals.
 - **Human-in-the-loop.** AI proposes; the operator and performers dispose. Nothing the AI emits goes straight to the audience unmediated.
-- **Offline-resilient.** Venue wifi is unreliable. The Brain runs locally; only Claude/STT/TTS calls leave the machine, and each degrades gracefully (cached fallback lines, manual override) if an API call fails mid-show.
+- **Offline-resilient.** Venue wifi is unreliable. The Brain runs locally; only OpenAI/STT/TTS calls leave the machine, and each degrades gracefully (cached fallback lines, manual override) if an API call fails mid-show.
 - **MVP for the workshop.** Favor the smallest thing that's performable live over the complete thing.
 
 ## 3. Repo layout (pnpm workspace)
@@ -41,7 +41,7 @@ Three flows pass through it:
 ```
 channelers/
   apps/
-    brain/      Fastify + ws + node-osc + @anthropic-ai/sdk   — the hub
+    brain/      Fastify + ws + node-osc + openai               — the hub
     stage/      Vite + React + TypeScript                     — all screens, role-based routes:
                   /intake    visitor kiosk: number gate → data-only survey → handoff to Physical Challenge
                   /bodyscan  pose identity token enrollment (enroll self-invented pose → poseTemplate)
@@ -134,9 +134,9 @@ type ShowEvent =
 Custom kiosk app, themed as the DMV-void. Gates on a **number entry** (the visitor's ticket number, which creates-or-fetches a `VisitorProfile`). Renders the data-only intake questions (`intake.md`): name, free-text absurdist prompts, and the three "State of vulnerability / tension / hopefulness" phrase pickers. **No scan placeholders, no oracle picker** — those steps are separate stations. On submit, `POST …/intake` attaches the `SurveyResponse`, emits `visitor.submitted`, and fires the music-seed transform (fire-and-forget). The screen then directs the visitor to **proceed to the Physical Challenge** (the body-scan station). The body-scan is its own station (`/bodyscan`), not a form field.
 
 ### 5.2 Transform (intake → seeds)
-A Claude call per visitor turns the profile into the three seeds, using **structured outputs** (`output_config.format` with a json_schema) so the result is guaranteed-parseable `Seeds` — no fragile prompt parsing.
+An OpenAI call per visitor turns the profile into the three seeds.
 
-- Model: **Opus 4.8** (`claude-opus-4-8`), adaptive thinking, `effort: "high"`. Latency doesn't matter here (it's pre-divination prep), and quality does.
+- Model: **gpt-4o** (`config.transformModel`, default `gpt-4o`; configurable via `TRANSFORM_MODEL`). Structured outputs (`response_format` json_schema) are available but not yet wired — the transform currently prompts for JSON and validates with zod, falling back to a deterministic stub on any miss or when no `OPENAI_API_KEY` is set.
 - The music seed → Anna; the dance score → Jane/the dancers; the persona → the live loop.
 
 ### 5.3 Live divination (the earpiece loop)
@@ -150,11 +150,11 @@ The visitor speaks → STT → the Oracle persona LLM → text/TTS to the perfor
 
 **Archetype assignment (persona seam):** the oracle persona is chosen at the **altar** (`POST /api/visitors/:id/persona`), after the visitor has verified their pose. The performer's `/channel` lobby shows the archetype already set; there is no oracle selection on the performer's end. `divination.start` reads the record's top-level `archetype` field and guards on missing `survey` or missing `archetype` before starting a session.
 
-Engineering notes (grounded against the Claude API reference):
-- **Stream** the response (`messages.stream`) so the performer hears words as they generate — TTFT is everything in a live loop.
-- **Prompt-cache the stable prefix** (persona system prompt + the visitor's intake profile); keep only the latest utterance after the last cache breakpoint. **Pre-warm** the cache (`max_tokens: 0`) the moment an Oracle is selected, so the first reply has low latency.
-- **Model is a latency/quality decision** — flagged for Jared, not silently chosen. Opus 4.8 is the default brain; **Sonnet 4.6** or **Haiku 4.5** are materially faster/cheaper for the real-time loop. Recommendation: prototype the Oracle on Sonnet 4.6 (fast, 1M context, characterful enough), keep Opus 4.8 for the transforms.
-- For lowest TTFT in the loop, disable thinking on the Oracle turn (or keep it minimal) — the persona doesn't need to deliberate, it needs to speak.
+Engineering notes (grounded against the OpenAI API reference):
+- **Stream** the response (`chat.completions.create({stream:true})`) iterated with `for await ... chunk.choices[0].delta.content` so the performer hears words as they generate — TTFT is everything in a live loop.
+- **OpenAI caches identical prompt prefixes automatically** — no manual cache step or pre-warm needed.
+- **Both default to gpt-4o** (configurable); for a lower-latency live loop, a smaller model like **gpt-4o-mini** can be set via `ORACLE_MODEL`.
+- gpt-4o has no separate thinking parameter — no special flag needed to keep the Oracle turn fast.
 
 ### 5.4 Output integration
 - **Anna (music):** the Brain hands her the `MusicSeed` (lyrics + tempo/key/palette) over WebSocket — rendered on a simple "now generating for visitor N" panel she reads from, and/or pushed as OSC for her rig.
@@ -177,10 +177,10 @@ The enemy isn't "AI" — the show is *about* transactional AI — it's the **hel
 The bridge between the body and the system. All in-browser TypeScript:
 
 - **Pose identity token** (`/bodyscan` + `/altar`) — **MediaPipe Tasks for Web** (`@mediapipe/tasks-vision`, Pose Landmarker) on a webcam. The pose is a **self-invented biometric identity token**, not an archetype classification. Each frame's 33 landmarks reduce to an **angle vector** (`PoseVector = { angles, weights }`) — one interior angle per joint, weighted by landmark visibility — which is translation/scale/identity-invariant by construction. Matching = weighted angular distance; "holding still" = low frame-to-frame angular motion.
-  - **Enroll at `/bodyscan`:** the visitor invents a pose and holds it to lock a `PoseVector` template. The template is persisted as `poseTemplate` on the `VisitorProfile` via `POST /api/visitors/:id/pose`. Functional debug view: skeleton overlay, motion/hold telemetry bars.
+  - **Enroll at `/bodyscan`:** the visitor invents a pose and holds it to lock a `PoseVector` template. The template is persisted as `poseTemplate` on the `VisitorProfile` via `POST /api/visitors/:id/pose`. Functional debug view: skeleton overlay, motion/hold telemetry bars. The hold only counts while the **whole body is in frame** — measured by `bodyCoverage` (mean per-joint visibility); when it falls short the camera view turns red with a "step into frame" prompt so the visitor self-corrects (the gate uses hysteresis — `isBodyFramed`, enter/exit thresholds — so the warning can't strobe at the boundary). Previously a partial framing silently failed to register and the visitor had no idea why.
   - **Verify at `/altar`:** the visitor returns to their pose; the altar matches the live vector against the stored `poseTemplate`. On a successful sustained hold (still AND similar), `POST /api/visitors/:id/verify` stamps `poseVerifiedAt`. The operator also picks the oracle persona at the altar (`POST /api/visitors/:id/persona`). Both steps complete → visitor is oracle-ready.
   - **Iteration 2 (pre-authored archetype poses) is cancelled.** The token is semantically opaque — it proves identity ("you are who you enrolled as"), not archetype ("your pose looks like X"). The pose has no `archetypeGuess`; archetype is chosen by the operator at the altar.
-  - *Robustness note:* single-camera 2.5D — the `z`/depth axis is noisy; we match on the 2D silhouette. The real risk is venue **lighting + full-body framing**, not the model.
+  - *Robustness note:* single-camera 2.5D — the `z`/depth axis is noisy; we match on the 2D silhouette. The real risk is venue **lighting + full-body framing**, not the model. Framing is now surfaced to the visitor at `/bodyscan` (red "step into frame" overlay); lighting is still on the operator.
 - **Fiducial cards** (Station 2, "place the images in their correct place") — printed **ArUco/AprilTag** cards read via `js-aruco2` / OpenCV.js. The arrangement → `scan.fiducial`. Robust, theatrical, trivial to detect.
 - **Souvenir QR** (the takeaway) — at the end, mint a stylized QR fused with the visitor's silhouette, linking to *their* generated artifact (song/transcript). The silhouette is decorative; the QR encodes a real URL. Thematic payoff: *you've been reduced to a scannable code.*
 
@@ -281,11 +281,11 @@ Maintained here — **no separate questions file**. Add to this section as new q
 - **Presence capture** — does waiting-room registration stay operator-keyed, or do we add a `/waiting` self-serve kiosk / integrate the dispenser?
 - **Choreography feed routing** — dancers' in-ears, a public loudspeaker, or both? (The channel is built either way; this is output routing.)
 - **Dispatcher knob values** — warm-up pool size `K`, `T_warmup`, `T_max` (anti-starvation), `T_noshow`, `T_stale` (per station), check-in grace window — set defaults, tune in rehearsal.
-- **Choreography agent model** — confirm Sonnet 4.6 vs. another tier for the second live loop.
+- **Choreography agent model** — confirm gpt-4o vs. gpt-4o-mini (or another model) for the second live loop.
 - **No-show automation** — keep `T_noshow` operator-flagged, or auto-re-pool like `T_stale`?
 
 ## 13. Risks
-- **Latency** in the voice loop (STT + LLM + TTS stacked). Mitigate with streaming + prompt-cache pre-warm + a faster model on the Oracle turn.
+- **Latency** in the voice loop (STT + LLM + TTS stacked). Mitigate with streaming (OpenAI caches prompt prefixes automatically) + a faster model on the Oracle turn (e.g. gpt-4o-mini via `ORACLE_MODEL`).
 - **Live API failure.** Pre-generate fallback Oracle lines and allow the operator to inject a manual line.
 - **Noisy room** wrecking STT. Close mic + push-to-talk on the performer side.
 - **Scope creep** vs the 2-week window — keep one persona and one full path working before breadth.

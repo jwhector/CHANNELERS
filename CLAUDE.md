@@ -15,4 +15,4 @@ Each subdirectory has its own `CLAUDE.md` with specifics; this file is the top-l
 - **After every change, update `docs/CHANGELOG.md`** (newest entry on top: what / why / files-areas / docs-touched) and any docs the change affects. This is how context transfers between sessions — required, not optional.
 - Update `docs/ARCHITECTURE.md` after any architectural deviations from the existing document.
 - New questions for the team go in `docs/ARCHITECTURE.md` §11, not a new file.
-- For anything touching the Claude API (models, params, caching, fine-tuning), check the current reference rather than relying on memory.
+- For anything touching the OpenAI API (models, params, caching, fine-tuning), check the current reference rather than relying on memory.

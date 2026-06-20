@@ -68,6 +68,32 @@ export function poseSimilarity(p: PoseVector, q: PoseVector): number {
 }
 
 /**
+ * How much of the body we can confidently see, in [0,1]: the mean per-joint
+ * weight. Legs leaving the frame drop the leg joints to ~0, so a full-body
+ * stance scores high and an upper-body-only crop sits around 0.5. This is what
+ * tells us whether the visitor is framed head-to-toe well enough to enroll.
+ */
+export function bodyCoverage(vec: PoseVector): number {
+  if (vec.weights.length === 0) return 0;
+  return vec.weights.reduce((s, w) => s + w, 0) / vec.weights.length;
+}
+
+// Two thresholds, not one, so the "step into frame" warning can't strobe when
+// coverage hovers at the boundary: you must climb past ENTER to count as framed
+// and fall below EXIT to count as out. ENTER sits above the ~0.5 an upper-body
+// crop scores, so partial framing is correctly rejected.
+export const FRAME_ENTER = 0.65;
+export const FRAME_EXIT = 0.55;
+
+/**
+ * Hysteretic "is the whole body in frame" test. Pure so it's testable; the
+ * caller threads the previous result back in as `wasFramed`.
+ */
+export function isBodyFramed(coverage: number, wasFramed: boolean): boolean {
+  return wasFramed ? coverage >= FRAME_EXIT : coverage >= FRAME_ENTER;
+}
+
+/**
  * Per-frame motion = how much the shape changed since the previous frame
  * (radians). Low and steady ⇒ they're holding still. This is the "deviation
  * detection": the hold timer only advances while motion stays below threshold,

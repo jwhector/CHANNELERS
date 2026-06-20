@@ -13,6 +13,22 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-19 — /bodyscan: warn when the body isn't fully in frame
+- **What:** `/bodyscan` now gives user-facing feedback when the visitor isn't framed head-to-toe. Added `bodyCoverage(vec)` (mean per-joint visibility) and `isBodyFramed(coverage, wasFramed)` (hysteresis: enter `0.65` / exit `0.55`) to `apps/stage/src/lib/pose/angles.ts`. `BodyScan.tsx` tracks the framed flag per frame (incl. the no-body case) and uses it as the record-hold gate; when not framed the camera view gets a red highlight + a "Step back so your whole body — head to toe — is in frame." overlay (un-mirrored like `.poseflash`). The hysteresis band stops the warning strobing at the threshold.
+- **Why:** The hold timer's old `bodyVisible` gate (`mean weight > 0.5`) silently refused to register a held pose whenever the legs were out of frame — the common webcam case — with **no on-screen explanation**. Visitors held a pose and nothing happened. The design (ARCHITECTURE §6) already flagged full-body framing as the real CV risk; it just had no feedback affordance.
+- **Files/areas:** `apps/stage/src/lib/pose/angles.ts` (new predicates), `apps/stage/src/routes/BodyScan.tsx` (framing state + gate + overlay), `apps/stage/src/styles.css` (`.posestage.unframed`, `.framehint`).
+- **Docs touched:** this changelog; ARCHITECTURE.md §6 (enroll bullet + robustness note).
+
+---
+
+## 2026-06-19 — Switch LLM provider: Anthropic Claude → OpenAI
+- **What:** The brain's LLM provider is now OpenAI. `@anthropic-ai/sdk` → `openai`; `ANTHROPIC_API_KEY` → `OPENAI_API_KEY`; models default to `gpt-4o` for both the intake→seeds transform and the live oracle loop (configurable via `TRANSFORM_MODEL`/`ORACLE_MODEL`). `transform.ts` uses `chat.completions.create`; `divination.ts` streams via `chat.completions.create({stream:true})`. The offline fallback (no key → stub seeds / word-by-word oracle) is unchanged.
+- **Why:** Project decision to use OpenAI GPT models instead of Claude.
+- **Files/areas:** `apps/brain/{config,transform,divination}.ts`, `apps/brain/package.json`, `app/.env.example`; docs (ARCHITECTURE.md §1/§5, root+docs+app CLAUDE.md).
+- **Docs touched:** this changelog; CLAUDE.md (×3); ARCHITECTURE.md.
+
+---
+
 ## 2026-06-19 — Fix /altar verifyPose 400 (empty JSON body)
 
 - **What:** In `apps/stage/src/lib/api.ts`, the `post` helper now omits the `content-type: application/json` header when called with no body (it already omitted the body itself). Previously it always set the JSON content-type, so the bodyless `verifyPose` POST sent `Content-Type: application/json` with an empty body.

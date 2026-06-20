@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { VisitorProfile } from "@channelers/shared";
 import { usePoseLandmarker } from "../lib/pose/usePoseLandmarker";
-import { landmarksToAngles, motionMetric, type PoseVector } from "../lib/pose/angles";
+import { bodyCoverage, isBodyFramed, landmarksToAngles, motionMetric, type PoseVector } from "../lib/pose/angles";
 import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
 import { NumberGate } from "../components/NumberGate";
@@ -21,12 +21,23 @@ function Enroll({ visitor }: { visitor: VisitorProfile }) {
   const [phase, setPhase] = useState<Phase>("ready");
   const [motion, setMotion] = useState(1);
   const [holdProgress, setHoldProgress] = useState(0);
+  const [framed, setFramed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const phaseRef = useRef<Phase>("ready");
   const prevVecRef = useRef<PoseVector | null>(null);
   const holdStartRef = useRef<number | null>(null);
+  const framedRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Hysteretic framing flag, mirrored into state for render. Threading the
+  // previous value through isBodyFramed keeps the "step into frame" warning from
+  // strobing when coverage sits at the boundary.
+  const updateFramed = (coverage: number) => {
+    const next = isBodyFramed(coverage, framedRef.current);
+    if (next !== framedRef.current) { framedRef.current = next; setFramed(next); }
+    return next;
+  };
 
   const setPhaseBoth = (p: Phase) => { phaseRef.current = p; setPhase(p); };
 
@@ -48,16 +59,16 @@ function Enroll({ visitor }: { visitor: VisitorProfile }) {
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
     }
     drawSkeleton(canvasRef.current, lms);
-    if (!lms) { holdStartRef.current = null; prevVecRef.current = null; setMotion(1); return; }
+    if (!lms) { holdStartRef.current = null; prevVecRef.current = null; setMotion(1); updateFramed(0); return; }
 
     const vec = landmarksToAngles(lms);
-    const bodyVisible = vec.weights.reduce((s, w) => s + w, 0) / vec.weights.length > 0.5;
+    const framedNow = updateFramed(bodyCoverage(vec));
     const m = prevVecRef.current ? motionMetric(prevVecRef.current, vec) : 1;
     prevVecRef.current = vec;
     setMotion(m);
 
     if (phaseRef.current !== "record") return;
-    const still = m < stillness && bodyVisible;
+    const still = m < stillness && framedNow;
     if (!still) { holdStartRef.current = null; setHoldProgress(0); return; }
     if (holdStartRef.current == null) holdStartRef.current = tMs;
     const prog = Math.min(1, (tMs - holdStartRef.current) / (recordSec * 1000));
@@ -74,14 +85,21 @@ function Enroll({ visitor }: { visitor: VisitorProfile }) {
     enrolled: "Your shape is saved. Return to the waiting room until you are called.",
   }[phase];
 
+  // The hold only counts while the whole body is framed, so warn the visitor the
+  // moment they're cut off — but only while we're actually looking (ready/record).
+  const showFrameHint = status === "running" && !framed && (phase === "ready" || phase === "record");
+
   return (
     <main className="void">
       <h1>Body Scan</h1>
       <p className="dim">Number {visitor.number} · invent and hold a shape — it becomes your key.</p>
 
-      <div className="posestage">
+      <div className={`posestage${showFrameHint ? " unframed" : ""}`}>
         <video ref={videoRef} playsInline muted />
         <canvas ref={canvasRef} />
+        {showFrameHint && (
+          <div className="framehint">Step back so your whole body — head to toe — is in frame.</div>
+        )}
         {phase === "enrolled" && <div className="poseflash">✓ SAVED</div>}
       </div>
 

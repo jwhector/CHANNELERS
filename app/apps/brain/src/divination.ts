@@ -221,21 +221,31 @@ export function registerDivination(bus: Bus): void {
 }
 
 async function streamReply(session: Session, onDelta: (chunk: string) => void): Promise<string> {
-  if (!config.anthropicApiKey) return fallbackStream(session, onDelta);
+  if (!config.openaiApiKey) return fallbackStream(session, onDelta);
 
-  const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic({ apiKey: config.anthropicApiKey });
+  const { default: OpenAI } = await import("openai");
+  const client = new OpenAI({ apiKey: config.openaiApiKey });
 
-  const stream = client.messages.stream({
+  // OpenAI puts the system prompt in the messages array (no separate `system` param).
+  const stream = await client.chat.completions.create({
     model: config.oracleModel,
-    max_tokens: 300,
+    max_completion_tokens: 300,
     temperature: 1,
-    system: session.persona.systemPrompt,
-    messages: session.history.map((t) => ({ role: t.role, content: t.content })),
+    stream: true,
+    messages: [
+      { role: "system", content: session.persona.systemPrompt },
+      ...session.history.map((t) => ({ role: t.role, content: t.content })),
+    ],
   });
-  stream.on("text", (textDelta: string) => onDelta(textDelta));
-  const final = await stream.finalMessage();
-  return final.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
+  let full = "";
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) {
+      full += delta;
+      onDelta(delta);
+    }
+  }
+  return full;
 }
 
 async function fallbackStream(session: Session, onDelta: (chunk: string) => void): Promise<string> {

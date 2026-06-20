@@ -115,6 +115,13 @@ pre {
   background: rgba(60, 255, 122, 0.16); color: #3cff7a; font-size: 40px; font-weight: 700;
   transform: scaleX(-1); /* un-mirror the text */ letter-spacing: 0.05em;
 }
+/* Body not fully framed: flag the camera view red so the visitor self-corrects. */
+.posestage.unframed { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 24px rgba(255, 90, 60, 0.35); }
+.framehint {
+  position: absolute; inset: auto 0 0 0; padding: 14px 18px;
+  background: rgba(255, 90, 60, 0.85); color: #fff; font-size: 18px; font-weight: 600;
+  text-align: center; transform: scaleX(-1); /* un-mirror the text */
+}
 .posebars { margin: 18px 0; display: grid; gap: 10px; }
 .bar { display: grid; grid-template-columns: 120px 1fr 64px; align-items: center; gap: 10px; font-size: 13px; }
 .bar .track { height: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
