@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — Tier 3 Task 3.7: Stage `/board` public call display
+- **What:** Created `apps/stage/src/routes/Board.tsx` — a public lobby display that shows the `board` array (`#N → STATION`) from `dispatch.state`. Subscribes to live updates via `useBrainSocket` (filters `m.kind === "dispatch.state"`), loads initial state via `api.dispatch.state()` on mount, and shows a connection LED. Added `Board` import + `/board` route to `apps/stage/src/App.tsx`; added `"board"` to the `SCREENS` tuple (Home nav link). `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (67 modules, 376 kB JS). Manual browser smoke pending human verification.
+- **Why:** Task 3.7 of the Tier 3 dispatcher build — the public call-display board. Shows visitors which number is being called to which station, updating in real time.
+- **Files/areas:** `apps/stage/src/routes/Board.tsx` (new), `apps/stage/src/App.tsx`.
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-20 — Tier 3 Task 3.6: Stage API client, station presence hook, NumberGate check-in
 - **What:** Extended `apps/stage/src/lib/api.ts` with `checkin(number, station)` (returns `{record, superseded}`) and a `dispatch` group (`state/confirm/assign/recall/repool/complete/remove`) that call the Task 3.5 endpoints. Added `Station` and `DispatchState` to the shared-type import. Created new hook `apps/stage/src/lib/useStationPresence.ts` — wraps `useBrainSocket`, sends `{kind:"station.hello", station}` on every (re)connect, returns `{connected}`. Added optional `station?: Station` prop to `NumberGate`: when present, resolves via `api.checkin(...).record`; without it, falls back to existing `api.register`. All existing `NumberGate` callers (which omit `station`) continue to compile unchanged. `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (66 modules, 376 kB JS). Manual browser smoke pending human verification.
 - **Why:** Task 3.6 of the Tier 3 dispatcher build — first stage-side task. Exposes the brain's check-in and dispatch API surface to stage screens, and lets station screens announce their role over WebSocket for the dispatcher's online LED.
