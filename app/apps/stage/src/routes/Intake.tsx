@@ -1,16 +1,20 @@
 import { useState } from "react";
-import { ARCHETYPES, SURVEY, type SurveyResponse, type VibeAxis } from "@channelers/shared";
+import { SURVEY, type SurveyResponse, type VibeAxis, type VisitorProfile } from "@channelers/shared";
 import { api } from "../lib/api";
+import { NumberGate } from "../components/NumberGate";
 
 export function Intake() {
+  const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
   const [name, setName] = useState("");
   const [freeText, setFreeText] = useState<Record<string, string>>({});
   const [phrases, setPhrases] = useState<Partial<Record<VibeAxis, string>>>({});
-  const [archetype, setArchetype] = useState<string>("");
-  const [ticket, setTicket] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  if (!visitor) return <NumberGate title="Intake" onResolved={setVisitor} />;
+
   async function submit() {
+    if (!visitor) return;
     setError(null);
     const survey: SurveyResponse = {
       name,
@@ -19,21 +23,22 @@ export function Intake() {
         axis: axis as VibeAxis,
         choice: choice as string,
       })),
-      archetype: archetype || undefined,
     };
     try {
-      const profile = await api.submitSurvey(survey);
-      setTicket(profile.id);
+      await api.submitIntake(visitor.id, survey);
+      setDone(true);
     } catch (e) {
       setError(String(e));
     }
   }
 
-  if (ticket) {
+  if (done) {
     return (
       <main className="void">
         <h1>Processed.</h1>
-        <p className="dim">Ticket {ticket.slice(0, 8)} — proceed to the scanning station.</p>
+        <p className="dim">
+          Number {visitor.number} — proceed to the Physical Challenge when called.
+        </p>
       </main>
     );
   }
@@ -41,16 +46,8 @@ export function Intake() {
   return (
     <main className="void form">
       <h1>Intake</h1>
+      <p className="dim">Number {visitor.number}</p>
       {SURVEY.map((f) => {
-        if (f.kind === "scan") {
-          return (
-            <section key={`${f.label}-${f.station}`} className="field scan">
-              <h3>{f.label}</h3>
-              <p className="dim">{f.instruction}</p>
-              <em className="dim">(completed at the scanning station — /scan)</em>
-            </section>
-          );
-        }
         if (f.kind === "phrase") {
           return (
             <section key={f.axis} className="field">
@@ -64,27 +61,6 @@ export function Intake() {
                     onClick={() => setPhrases((p) => ({ ...p, [f.axis]: o }))}
                   >
                     {o}
-                  </button>
-                ))}
-              </div>
-            </section>
-          );
-        }
-        if (f.kind === "oracle") {
-          return (
-            <section key="oracle" className="field">
-              <label>{f.label}</label>
-              <p className="dim">{f.instruction}</p>
-              <div className="choices oracle-choices">
-                {ARCHETYPES.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    className={archetype === a.id ? "choice on" : "choice"}
-                    onClick={() => setArchetype(a.id)}
-                  >
-                    <strong>{a.label}</strong>
-                    <span className="dim">{a.blurb}</span>
                   </button>
                 ))}
               </div>
@@ -106,7 +82,7 @@ export function Intake() {
         );
       })}
       {error && <p className="error">{error}</p>}
-      <button className="submit" onClick={submit} disabled={!name.trim()}>
+      <button className="submit" onClick={() => void submit()} disabled={!name.trim()}>
         Submit for processing
       </button>
     </main>

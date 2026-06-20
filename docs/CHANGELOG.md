@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-19 — Survey trim + Intake rework: number gate, data-only form, physical-challenge handoff (Task 1.2)
+
+- **What:** Trimmed `packages/shared/src/survey.ts` — removed the two `scan` SurveyField kinds (pose/fiducial) and the `oracle` kind, plus their three corresponding entries from the `SURVEY` array. The eight content fields (name, tender, shoeSize, lost, ssn, three phrase pickers) are unchanged. Rewrote `apps/stage/src/routes/Intake.tsx`: now gates on `NumberGate` (enter visitor number → resolve `VisitorProfile`), renders only text/longtext/phrase fields (no scan placeholders, no oracle picker), submits via `api.submitIntake(visitor.id, survey)`, and shows "Number N — proceed to the Physical Challenge when called." on completion. `SurveyResponse` no longer includes `archetype` (removed in Tier 0); Intake does not set it.
+- **Why:** Spec §3–§6 moved scan stations and oracle choice out of the intake form; the intake route should be purely a data-collection form with a physical-world handoff message. The number gate makes cross-station visitor identity consistent (same pattern as /bodyscan and /altar).
+- **Files/areas:** `packages/shared/src/survey.ts` (trimmed), `apps/stage/src/routes/Intake.tsx` (rewritten).
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-19 — Stage API client + shared NumberGate (Task 1.1)
 
 - **What:** Rewrote `apps/stage/src/lib/api.ts` to target the Tier 0 brain endpoints: removed old `submitSurvey`/`generateSeeds`, added `register`, `getByNumber`, `submitIntake`, `enrollPose`, `setPersona`, `verifyPose` (all returning `Promise<VisitorProfile>`), kept `listVisitors`. Added new `apps/stage/src/components/NumberGate.tsx`: a shared "enter your number" gate that calls `api.register` and hands the resolved `VisitorProfile` up via `onResolved` callback; used by `/intake`, `/bodyscan`, `/altar` in later tasks.
