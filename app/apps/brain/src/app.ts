@@ -1,12 +1,13 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
-import { SurveyResponse, ScanResult, PoseVector, type ShowEvent } from "@channelers/shared";
+import { SurveyResponse, ScanResult, PoseVector, Station, type ShowEvent } from "@channelers/shared";
 import { z } from "zod";
 import { store } from "./store";
 import { Bus } from "./bus";
 import { transform } from "./transform";
 import { registerDivination } from "./divination";
+import { createDispatcher } from "./dispatcher";
 import { transcribeWav } from "./stt";
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -19,6 +20,8 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   const bus = new Bus(app.server);
   registerDivination(bus);
+  const dispatcher = createDispatcher(bus);
+  app.addHook("onClose", async () => dispatcher.stop());
 
   app.get("/api/health", async () => ({ ok: true, at: new Date().toISOString() }));
 
@@ -42,7 +45,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.post("/api/register", async (req, reply) => {
     const parsed = RegisterBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    return store.register(parsed.data.number);
+    const v = store.register(parsed.data.number);
+    dispatcher.kick();
+    return v;
   });
 
   app.get("/api/visitors/by-number/:number", async (req, reply) => {
@@ -65,6 +70,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       store.setSeeds(v.id, seeds);
       bus.publish({ type: "seeds.ready", profileId: v.id });
     });
+    dispatcher.kick();
     return v;
   });
 
@@ -76,6 +82,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const v = store.setPoseTemplate(id, parsed.data.template);
     if (!v) return reply.code(404).send({ error: "unknown visitor" });
+    dispatcher.kick();
     return v;
   });
 
@@ -97,6 +104,50 @@ export async function buildApp(): Promise<FastifyInstance> {
     const v = store.setPoseVerified(id);
     if (!v) return reply.code(404).send({ error: "unknown visitor" });
     return v;
+  });
+
+  // ── dispatcher: check-in (permissive) + operator queue controls (spec §9–§10) ──
+  const CheckinBody = z.object({ number: z.number().int(), station: Station });
+  app.post("/api/checkin", async (req, reply) => {
+    const parsed = CheckinBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return dispatcher.checkin(parsed.data.number, parsed.data.station);
+  });
+
+  app.get("/api/dispatch", async () => dispatcher.snapshot());
+
+  const VisitorIdBody = z.object({ visitorId: z.string() });
+  const StationActionBody = z.object({ visitorId: z.string(), station: Station });
+
+  app.post("/api/dispatch/confirm", async (req, reply) => {
+    const parsed = VisitorIdBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return { ok: dispatcher.confirm(parsed.data.visitorId) };
+  });
+  app.post("/api/dispatch/assign", async (req, reply) => {
+    const parsed = StationActionBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return { ok: dispatcher.assign(parsed.data.visitorId, parsed.data.station) };
+  });
+  app.post("/api/dispatch/recall", async (req, reply) => {
+    const parsed = VisitorIdBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return { ok: dispatcher.recall(parsed.data.visitorId) };
+  });
+  app.post("/api/dispatch/repool", async (req, reply) => {
+    const parsed = VisitorIdBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return { ok: dispatcher.repool(parsed.data.visitorId) };
+  });
+  app.post("/api/dispatch/complete", async (req, reply) => {
+    const parsed = StationActionBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return { ok: dispatcher.markComplete(parsed.data.visitorId, parsed.data.station) };
+  });
+  app.post("/api/dispatch/remove", async (req, reply) => {
+    const parsed = VisitorIdBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return { ok: dispatcher.remove(parsed.data.visitorId) };
   });
 
   // legacy scan + manual seeds regeneration (kept)

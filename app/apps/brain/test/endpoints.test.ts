@@ -129,3 +129,52 @@ describe("divination guards", () => {
     expect(err.message).toBe("no oracle selected yet");
   });
 });
+
+describe("dispatch endpoints", () => {
+  it("check-in puts a visitor in_progress and appears in GET /api/dispatch", async () => {
+    const ci = await app.inject({ method: "POST", url: "/api/checkin", payload: { number: 4001, station: "bodyscan" } });
+    expect(ci.statusCode).toBe(200);
+    expect(ci.json().record.location).toMatchObject({ state: "in_progress", station: "bodyscan" });
+
+    const state = await app.inject({ method: "GET", url: "/api/dispatch" });
+    expect(state.statusCode).toBe(200);
+    const occ = state.json().slots.bodyscan.occupants;
+    expect(occ.some((o: any) => o.number === 4001)).toBe(true);
+  });
+
+  it("400s a check-in with a bad station", async () => {
+    const res = await app.inject({ method: "POST", url: "/api/checkin", payload: { number: 4002, station: "lobby" } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("repool returns a checked-in visitor to waiting", async () => {
+    const ci = await app.inject({ method: "POST", url: "/api/checkin", payload: { number: 4003, station: "intake" } });
+    const id = ci.json().record.id;
+    const rp = await app.inject({ method: "POST", url: "/api/dispatch/repool", payload: { visitorId: id } });
+    expect(rp.statusCode).toBe(200);
+    const lookup = await app.inject({ method: "GET", url: "/api/visitors/by-number/4003" });
+    expect(lookup.json().location.state).toBe("waiting");
+  });
+});
+
+describe("WS broadcasts coexist (bus multiplex)", () => {
+  it("a new socket receives BOTH a roster and a dispatch.state on connect", async () => {
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const addr = app.server.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const kinds = await new Promise<string[]>((resolve, reject) => {
+      const seen: string[] = [];
+      ws.on("message", (raw) => {
+        const m = JSON.parse(raw.toString());
+        seen.push(m.kind);
+        if (seen.includes("roster") && seen.includes("dispatch.state")) resolve(seen);
+      });
+      ws.on("error", reject);
+      setTimeout(() => resolve(seen), 1000);
+    });
+    ws.close();
+    expect(kinds).toContain("roster");
+    expect(kinds).toContain("dispatch.state");
+  });
+});
