@@ -8,7 +8,7 @@ Update **`../docs/CHANGELOG.md`** — newest entry on top, with *what / why / fi
 ## Stack
 pnpm + TypeScript monorepo:
 - `apps/brain` — Show Brain: Fastify + `ws` + OSC + Anthropic SDK. Owns visitor data and all AI calls.
-- `apps/stage` — Vite/React; one app, role-based routes: `/intake /scan /station /console /souvenir`. `/station` is the unified performer page (lobby → claim visitor → teleprompter); `/console` is the read-only stage-manager monitor.
+- `apps/stage` — Vite/React; one app, role-based routes: `/intake /bodyscan /altar /channel /console /souvenir`. `/channel` is the performer page (lobby of oracle-ready visitors → teleprompter; renamed from `/station`); `/bodyscan` enrolls the pose identity token; `/altar` gates on pose-verify + persona pick → oracle-ready; `/console` is the read-only stage-manager monitor. Dispatcher screens (`/waiting /board /dispatch`) are Tier 3, designed but not built.
 - `packages/shared` — zod schemas, the `ShowEvent` + OSC contract, the WS divination protocol, the survey.
 - `packages/oracles` — persona library (voices, anti-slop deny-list, system-prompt builder).
 

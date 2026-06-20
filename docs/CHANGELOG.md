@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-19 — Reconcile architecture/reference docs to implemented multi-station Tier 0+1
+
+- **What:** Doc-only edits to reconcile three reference files to the implemented multi-station reality (no code touched). Updated `docs/ARCHITECTURE.md` §3–§6: status pointer now states Tier 0+1 are implemented / Tier 2+3 not built; §3 route list updated to `/intake /bodyscan /altar /channel /console /souvenir` (Tier 3 `/waiting /board /dispatch` noted as designed, not built); §4 data model updated to current `VisitorProfile` shape (number-keyed, optional survey, top-level archetype, poseTemplate, milestone timestamps), `SurveyResponse` with no archetype, added `PoseVector`/`VisitorLocation`, noted `Seeds.persona` deprecated; §5.1 rewritten as number-gate → data-only form → Physical Challenge handoff; §5.3 `/station` → `/channel`, lobby filters to oracle-ready visitors, archetype assignment paragraph updated to altar persona seam; §6 pose section rewritten as self-invented identity token (enroll at `/bodyscan`, verify at `/altar`, iteration-2 archetype-pose plan cancelled). Updated `app/CLAUDE.md` route list and descriptions. Updated `docs/CLAUDE.md` `/station` → `/channel` in the stateful-resource-recovery convention anecdote.
+- **Why:** Tier 0+1 implementation diverged significantly from the pre-redesign docs; docs needed to reflect the built reality before the workshop.
+- **Files/areas:** `docs/ARCHITECTURE.md` (§3–§6), `app/CLAUDE.md`, `docs/CLAUDE.md`.
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-19 — /channel lobby: refresh on oracle.selected + divination.ended (fix)
 
 - **What:** In `apps/stage/src/routes/Channel.tsx`, extended the WS `event` handler to also call `refresh()` on `oracle.selected` and `divination.ended` events (previously only `visitor.submitted` and `seeds.ready` triggered a refresh). Also corrected a stale CHANGELOG description in the Task 0.5 entry (the divination guards test description now accurately reflects the real ws-based integration test).
