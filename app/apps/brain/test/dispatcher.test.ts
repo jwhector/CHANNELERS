@@ -198,6 +198,21 @@ describe("operator actions", () => {
     expect(store.get(r.id)).toBeUndefined();
     d.stop();
   });
+  it("recall refreshes since for a called visitor and returns false for unknown id", () => {
+    const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0 }, autoStart: false });
+    store.register(NUM());
+    d.kick();
+    const p = d.snapshot().pending[0];
+    d.confirm(p.id);
+    const calledSince = store.get(p.id)!.location.since;
+    vi.setSystemTime(new Date("2026-06-20T00:01:00.000Z"));
+    expect(d.recall(p.id)).toBe(true);
+    const loc = store.get(p.id)!.location;
+    expect(loc.state).toBe("called");
+    expect(loc.since > calledSince).toBe(true);
+    expect(d.recall("nope")).toBe(false);
+    d.stop();
+  });
 });
 
 describe("station identity (online LED + detector 3)", () => {
