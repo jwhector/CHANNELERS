@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — Tier 3 Task 3.1: Station enum, station.hello, DispatchState types
+- **What:** Added shared `Station` zod enum (`["intake","bodyscan","altar"]`) to `packages/shared/src/schemas.ts`, replacing the inline `z.enum([...])` in `VisitorLocation`. Added `station.hello` variant to `WsClientMsg` discriminated union. Added `DispatchFlag`, `DispatchSlot`, `DispatchQueueEntry`, `DispatchCall`, `DispatchState` TypeScript types and `dispatch.state` variant to `WsServerMsg` in `packages/shared/src/protocol.ts`. New tests appended to `apps/brain/test/schema.test.ts` (TDD: RED then GREEN).
+- **Why:** First additive step of the Tier 3 dispatcher build — establishes the shared vocabulary consumed by all Tier 3 tasks (dispatcher logic, operator screens). Purely additive; all existing consumers still compile.
+- **Files/areas:** `packages/shared/src/schemas.ts`, `packages/shared/src/protocol.ts`, `apps/brain/test/schema.test.ts`.
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-19 — /bodyscan: warn when the body isn't fully in frame
 - **What:** `/bodyscan` now gives user-facing feedback when the visitor isn't framed head-to-toe. Added `bodyCoverage(vec)` (mean per-joint visibility) and `isBodyFramed(coverage, wasFramed)` (hysteresis: enter `0.65` / exit `0.55`) to `apps/stage/src/lib/pose/angles.ts`. `BodyScan.tsx` tracks the framed flag per frame (incl. the no-body case) and uses it as the record-hold gate; when not framed the camera view gets a red highlight + a "Step back so your whole body — head to toe — is in frame." overlay (un-mirrored like `.poseflash`). The hysteresis band stops the warning strobing at the threshold.
 - **Why:** The hold timer's old `bodyVisible` gate (`mean weight > 0.5`) silently refused to register a held pose whenever the legs were out of frame — the common webcam case — with **no on-screen explanation**. Visitors held a pose and nothing happened. The design (ARCHITECTURE §6) already flagged full-body framing as the real CV risk; it just had no feedback affordance.
