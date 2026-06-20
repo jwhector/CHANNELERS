@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — Tier 3 Task 3.6: Stage API client, station presence hook, NumberGate check-in
+- **What:** Extended `apps/stage/src/lib/api.ts` with `checkin(number, station)` (returns `{record, superseded}`) and a `dispatch` group (`state/confirm/assign/recall/repool/complete/remove`) that call the Task 3.5 endpoints. Added `Station` and `DispatchState` to the shared-type import. Created new hook `apps/stage/src/lib/useStationPresence.ts` — wraps `useBrainSocket`, sends `{kind:"station.hello", station}` on every (re)connect, returns `{connected}`. Added optional `station?: Station` prop to `NumberGate`: when present, resolves via `api.checkin(...).record`; without it, falls back to existing `api.register`. All existing `NumberGate` callers (which omit `station`) continue to compile unchanged. `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (66 modules, 376 kB JS). Manual browser smoke pending human verification.
+- **Why:** Task 3.6 of the Tier 3 dispatcher build — first stage-side task. Exposes the brain's check-in and dispatch API surface to stage screens, and lets station screens announce their role over WebSocket for the dispatcher's online LED.
+- **Files/areas:** `apps/stage/src/lib/api.ts`, `apps/stage/src/lib/useStationPresence.ts` (new), `apps/stage/src/components/NumberGate.tsx`.
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-20 — Tier 3 Task 3.5: Bus multiplex; wire dispatcher + checkin/dispatch endpoints
 - **What:** Multiplexed the `Bus` class: replaced three single-slot fields (`onCmd`, `onConnectHook`, `onDisconnectHook`) with arrays and removed `setCommandHandler`. All three now append hooks so multiple subsystems can subscribe without clobbering each other. Updated `divination.ts` (`setCommandHandler` → `onCommand`). Wired `createDispatcher(bus)` into `app.ts` right after `registerDivination(bus)` with an `onClose` lifecycle hook for cleanup. Added `dispatcher.kick()` to `/api/register`, `/api/visitors/:id/intake`, and `/api/visitors/:id/pose` so slot fills are triggered immediately on relevant writes. Added six new HTTP endpoints: `POST /api/checkin`, `GET /api/dispatch`, and `POST /api/dispatch/{confirm,assign,recall,repool,complete,remove}`. Appended TDD tests: `dispatch endpoints` (check-in 200, bad-station 400, repool → waiting) and `WS broadcasts coexist` (new socket gets both `roster` and `dispatch.state` — proves the bus multiplex). TDD: RED → GREEN; all 45 brain tests pass; `pnpm -r typecheck` clean (0 errors, 4 packages). Pre-existing divination tests (including the WS session guards) still pass — confirming Tier 1 regression-free.
 - **Why:** Task 3.5 of the Tier 3 dispatcher build. Integration step: connects the dispatcher engine (Tasks 3.3–3.4) to the running brain and exposes the operator API.
