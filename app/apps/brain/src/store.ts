@@ -115,4 +115,9 @@ export const store = {
     byNumber.delete(v.number);
     return true;
   },
+  /** Wipe all records — test isolation only. Do NOT call in production paths. */
+  clear(): void {
+    visitors.clear();
+    byNumber.clear();
+  },
 };
