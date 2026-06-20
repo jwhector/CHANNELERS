@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-19 — Stage API client + shared NumberGate (Task 1.1)
+
+- **What:** Rewrote `apps/stage/src/lib/api.ts` to target the Tier 0 brain endpoints: removed old `submitSurvey`/`generateSeeds`, added `register`, `getByNumber`, `submitIntake`, `enrollPose`, `setPersona`, `verifyPose` (all returning `Promise<VisitorProfile>`), kept `listVisitors`. Added new `apps/stage/src/components/NumberGate.tsx`: a shared "enter your number" gate that calls `api.register` and hands the resolved `VisitorProfile` up via `onResolved` callback; used by `/intake`, `/bodyscan`, `/altar` in later tasks.
+- **Why:** Tier 1 stage UI needs a correctly-typed API layer matching the brain's actual endpoint paths, and a reusable identity gate component so each station route doesn't re-implement number capture.
+- **Files/areas:** `apps/stage/src/lib/api.ts` (rewritten), `apps/stage/src/components/NumberGate.tsx` (new).
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-19 — Divination: archetype from record, guard missing survey/persona, stamp session (Task 0.5)
 
 - **What:** Made `packages/oracles/src/buildPrompt.ts` survey-safe: `buildSystemPrompt` now takes a concrete `SurveyResponse` (not a `VisitorProfile`), and `buildPersona` guards `if (!profile.survey) throw`. Updated `apps/brain/src/divination.ts` `start()` to read `visitor.archetype` (top-level field, was `visitor.survey.archetype`), guard missing `survey` and `archetype` with `session.error` replies, and call `store.markSessionStart(visitorId)` after the session map entry is written. Added `store.markSessionEnd(session.visitorId)` in `reap()` immediately after `sessions.delete`. Removed now-unused `ARCHETYPES` import from `divination.ts`. Added a guard test to `apps/brain/test/endpoints.test.ts` (describes "divination guards"): registers a bare visitor and asserts `oracleReady` is false. Brain/oracles/shared all typecheck clean; stage is the only remaining residual (Tier 1).
