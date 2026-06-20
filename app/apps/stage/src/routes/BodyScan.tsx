@@ -1,0 +1,159 @@
+import { useCallback, useRef, useState } from "react";
+import type { VisitorProfile } from "@channelers/shared";
+import { usePoseLandmarker } from "../lib/pose/usePoseLandmarker";
+import { landmarksToAngles, motionMetric, type PoseVector } from "../lib/pose/angles";
+import { CONNECTIONS, type Landmark } from "../lib/pose/landmarks";
+import { api } from "../lib/api";
+import { NumberGate } from "../components/NumberGate";
+
+type Phase = "ready" | "record" | "saving" | "enrolled";
+
+export function BodyScan() {
+  const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
+  if (!visitor) return <NumberGate title="Body Scan" onResolved={setVisitor} />;
+  return <Enroll visitor={visitor} />;
+}
+
+function Enroll({ visitor }: { visitor: VisitorProfile }) {
+  const [stillness, setStillness] = useState(0.05);
+  const [recordSec, setRecordSec] = useState(3.5);
+  const [phase, setPhase] = useState<Phase>("ready");
+  const [motion, setMotion] = useState(1);
+  const [holdProgress, setHoldProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  const phaseRef = useRef<Phase>("ready");
+  const prevVecRef = useRef<PoseVector | null>(null);
+  const holdStartRef = useRef<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const setPhaseBoth = (p: Phase) => { phaseRef.current = p; setPhase(p); };
+
+  const draw = (lms: Landmark[] | null) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!lms) return;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(231,227,218,0.7)";
+    for (const [i, j] of CONNECTIONS) {
+      const a = lms[i], b = lms[j];
+      if (!a || !b) continue;
+      ctx.beginPath();
+      ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
+      ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
+      ctx.stroke();
+    }
+  };
+
+  async function persist(vec: PoseVector) {
+    setPhaseBoth("saving");
+    try {
+      await api.enrollPose(visitor.id, vec);
+      setPhaseBoth("enrolled");
+    } catch (e) {
+      setError(String(e));
+      setPhaseBoth("ready");
+    }
+  }
+
+  const onFrame = useCallback((lms: Landmark[] | null, tMs: number) => {
+    const canvas = canvasRef.current;
+    const video = canvas?.previousElementSibling as HTMLVideoElement | null;
+    if (canvas && video && video.videoWidth && canvas.width !== video.videoWidth) {
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    }
+    draw(lms);
+    if (!lms) { holdStartRef.current = null; prevVecRef.current = null; setMotion(1); return; }
+
+    const vec = landmarksToAngles(lms);
+    const bodyVisible = vec.weights.reduce((s, w) => s + w, 0) / vec.weights.length > 0.5;
+    const m = prevVecRef.current ? motionMetric(prevVecRef.current, vec) : 1;
+    prevVecRef.current = vec;
+    setMotion(m);
+
+    if (phaseRef.current !== "record") return;
+    const still = m < stillness && bodyVisible;
+    if (!still) { holdStartRef.current = null; setHoldProgress(0); return; }
+    if (holdStartRef.current == null) holdStartRef.current = tMs;
+    const prog = Math.min(1, (tMs - holdStartRef.current) / (recordSec * 1000));
+    setHoldProgress(prog);
+    if (prog >= 1) { holdStartRef.current = null; void persist(vec); }
+  }, [stillness, recordSec]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const { videoRef, status, error: camError, start } = usePoseLandmarker(onFrame);
+
+  const prompt = {
+    ready: "Press start, then invent a shape only you will remember.",
+    record: "Strike your shape — and hold it.",
+    saving: "Saving your shape…",
+    enrolled: "Your shape is saved. Return to the waiting room until you are called.",
+  }[phase];
+
+  return (
+    <main className="void">
+      <h1>Body Scan</h1>
+      <p className="dim">Number {visitor.number} · invent and hold a shape — it becomes your key.</p>
+
+      <div className="posestage">
+        <video ref={videoRef} playsInline muted />
+        <canvas ref={canvasRef} />
+        {phase === "enrolled" && <div className="poseflash">✓ SAVED</div>}
+      </div>
+
+      <p style={{ fontSize: 20, minHeight: 28 }}>{prompt}</p>
+
+      <div className="controls">
+        {status !== "running" ? (
+          <button className="submit" onClick={start} disabled={status === "loading"}>
+            {status === "loading" ? "loading model…" : "Start camera"}
+          </button>
+        ) : phase === "ready" || phase === "enrolled" ? (
+          <button className="submit" onClick={() => setPhaseBoth("record")}>
+            {phase === "enrolled" ? "Re-record shape" : "Record shape"}
+          </button>
+        ) : null}
+      </div>
+      {(error || camError) && <p className="error">{error ?? `camera/model error: ${camError}`}</p>}
+
+      {status === "running" && (
+        <>
+          <div className="posebars">
+            <Bar label="motion" value={1 - Math.min(1, motion / 0.3)} text={motion.toFixed(3)} good={motion < stillness} />
+            <Bar label="record hold" value={holdProgress} text={`${(holdProgress * 100).toFixed(0)}%`} good={holdProgress >= 1} />
+          </div>
+          <details>
+            <summary className="dim">tuning</summary>
+            <div className="tuners">
+              <Tuner label="stillness (rad)" min={0.01} max={0.2} step={0.005} value={stillness} onChange={setStillness} />
+              <Tuner label="record hold (s)" min={1} max={6} step={0.5} value={recordSec} onChange={setRecordSec} />
+            </div>
+          </details>
+        </>
+      )}
+    </main>
+  );
+}
+
+function Bar({ label, value, text, good }: { label: string; value: number; text: string; good: boolean }) {
+  return (
+    <div className="bar">
+      <span>{label}</span>
+      <div className="track"><div className={`fill${good ? " good" : ""}`} style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }} /></div>
+      <span className="val">{text}</span>
+    </div>
+  );
+}
+
+function Tuner({ label, min, max, step, value, onChange }: {
+  label: string; min: number; max: number; step: number; value: number; onChange: (v: number) => void;
+}) {
+  return (
+    <div className="tuner">
+      <span>{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <span className="val">{value.toFixed(3)}</span>
+    </div>
+  );
+}

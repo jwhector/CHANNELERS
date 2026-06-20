@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-19 — /scan → /bodyscan: number gate, enroll-only, persist pose template (Task 1.3)
+
+- **What:** Created `apps/stage/src/routes/BodyScan.tsx` — gates on `NumberGate`, runs the pose CV pipeline (camera + MediaPipe skeleton overlay), records the visitor's invented shape (hold-to-lock), and on lock POSTs the `PoseVector` via `api.enrollPose`. The verify/match loop from the old `Scan.tsx` is gone (verification happens at the altar in a later task). Deleted `apps/stage/src/routes/Scan.tsx` (`git rm`). Updated `App.tsx`: replaced `import { Scan }` with `import { BodyScan }`, updated `SCREENS` from `["intake","scan",...]` to `["intake","bodyscan",...]`, swapped `<Route path="/scan">` for `<Route path="/bodyscan">`.
+- **Why:** Tier 1 station split — bodyscan is enroll-only; match/verify belongs to the altar route (Task 1.5+). Wrapping in `NumberGate` gives each station consistent visitor identity without re-implementing number capture.
+- **Files/areas:** `apps/stage/src/routes/BodyScan.tsx` (new), `apps/stage/src/routes/Scan.tsx` (deleted), `apps/stage/src/App.tsx` (route wiring).
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-19 — Survey trim + Intake rework: number gate, data-only form, physical-challenge handoff (Task 1.2)
 
 - **What:** Trimmed `packages/shared/src/survey.ts` — removed the two `scan` SurveyField kinds (pose/fiducial) and the `oracle` kind, plus their three corresponding entries from the `SURVEY` array. The eight content fields (name, tender, shoeSize, lost, ssn, three phrase pickers) are unchanged. Rewrote `apps/stage/src/routes/Intake.tsx`: now gates on `NumberGate` (enter visitor number → resolve `VisitorProfile`), renders only text/longtext/phrase fields (no scan placeholders, no oracle picker), submits via `api.submitIntake(visitor.id, survey)`, and shows "Number N — proceed to the Physical Challenge when called." on completion. `SurveyResponse` no longer includes `archetype` (removed in Tier 0); Intake does not set it.
