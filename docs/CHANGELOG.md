@@ -13,6 +13,13 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — fix(stage): silence benign Vite `/ws` dev-proxy disconnect noise (EPIPE/ECONNRESET)
+
+- **What:** Added a scoped `customLogger` to `apps/stage/vite.config.ts` that drops only the Vite dev-server `ws proxy socket error: write EPIPE` / `read ECONNRESET` log lines; every other error still logs normally.
+- **Why:** Root-caused (via reproduction with the identical stack trace) to the Vite **dev-only** `/ws` proxy: when a proxied WebSocket client (a kiosk/operator screen) refreshes or navigates away **while the brain is mid-broadcast** (`roster`/`dispatch.state`), the proxy writes a frame to the just-closed socket → EPIPE. Vite already catches these (no crash), but logs an alarming stack. It is harmless — the brain is unaffected and production has no Vite proxy. Tier 3 amplified the noise by adding persistent station sockets (`useStationPresence` on `/intake /bodyscan /altar`) plus the 5s `dispatch.state` tick, widening a pre-existing race. Suppressing the log is the honest fix; the lost frame is a broadcast the disconnected client no longer needs.
+- **Files/areas:** `apps/stage/vite.config.ts` (customLogger filter).
+- **Docs touched:** this CHANGELOG. (No prod-path or protocol change.) **Note:** a running `pnpm dev` must be restarted to pick up the new Vite config.
+
 ## 2026-06-20 — fix(brain): guard dispatcher assign() to waiting visitors only
 
 - **What:** Added a state guard to `assign()` in `apps/brain/src/dispatcher.ts`: the method now returns `false` immediately if the visitor doesn't exist OR their `location.state !== "waiting"`. Previously only the existence check was present, so calling `assign` on a `called` or `in_progress` visitor (e.g. via a stray API call or the `autoConfirm` path) would insert a duplicate entry into `pending`, silently over-counting slot occupancy. One focused regression test added to the `"operator actions"` block in `dispatcher.test.ts`.
