@@ -32,6 +32,7 @@ export interface Dispatcher {
   repool(visitorId: string): boolean;
   markComplete(visitorId: string): boolean;
   remove(visitorId: string): boolean;
+  checkin(num: number, station: Station): { record: VisitorRecord };
   clearFlags(visitorId: string): void;
   snapshot(): DispatchState;
   kick(): void;
@@ -244,6 +245,24 @@ export function createDispatcher(
     return ok;
   }
 
+  /**
+   * Manual operator override (spec §5 / decision log) — the `/console` type-a-number
+   * safety net for when a station screen misbehaves. Forces the visitor in_progress at
+   * `station`, bypassing the slot/confirm flow. Best-effort: if a free online slot exists
+   * at that station, pin the visitor to it so the board reflects it; otherwise just force
+   * the location (the screen may be offline — the override must still work).
+   */
+  function checkin(num: number, station: Station): { record: VisitorRecord } {
+    const record = store.getByNumber(num) ?? store.register(num);
+    freeSlotOf(record.id); // drop any existing slot pin → no split state
+    store.setLocation(record.id, { state: "in_progress", station, since: nowIso() });
+    clearFlags(record.id);
+    const slot = slotsOf(station).find((s) => isOnline(s) && !s.occupant);
+    if (slot) slot.occupant = { visitorId: record.id, number: record.number, phase: "in_progress", since: nowIso() };
+    broadcastState();
+    return { record };
+  }
+
   function completionMilestoneSet(v: VisitorRecord, station: Station): boolean {
     if (station === "intake") return !!v.intakeAt;
     if (station === "bodyscan") return !!v.poseAt;
@@ -358,5 +377,5 @@ export function createDispatcher(
     offlineTimers.clear();
   }
 
-  return { confirm, arrive, assign, repool, markComplete, remove, clearFlags, snapshot, kick, stop };
+  return { confirm, arrive, assign, repool, markComplete, remove, checkin, clearFlags, snapshot, kick, stop };
 }

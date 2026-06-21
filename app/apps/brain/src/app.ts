@@ -106,7 +106,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     return v;
   });
 
-  // ── dispatcher: check-in (permissive) + operator queue controls (spec §9–§10) ──
+  // ── dispatcher: /console manual-override check-in + operator queue controls (spec §5, §9–§10) ──
   const CheckinBody = z.object({ number: z.number().int(), station: Station });
   app.post("/api/checkin", async (req, reply) => {
     const parsed = CheckinBody.safeParse(req.body);
@@ -117,22 +117,22 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.get("/api/dispatch", async () => dispatcher.snapshot());
 
   const VisitorIdBody = z.object({ visitorId: z.string() });
-  const StationActionBody = z.object({ visitorId: z.string(), station: Station });
+  const AssignBody = z.object({ visitorId: z.string(), slotId: z.string() });
 
   app.post("/api/dispatch/confirm", async (req, reply) => {
     const parsed = VisitorIdBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     return { ok: dispatcher.confirm(parsed.data.visitorId) };
   });
-  app.post("/api/dispatch/assign", async (req, reply) => {
-    const parsed = StationActionBody.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    return { ok: dispatcher.assign(parsed.data.visitorId, parsed.data.station) };
-  });
-  app.post("/api/dispatch/recall", async (req, reply) => {
+  app.post("/api/dispatch/arrive", async (req, reply) => {
     const parsed = VisitorIdBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    return { ok: dispatcher.recall(parsed.data.visitorId) };
+    return { ok: dispatcher.arrive(parsed.data.visitorId) };
+  });
+  app.post("/api/dispatch/assign", async (req, reply) => {
+    const parsed = AssignBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return { ok: dispatcher.assign(parsed.data.visitorId, parsed.data.slotId) };
   });
   app.post("/api/dispatch/repool", async (req, reply) => {
     const parsed = VisitorIdBody.safeParse(req.body);
@@ -140,9 +140,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     return { ok: dispatcher.repool(parsed.data.visitorId) };
   });
   app.post("/api/dispatch/complete", async (req, reply) => {
-    const parsed = StationActionBody.safeParse(req.body);
+    const parsed = VisitorIdBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    return { ok: dispatcher.markComplete(parsed.data.visitorId, parsed.data.station) };
+    return { ok: dispatcher.markComplete(parsed.data.visitorId) };
   });
   app.post("/api/dispatch/remove", async (req, reply) => {
     const parsed = VisitorIdBody.safeParse(req.body);
