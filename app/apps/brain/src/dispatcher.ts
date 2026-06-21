@@ -143,11 +143,145 @@ export function createDispatcher(
     broadcastState();
   }
 
-  // Stubs replaced in Task 3.
-  function reapOccupant(_slot: SlotState, _reason: string): void { /* Task 3 */ }
-  function reconcile(): void { /* Task 3 */ }
-  function fill(): void { /* Task 3 */ }
-  function notImplemented(): never { throw new Error("dispatcher: method added in Task 3"); }
+  // ── selection (anti-starvation over random; excludes occupied + non-waiting) ──
+  function select(station: Station): VisitorRecord | undefined {
+    const occupied = occupiedVisitorIds();
+    const eligible = store.list().filter(
+      (v) => !occupied.has(v.id) && eligibleStations(v).includes(station),
+    );
+    if (eligible.length === 0) return undefined;
+    const starving = eligible.filter((v) => ageMs(v.location.since) > knobs.maxWaitMs);
+    const pool = starving.length > 0 ? starving : eligible;
+    if (starving.length > 0) {
+      return pool.reduce((oldest, v) =>
+        Date.parse(v.location.since) < Date.parse(oldest.location.since) ? v : oldest);
+    }
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function fill(): void {
+    if (!warmedUp()) return;
+    for (const slot of slots.values()) {
+      if (!isOnline(slot) || slot.occupant) continue;
+      const pick = select(slot.station);
+      if (!pick) continue;
+      slot.occupant = { visitorId: pick.id, number: pick.number, phase: "pending", since: nowIso() };
+      if (knobs.autoConfirm) confirm(pick.id);
+    }
+  }
+
+  function confirm(visitorId: string): boolean {
+    const slot = slotOfVisitor(visitorId);
+    if (!slot || slot.occupant?.phase !== "pending") return false;
+    slot.occupant.phase = "called";
+    slot.occupant.since = nowIso();
+    store.setLocation(visitorId, { state: "called", station: slot.station, since: nowIso() });
+    clearFlags(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function arrive(visitorId: string): boolean {
+    const slot = slotOfVisitor(visitorId);
+    if (!slot || slot.occupant?.phase !== "called") return false;
+    slot.occupant.phase = "in_progress";
+    slot.occupant.since = nowIso();
+    store.setLocation(visitorId, { state: "in_progress", station: slot.station, since: nowIso() });
+    clearFlags(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function assign(visitorId: string, slotId: string): boolean {
+    const v = store.get(visitorId);
+    const slot = slots.get(slotId);
+    if (!v || v.location.state !== "waiting" || !slot || !isOnline(slot) || slot.occupant) return false;
+    if (occupiedVisitorIds().has(visitorId)) return false;
+    slot.occupant = { visitorId, number: v.number, phase: "pending", since: nowIso() };
+    if (knobs.autoConfirm) confirm(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function freeSlotOf(visitorId: string): void {
+    const slot = slotOfVisitor(visitorId);
+    if (slot) slot.occupant = undefined;
+  }
+
+  function repool(visitorId: string): boolean {
+    const v = store.get(visitorId);
+    if (!v) return false;
+    freeSlotOf(visitorId);
+    store.setLocation(visitorId, { state: "waiting", since: nowIso() });
+    clearFlags(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function markComplete(visitorId: string): boolean {
+    const slot = slotOfVisitor(visitorId);
+    const v = store.get(visitorId);
+    if (!v) return false;
+    const station = slot?.station ?? (v.location.station as Station | undefined);
+    const field = station === "intake" ? "intakeAt" : station === "bodyscan" ? "poseAt" : "sessionEndAt";
+    if (station) store.stampMilestone(visitorId, field);
+    freeSlotOf(visitorId);
+    store.setLocation(visitorId, { state: "waiting", since: nowIso() });
+    clearFlags(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function remove(visitorId: string): boolean {
+    freeSlotOf(visitorId);
+    flags.delete(visitorId);
+    const ok = store.remove(visitorId);
+    if (ok) broadcastState();
+    return ok;
+  }
+
+  function completionMilestoneSet(v: VisitorRecord, station: Station): boolean {
+    if (station === "intake") return !!v.intakeAt;
+    if (station === "bodyscan") return !!v.poseAt;
+    return !!v.sessionEndAt; // altar held through the reading
+  }
+
+  function reapOccupant(slot: SlotState, reason: string): void {
+    const occ = slot.occupant;
+    slot.occupant = undefined;
+    if (!occ) return;
+    if (store.get(occ.visitorId)) {
+      store.setLocation(occ.visitorId, { state: "waiting", since: nowIso() });
+      addFlag(occ.visitorId, { type: "auto-reaped", reason, since: nowIso() });
+    }
+  }
+
+  function reconcile(): void {
+    for (const slot of slots.values()) {
+      const occ = slot.occupant;
+      if (!occ) continue;
+      const v = store.get(occ.visitorId);
+      if (!v) { slot.occupant = undefined; continue; }
+      if (occ.phase === "in_progress") {
+        if (completionMilestoneSet(v, slot.station)) {
+          slot.occupant = undefined;
+          store.setLocation(v.id, { state: "waiting", since: nowIso() });
+        } else if (ageMs(occ.since) > knobs.staleMs) {
+          reapOccupant(slot, "stale");
+        }
+      } else if (occ.phase === "called") {
+        if (ageMs(occ.since) > knobs.noShowMs) {
+          if (knobs.noShowAutoRepool) reapOccupant(slot, "no-show");
+          else addFlag(v.id, { type: "no-show", since: nowIso() });
+        }
+      }
+    }
+    if (knobs.autoConfirm) {
+      for (const slot of slots.values()) {
+        if (slot.occupant?.phase === "pending") confirm(slot.occupant.visitorId);
+      }
+    }
+  }
 
   function kick(): void {
     reconcile();
@@ -220,16 +354,5 @@ export function createDispatcher(
     offlineTimers.clear();
   }
 
-  return {
-    confirm: notImplemented,
-    arrive: notImplemented,
-    assign: notImplemented,
-    repool: notImplemented,
-    markComplete: notImplemented,
-    remove: notImplemented,
-    clearFlags,
-    snapshot,
-    kick,
-    stop,
-  };
+  return { confirm, arrive, assign, repool, markComplete, remove, clearFlags, snapshot, kick, stop };
 }

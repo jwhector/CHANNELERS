@@ -103,3 +103,115 @@ describe("socket-drop → slot offline after grace", () => {
     expect(s.stationsOnline.intake).toBe(false);
   });
 });
+
+const NUM = () => 500000 + Math.floor(Math.random() * 400000);
+
+describe("pinned dispatch only fills free ONLINE slots", () => {
+  it("does not dispatch when no slot is online", () => {
+    store.register(NUM());
+    d.kick();
+    expect(d.snapshot().slots.every((s) => !s.occupant)).toBe(true);
+  });
+
+  it("pins a pending occupant to an online slot, then confirm→arrive progress the phase", () => {
+    f.hello("intake", "kioskA", "connA"); // intake-0 online
+    const v = store.register(NUM());
+    d.kick();
+    const pendingSlot = d.snapshot().slots.find((s) => s.occupant?.phase === "pending");
+    expect(pendingSlot?.occupant?.visitorId).toBe(v.id);
+    expect(pendingSlot?.station).toBe("intake");
+
+    expect(d.confirm(v.id)).toBe(true);
+    expect(store.get(v.id)?.location).toMatchObject({ state: "called", station: "intake" });
+    expect(d.snapshot().slots.find((s) => s.occupant?.visitorId === v.id)?.occupant?.phase).toBe("called");
+
+    expect(d.arrive(v.id)).toBe(true);
+    expect(store.get(v.id)?.location).toMatchObject({ state: "in_progress", station: "intake" });
+    expect(d.snapshot().slots.find((s) => s.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
+  });
+
+  it("effective capacity = online slots: 2 online intake slots hold at most 2 occupants", () => {
+    f.hello("intake", "kA", "cA");
+    f.hello("intake", "kB", "cB"); // 2 of 3 intake slots online
+    for (let i = 0; i < 5; i++) store.register(NUM());
+    d.kick();
+    const intakeOccupied = d.snapshot().slots.filter((s) => s.station === "intake" && s.occupant).length;
+    expect(intakeOccupied).toBe(2);
+  });
+});
+
+describe("completion frees the slot", () => {
+  it("an in_progress intake occupant with intakeAt set is freed on the next kick", () => {
+    f.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d.kick(); d.confirm(v.id); d.arrive(v.id);
+    store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] }); // stamps intakeAt
+    d.kick();
+    expect(d.snapshot().slots.find((s) => s.occupant?.visitorId === v.id)).toBeUndefined();
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+  });
+});
+
+describe("recovery", () => {
+  it("T_stale reaps an in_progress occupant with no completion", () => {
+    const d2 = createDispatcher(f.bus, { knobs: { ...KNOBS, staleMs: 300_000 }, autoStart: false });
+    f.hello("bodyscan", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); d2.confirm(v.id); d2.arrive(v.id);
+    vi.setSystemTime(new Date("2026-06-21T00:06:00.000Z"));
+    d2.kick();
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    d2.stop();
+  });
+
+  it("flags a no-show by default", () => {
+    const d2 = createDispatcher(f.bus, { knobs: { ...KNOBS, noShowMs: 90_000 }, autoStart: false });
+    f.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); d2.confirm(v.id); // called
+    vi.setSystemTime(new Date("2026-06-21T00:02:00.000Z"));
+    d2.kick();
+    expect(store.get(v.id)?.location.state).toBe("called");
+    const slot = d2.snapshot().slots.find((s) => s.occupant?.visitorId === v.id);
+    expect(slot?.occupant?.phase).toBe("called");
+    d2.stop();
+  });
+
+  it("socket-drop after grace repools the slot's occupant", () => {
+    f.hello("altar", "kA", "cA");
+    const v = store.register(NUM());
+    store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] });
+    store.setPoseTemplate(v.id, { angles: [0], weights: [1] }); // now altar-eligible
+    store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
+    d.kick(); d.confirm(v.id); d.arrive(v.id); // in_progress@altar
+    f.fireDisconnect("cA");
+    vi.advanceTimersByTime(KNOBS.graceMs + 10);
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    expect(d.snapshot().slots.find((s) => s.id === "altar-0")?.occupant).toBeUndefined();
+  });
+});
+
+describe("operator backstops", () => {
+  it("assign pins a waiting visitor to a specific free online slot", () => {
+    f.hello("intake", "kA", "cA"); // intake-0
+    const v = store.register(NUM());
+    expect(d.assign(v.id, "intake-0")).toBe(true);
+    expect(d.snapshot().slots.find((s) => s.id === "intake-0")?.occupant?.visitorId).toBe(v.id);
+  });
+  it("repool clears a visitor's slot back to waiting", () => {
+    f.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d.kick(); d.confirm(v.id);
+    expect(d.repool(v.id)).toBe(true);
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    expect(d.snapshot().slots.every((s) => s.occupant?.visitorId !== v.id)).toBe(true);
+  });
+  it("remove deletes the record and frees its slot", () => {
+    f.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d.kick(); d.confirm(v.id);
+    expect(d.remove(v.id)).toBe(true);
+    expect(store.get(v.id)).toBeUndefined();
+    expect(d.snapshot().slots.every((s) => s.occupant?.visitorId !== v.id)).toBe(true);
+  });
+});
