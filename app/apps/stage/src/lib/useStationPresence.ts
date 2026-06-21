@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { Station, Slot, DispatchState, WsServerMsg } from "@channelers/shared";
 import { useBrainSocket } from "./useBrainSocket";
 
-/** Stable per-screen kiosk id: from ?kiosk=, else a localStorage UUID. */
+/** Stable per-tab kiosk id: from ?kiosk=, else a sessionStorage UUID (one tab = one kiosk). */
 function kioskId(): string {
   const url = new URLSearchParams(location.search).get("kiosk");
   if (url) return url;
-  const KEY = "channelers.kioskId";
-  let id = localStorage.getItem(KEY);
-  if (!id) { id = crypto.randomUUID(); localStorage.setItem(KEY, id); }
+  const KEY = "channelers.kioskId";          // per-tab via sessionStorage (a tab renders one station)
+  let id = sessionStorage.getItem(KEY);
+  if (!id) { id = crypto.randomUUID(); sessionStorage.setItem(KEY, id); }
   return id;
 }
 
@@ -30,6 +30,6 @@ export function useStationPresence(station: Station): { connected: boolean; slot
     if (connected) send({ kind: "station.hello", station, kioskId: id, slotHint });
   }, [connected, send, station, id, slotHint]);
 
-  const slot = slots.find((s) => s.kioskId === id);
+  const slot = slots.find((s) => s.kioskId === id && s.station === station);
   return { connected, slot };
 }

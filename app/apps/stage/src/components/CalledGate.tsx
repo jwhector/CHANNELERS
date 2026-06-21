@@ -1,23 +1,24 @@
 import { useEffect, useState } from "react";
-import type { Station, VisitorProfile } from "@channelers/shared";
+import type { Slot, Station, VisitorProfile } from "@channelers/shared";
 import { api } from "../lib/api";
-import { useStationPresence } from "../lib/useStationPresence";
 
 /**
- * Confirm-at-station gate (spec §5). Replaces typing a number. Watches this screen's bound
- * slot; when a visitor is `called` there, shows the number + Confirm arrival. On confirm it
- * marks the visitor in_progress, loads their record, and hands it up to render the station work.
+ * Confirm-at-station gate (spec §5). Presentational: presence tracking lives at the
+ * parent route so the socket outlives this gate's unmount on arrival.
  */
 export function CalledGate({
   station,
   title,
+  connected,
+  slot,
   onArrived,
 }: {
   station: Station;
   title: string;
+  connected: boolean;
+  slot: Slot | undefined;
   onArrived: (visitor: VisitorProfile) => void;
 }) {
-  const { connected, slot } = useStationPresence(station);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,7 +48,7 @@ export function CalledGate({
       </header>
       {!slot && <p className="dim">No slot bound — open this screen with <code>?kiosk=&lt;id&gt;</code> or wait for a free {station} slot.</p>}
       {slot && !occ && <p className="dim">Slot {slot.id} ready. Waiting to be called…</p>}
-      {occ && occ.phase !== "in_progress" && (
+      {occ && occ.phase !== "in_progress" && occ.phase !=="pending" && (
         <section className="called">
           <p className="dim">Now calling</p>
           <div className="called-number">#{occ.number}</div>

@@ -63,9 +63,16 @@ export function Dispatch() {
           <h3>Waiting ({state.queue.length})</h3>
           <ul className="pool-list">
             {state.queue.map((v) => (
-              <li key={v.id} className="pool-item" title={`${v.name || "(no name)"} · eligible: ${v.eligible.join(", ") || "—"}${v.flags.length ? " · " + v.flags.map((f) => f.type).join(",") : ""}`}>
-                <strong>#{v.number}</strong>
-                <span className="dim">{elapsed(v.waitingSince)}</span>
+              <li key={v.id} className="pool-item">
+                <div className="pool-item-top">
+                  <strong>#{v.number}</strong>
+                  <span className="dim">{elapsed(v.waitingSince)}</span>
+                </div>
+                <div className="pool-item-name">{v.name || "(no name)"}</div>
+                <div className="pool-item-meta">
+                  {v.eligible.map((s) => <span key={s} className="pool-chip">{s}</span>)}
+                  {v.flags.length > 0 && <span className="pool-flag">{v.flags.map((f) => f.type).join(" ")}</span>}
+                </div>
               </li>
             ))}
           </ul>
