@@ -27,17 +27,17 @@ export const api = {
   setPersona: (id: string, archetype: string) =>
     post<VisitorProfile>(`/api/visitors/${id}/persona`, { archetype }),
   verifyPose: (id: string) => post<VisitorProfile>(`/api/visitors/${id}/verify`),
+  /** Confirm-at-station arrival (spec §5): called → in_progress for the slot's occupant. */
+  arrive: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/arrive", { visitorId }),
   checkin: (number: number, station: Station) =>
-    post<{ record: VisitorProfile; superseded: number[] }>("/api/checkin", { number, station }),
+    post<{ record: VisitorProfile }>("/api/checkin", { number, station }),
   dispatch: {
     state: () => fetch("/api/dispatch").then((r) => json<DispatchState>(r)),
     confirm: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/confirm", { visitorId }),
-    assign: (visitorId: string, station: Station) =>
-      post<{ ok: boolean }>("/api/dispatch/assign", { visitorId, station }),
-    recall: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/recall", { visitorId }),
+    assign: (visitorId: string, slotId: string) =>
+      post<{ ok: boolean }>("/api/dispatch/assign", { visitorId, slotId }),
     repool: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/repool", { visitorId }),
-    complete: (visitorId: string, station: Station) =>
-      post<{ ok: boolean }>("/api/dispatch/complete", { visitorId, station }),
+    complete: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/complete", { visitorId }),
     remove: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/remove", { visitorId }),
   },
 };
