@@ -43,7 +43,7 @@ channelers/
   apps/
     brain/      Fastify + ws + node-osc + openai               — the hub
     stage/      Vite + React + TypeScript                     — all screens, role-based routes:
-                  /intake    visitor kiosk: number gate → data-only survey → handoff to Physical Challenge
+                  /intake    visitor kiosk: confirm-at-station gate → data-only survey → handoff to Physical Challenge
                   /bodyscan  pose identity token enrollment (enroll self-invented pose → poseTemplate)
                   /altar     pose verify + persona pick → oracle-ready
                   /channel   performer page: lobby of oracle-ready visitors → teleprompter (renamed from /station)
@@ -77,7 +77,9 @@ type SurveyResponse = {
 /** Self-invented biometric identity token enrolled at /bodyscan. */
 type PoseVector = { angles: number[]; weights: number[] }
 
-/** Transient dispatch location — managed by the dispatcher engine (see §5.x). */
+/** Transient dispatch location — the per-visitor truth. The dispatcher's addressable
+ *  slot registry (kiosk-bound `Slot`/`SlotOccupant`, see §5.x) is an addressing layer on
+ *  top of this; eligibility, /channel, and /console keep reading `location`. */
 type VisitorLocation = {
   state: "waiting" | "called" | "in_progress"
   station?: "intake" | "bodyscan" | "altar"
@@ -158,24 +160,28 @@ Engineering notes (grounded against the OpenAI API reference):
 - **Both default to gpt-4o** (configurable); for a lower-latency live loop, a smaller model like **gpt-4o-mini** can be set via `ORACLE_MODEL`.
 - gpt-4o has no separate thinking parameter — no special flag needed to keep the Oracle turn fast.
 
-### 5.x Visitor dispatcher (Tier 3)
+### 5.x Visitor dispatcher (confirm-at-station + addressable kiosk slots)
 
-The dispatcher (`apps/brain/src/dispatcher.ts`, `createDispatcher(bus)`) is an in-memory engine that manages visitor flow across the three stations. It runs alongside divination — the Bus multiplexes hooks so both subsystems coexist.
+The dispatcher (`apps/brain/src/dispatcher.ts`, `createDispatcher(bus)`) is an in-memory engine that manages visitor flow across the three stations. It runs alongside divination — the Bus multiplexes hooks so both subsystems coexist. (Spec: `docs/superpowers/specs/2026-06-20-dispatch-confirm-and-addressable-slots-design.md`.)
 
-**Slots:** intake 2 / bodyscan 1 / altar 1. The altar slot is held through the whole divination reading and freed when `sessionEndAt` is stamped.
+**Addressable slots (the model):** every station is an array of named slots derived from config counts — `config.dispatcher.slots: Record<Station, number>` (default intake 2 / bodyscan 1 / altar 1) → slot ids `${station}-${i}` (e.g. `intake-0`). Nothing hardcodes a count; raising a count adds slots everywhere (engine capacity, board boxes, binding). Each slot is **bound to a kiosk screen** and is **online** only while that screen's socket is connected. **Effective capacity of a station = its number of free, online slots** — the dispatcher never targets a dark (offline) slot, which yields all the 0/k/N/>N kiosk-count cases for free. The altar slot is held through the whole divination reading and freed when `sessionEndAt` is stamped.
 
-**State machine:** `waiting → pending (ephemeral, reserves a slot) → called → in_progress`. Completion stamps the station's milestone and returns the visitor to `waiting` (or removes them after the altar reading ends).
+**Kiosk binding (spec §4):** a screen announces `station.hello { station, kioskId, slotHint? }` (`kioskId` from `?kiosk=` else a stable `localStorage` UUID; `slotHint` from `?slot=`). Binding: reclaim the slot this `kioskId` already owns (a refresh/reconnect within grace resumes it) → else bind an explicit free `slotHint` → else auto-claim the next free slot → else the screen is **surplus** (flagged, idle, auto-binds when a slot frees). Collisions on a live slot are forgiving (newest wins, flagged).
 
-**Selection:** random among eligible `waiting` visitors (eligibility: intake slot ← visitor missing `intakeAt`; bodyscan slot ← missing `poseAt`; altar slot ← `intakeAt` + `poseAt` set, no active session), gated by:
+**State machine:** `waiting → pending → called → in_progress`, now **pinned to a specific slot** (occupancy is per-slot, not a per-station count). `pending`/`called`/`in_progress` live as the slot's `occupant`; `visitor.location` stays the per-visitor truth (`waiting | called | in_progress` + station), synced to the occupant for `called`/`in_progress`. Completion stamps the station's milestone and frees the slot.
+
+**Two confirms (spec §5):** arrival is an explicit press, not a typed number. (1) **Confirm call** — lobby operator on `/dispatch` (`pending → called`, pinned to the slot; skipped when `autoConfirm`). (2) **Confirm arrival** — station kiosk via `CalledGate` (`called → in_progress`, `POST /api/dispatch/arrive`), which then loads the visitor record and runs the existing station work.
+
+**Selection:** anti-starvation over random among eligible `waiting` visitors not already occupying a slot (eligibility: intake ← missing `intakeAt`; bodyscan ← missing `poseAt`; altar ← `intakeAt` + `poseAt` set, no `sessionEndAt`), `fill()`ing only **free online** slots, gated by:
 - **Warm-up:** pool size ≥ K OR T_warmup elapsed since first registration — avoids dispatching a single lonely visitor.
 - **Anti-starvation:** a visitor who has waited longer than T_max is priority-picked over the random selection.
 
-**Recovery detectors (three layers):**
-1. **Auto-supersede on check-in:** typing a ticket number at any station screen calls `POST /api/checkin`; the dispatcher moves the visitor to `in_progress@station`, bumping any over-capacity occupant back to `waiting` (flagged `walk-up`).
-2. **T_stale auto-reap:** `reconcile()` (periodic tick) reaps any `in_progress` visitor whose `since` age exceeds `staleMs` — sends them back to `waiting`.
-3. **Socket-drop grace reap:** station screens send `station.hello {station}` on every (re)connect; the dispatcher maps connId↦station. When the last screen for a station disconnects, a grace timer starts; if no screen re-attaches within `graceMs`, all `in_progress` occupants at that station are reaped to `waiting`.
+**Recovery detectors:**
+1. **Per-slot socket-drop grace reap:** on a kiosk socket close, that slot's `graceMs` timer starts (slot goes offline immediately; binding held for reclaim). If the same `kioskId` reconnects within grace → resume; else the slot unbinds and any `called`/`in_progress` occupant is re-pooled to `waiting` (flagged `auto-reaped: kiosk-offline`).
+2. **T_stale auto-reap:** `reconcile()` (periodic tick) reaps any `in_progress` slot occupant whose `since` age exceeds `staleMs` — back to `waiting`.
+3. **Manual override:** `POST /api/checkin { number, station }` survives as the hidden `/console` operator safety net (for a misbehaving screen) — forces the visitor `in_progress@station`, best-effort pinning a free online slot. The old auto-supersede/`walk-up` behavior is gone.
 
-**No-show:** a visitor called but not checked in after `noShowMs` is flagged `no-show`. Operator can re-pool manually; the `noShowAutoRepool` knob auto-re-pools instead.
+**No-show:** a visitor called but not arrived after `noShowMs` is flagged `no-show`. Operator can re-pool manually; the `noShowAutoRepool` knob auto-re-pools instead.
 
 **Knobs** (all in `config.dispatcher`, env-overridable):
 
@@ -193,9 +199,9 @@ The dispatcher (`apps/brain/src/dispatcher.ts`, `createDispatcher(bus)`) is an i
 
 Defaults are rehearsal-fast (small K, short timers). Tune for a full-audience show via env.
 
-**Transport:** a `dispatch.state` WS broadcast carries the full `DispatchState` (slots, call board, queue, per-station online LEDs). It is pushed on every state change **and** sent to each screen on connect (screens are always in sync immediately). This channel is **screens-only — never OSC** — dispatcher logistics are deliberately kept off the `ShowEvent`/OSC contract (§9-ext).
+**Transport:** a `dispatch.state` WS broadcast carries the full `DispatchState` — now `{ slots: Slot[], queue, completed, surplus, stationsOnline, warmedUp }` (the slots array replaces the old per-station count map + call board; `completed` = visitors with `sessionEndAt`; `surplus` = connected screens with no free slot; `stationsOnline` = derived per-station LED). It is pushed on every state change **and** sent to each screen on connect. This channel is **screens-only — never OSC** — dispatcher logistics are deliberately kept off the `ShowEvent`/OSC contract (§9-ext). `/dispatch` renders this as a no-scroll 3-zone board (waiting pool · slot grid · completed); `/board` derives the public call list from slots in the `called` phase; `/console` reads the slots array and keeps the manual override.
 
-**HTTP endpoints:** `POST /api/checkin` · `GET /api/dispatch` · `POST /api/dispatch/{confirm,assign,recall,repool,complete,remove}`.
+**HTTP endpoints:** `POST /api/checkin` (`/console` override) · `GET /api/dispatch` · `POST /api/dispatch/arrive` · `POST /api/dispatch/assign { visitorId, slotId }` · `POST /api/dispatch/{confirm,repool,complete,remove}` (all `{ visitorId }`; `complete` infers the station from the slot). `recall` removed.
 
 ### 5.4 Output integration
 - **Anna (music):** the Brain hands her the `MusicSeed` (lyrics + tempo/key/palette) over WebSocket — rendered on a simple "now generating for visitor N" panel she reads from, and/or pushed as OSC for her rig.
@@ -240,7 +246,7 @@ Client → brain commands (zod-validated):
 session.start   { visitorId }                        performer claims a visitor
 session.say     { sessionId, text }                  visitor utterance
 session.end     { sessionId }                        end this session
-station.hello   { station }                          station screen identity (dispatcher use only)
+station.hello   { station, kioskId, slotHint? }      station kiosk identity + slot binding (dispatcher use only)
 ```
 
 Brain → client messages:
@@ -254,14 +260,14 @@ oracle.done     { sessionId, text }                  full reply
 session.ended   { sessionId }
 session.error   { sessionId?, visitorId?, message }  targeted to the caller's socket
 event           { event: ShowEvent }                 OSC mirror
-dispatch.state  { slots, board, queue, flags, stationOnline }   dispatcher snapshot (screens only)
+dispatch.state  { slots: Slot[], queue, completed, surplus, stationsOnline, warmedUp }   dispatcher snapshot (screens only)
 ```
 
 The `roster` message is broadcast on every session change **and** sent to each socket on connect — the lobby (and monitor) are always correct immediately on load or reconnect.
 
-The `dispatch.state` message is broadcast on every dispatcher state change **and** sent on connect. It carries the full `DispatchState`: per-station slot occupancy and called visitors (`slots`), the public call board (`board`: `Array<{number, station}>`), the pending-confirm and waiting queues, active flags, and per-station online LED (`stationOnline`).
+The `dispatch.state` message is broadcast on every dispatcher state change **and** sent on connect. It carries the full `DispatchState`: the **addressable slot array** (`slots: Slot[]`, each with `id`, `station`, `kioskId?`, `online`, and a pinned `occupant?` of phase `pending`/`called`/`in_progress`), the waiting `queue`, the `completed` list (`sessionEndAt` set), `surplus` screens (connected but unbound), the derived `stationsOnline` LEDs, and `warmedUp`. Arrival is an explicit **Confirm arrival** at the kiosk (`POST /api/dispatch/arrive`), not a typed check-in.
 
-**Dispatcher logistics are deliberately kept off the `ShowEvent`/OSC contract.** `dispatch.state` is an internal screen-to-screen channel — Anna's and Jeff's tools subscribe to `ShowEvent`s over OSC/WebSocket (§9-ext); they never see dispatcher internals. The `station.hello` client message serves only the dispatcher's socket-drop detector and is ignored by all other subsystems.
+**Dispatcher logistics are deliberately kept off the `ShowEvent`/OSC contract.** `dispatch.state` is an internal screen-to-screen channel — Anna's and Jeff's tools subscribe to `ShowEvent`s over OSC/WebSocket (§9-ext); they never see dispatcher internals. The `station.hello` client message serves only the dispatcher's kiosk slot-binding + socket-drop detector and is ignored by all other subsystems.
 
 ## 9-ext. External integration contract (OSC / WebSocket)
 
@@ -330,7 +336,13 @@ Maintained here — **no separate questions file**. Add to this section as new q
 - ~~**Dispatcher knob values**~~ — ✅ **RESOLVED for MVP:** rehearsal-fast defaults set in `config.dispatcher` (K=3, T_warmup=60s, T_max=240s, T_noshow=90s, T_stale=300s, grace=20s, tick=5s). All env-overridable — tune in rehearsal without a code change.
 - **Choreography agent model** — confirm gpt-4o vs. gpt-4o-mini (or another model) for the second live loop.
 - ~~**No-show automation**~~ — ✅ **RESOLVED for MVP:** no-show is flagged by default (operator decides to re-pool). `noShowAutoRepool` knob (`DISPATCH_NOSHOW_AUTOREPOOL=true`) enables automatic re-pool for a faster-paced run.
-- **Scannable check-in (post-rehearsal)** — the current permissive check-in accepts any ticket number typed at a station screen, relying on the operator and dispatcher to catch mistakes. A wrong number typed at the wrong station silently moves the wrong visitor. Post-rehearsal: add a scannable/printable ticket (QR or barcode on the physical ticket) so check-in is unambiguous and requires no manual number entry at the station.
+- ~~**Scannable/displayed check-in (remove wrong-number risk)**~~ — ✅ **RESOLVED:** replaced permissive type-a-number check-in with **confirm-at-station** — the dispatcher calls `#N` to a kiosk-bound slot, the kiosk displays the number, and a **Confirm arrival** press transitions `called → in_progress` (no free-text entry). Each kiosk owns one addressable, online-gated slot (`station.hello { kioskId, slotHint? }`). Type-a-number survives only as the hidden `/console` operator override.
+- **Deferred from the confirm-at-station redesign** (spec §10):
+  - **Stylized per-kiosk display** (e.g. a CRT glitch-number skin) — the data model supports one bound number per kiosk; the immersive skin is deferred.
+  - **No-scroll board at large kiosk counts** — the center slot grid scales (`auto-fill`); revisit box sizing only if a show ever runs many kiosks.
+  - **Surplus-kiosk UX** — extra screens beyond a station's slot count are flagged + idle; a richer "standby" treatment is deferred.
+  - **Per-kiosk slot labels** (`?kiosk=intake-left`) vs auto-claim — settled in rehearsal once the physical layout is known.
+  - **Reclaim/takeover of a slot mid-grace** — if a *different* `kioskId` binds an occupied slot via explicit `slotHint` during its ~20 s grace window, the prior `in_progress` occupant stays pinned until the 5-min `staleMs` reap (normal kiosk reboots use `kioskId`-reclaim, not `slotHint`, so they don't hit this). Low-probability + self-healing; revisit if it bites in rehearsal.
 
 ## 13. Risks
 - **Latency** in the voice loop (STT + LLM + TTS stacked). Mitigate with streaming (OpenAI caches prompt prefixes automatically) + a faster model on the Oracle turn (e.g. gpt-4o-mini via `ORACLE_MODEL`).
