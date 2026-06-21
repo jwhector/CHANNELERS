@@ -61,7 +61,7 @@ export function registerDivination(bus: Bus): void {
   // Send current roster to each new client so the lobby is accurate on load / reconnect.
   bus.onConnect((reply, _connId) => reply(rosterMsg()));
 
-  bus.setCommandHandler((cmd, reply, connId) => void handle(cmd, reply, connId));
+  bus.onCommand((cmd, reply, connId) => void handle(cmd, reply, connId));
 
   // A performer's socket dropped: give them a grace window to refresh/reconnect (the client
   // re-asserts ownership via session.rejoin, which cancels this), then reap the orphan so the

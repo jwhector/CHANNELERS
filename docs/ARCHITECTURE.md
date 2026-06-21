@@ -1,7 +1,7 @@
 # CHANNELERS — System Architecture (v0.1 draft)
 
-> Status: **current architecture** as of 2026-06-19. Owner: Jared. Scope: **workshop MVP** (June 22–28, 2026).
-> **2026-06-19:** The multi-station redesign IS the current architecture. **Tier 0 (identity/state foundation) + Tier 1 (single-visitor path: register → intake → bodyscan → altar → channel) are implemented.** Tier 2 (AI choreography feed) and Tier 3 (dispatcher/board/waiting-room console) are designed but not built. Full design rationale and decision log: `docs/superpowers/specs/2026-06-19-multi-station-architecture-design.md`. §3–§6 of this document are reconciled to the implemented reality.
+> Status: **current architecture** as of 2026-06-20. Owner: Jared. Scope: **workshop MVP** (June 22–28, 2026).
+> **2026-06-20:** The multi-station redesign IS the current architecture. **Tier 0 (identity/state foundation) + Tier 1 (single-visitor path: register → intake → bodyscan → altar → channel) + Tier 3 (dispatcher/board/console logistics) are implemented.** Only **Tier 2 (AI choreography feed)** remains designed but not built. Full design rationale and decision log: `docs/superpowers/specs/2026-06-19-multi-station-architecture-design.md`. §3–§6 and §8 of this document are reconciled to the implemented reality.
 
 ## 1. The shape of the thing
 
@@ -47,9 +47,11 @@ channelers/
                   /bodyscan  pose identity token enrollment (enroll self-invented pose → poseTemplate)
                   /altar     pose verify + persona pick → oracle-ready
                   /channel   performer page: lobby of oracle-ready visitors → teleprompter (renamed from /station)
-                  /console   stage-manager monitor (read-only: active sessions + waiting queue)
+                  /console   master overseer: visitors+controls / flow funnel+station LEDs / sessions+event log
+                  /board     public call display: #N → STATION (live dispatch.state broadcast)
+                  /dispatch  lobby-operator interface: register arrivals, confirm/skip calls, manage queue
                   /souvenir  QR takeaway
-                  -- Tier 3 (designed, not built): /waiting /board /dispatch (dispatcher screens)
+                  -- Tier 3 deferred: /waiting (waiting-room self-serve kiosk, not yet built)
   packages/
     shared/     zod schemas + TS types + the OSC/event contract
     oracles/    persona prompt templates (child / AI-on-drugs / tree / …)
@@ -75,7 +77,7 @@ type SurveyResponse = {
 /** Self-invented biometric identity token enrolled at /bodyscan. */
 type PoseVector = { angles: number[]; weights: number[] }
 
-/** Transient dispatch location. "called" state is Tier 3 (dispatcher, not yet built). */
+/** Transient dispatch location — managed by the dispatcher engine (see §5.x). */
 type VisitorLocation = {
   state: "waiting" | "called" | "in_progress"
   station?: "intake" | "bodyscan" | "altar"
@@ -146,7 +148,7 @@ The visitor speaks → STT → the Oracle persona LLM → text/TTS to the perfor
 
 **Session model:** the brain holds **multiple concurrent sessions**, one per visitor, keyed by `sessionId`. A `roster` broadcast keeps every connected screen up to date. Performers use `/channel`: the lobby lists **oracle-ready visitors** only (those who have completed intake + bodyscan + altar: `personaAt` set + `poseVerifiedAt` set + no active `sessionEndAt`); one tap claims a visitor and drops directly into the teleprompter. Session messages carry `sessionId` so parallel streams don't bleed across screens.
 
-**Session liveness & recovery:** a session's lifetime is bound to its owning performer's connection, not just to an explicit `session.end`. The client persists its `{sessionId, visitorId}` handle (localStorage) and on every (re)connect sends `session.rejoin`; the brain replies `session.resumed` with the full history + teleprompter so a page refresh or transient socket blip transparently re-attaches. When a performer's socket drops, the brain starts a grace timer (`SESSION_GRACE_MS`, ~90s) and reaps the orphan if no one re-attaches — so an abandoned tab frees the visitor instead of stranding it "being channelled" forever. The lobby's active-session rows also expose manual **Reclaim** / **End** controls as a backstop. (`/console` stays read-only.)
+**Session liveness & recovery:** a session's lifetime is bound to its owning performer's connection, not just to an explicit `session.end`. The client persists its `{sessionId, visitorId}` handle (localStorage) and on every (re)connect sends `session.rejoin`; the brain replies `session.resumed` with the full history + teleprompter so a page refresh or transient socket blip transparently re-attaches. When a performer's socket drops, the brain starts a grace timer (`SESSION_GRACE_MS`, ~90s) and reaps the orphan if no one re-attaches — so an abandoned tab frees the visitor instead of stranding it "being channelled" forever. The lobby's active-session rows also expose manual **Reclaim** / **End** controls as a backstop — now mirrored on the `/console` master overseer (§11).
 
 **Archetype assignment (persona seam):** the oracle persona is chosen at the **altar** (`POST /api/visitors/:id/persona`), after the visitor has verified their pose. The performer's `/channel` lobby shows the archetype already set; there is no oracle selection on the performer's end. `divination.start` reads the record's top-level `archetype` field and guards on missing `survey` or missing `archetype` before starting a session.
 
@@ -155,6 +157,45 @@ Engineering notes (grounded against the OpenAI API reference):
 - **OpenAI caches identical prompt prefixes automatically** — no manual cache step or pre-warm needed.
 - **Both default to gpt-4o** (configurable); for a lower-latency live loop, a smaller model like **gpt-4o-mini** can be set via `ORACLE_MODEL`.
 - gpt-4o has no separate thinking parameter — no special flag needed to keep the Oracle turn fast.
+
+### 5.x Visitor dispatcher (Tier 3)
+
+The dispatcher (`apps/brain/src/dispatcher.ts`, `createDispatcher(bus)`) is an in-memory engine that manages visitor flow across the three stations. It runs alongside divination — the Bus multiplexes hooks so both subsystems coexist.
+
+**Slots:** intake 2 / bodyscan 1 / altar 1. The altar slot is held through the whole divination reading and freed when `sessionEndAt` is stamped.
+
+**State machine:** `waiting → pending (ephemeral, reserves a slot) → called → in_progress`. Completion stamps the station's milestone and returns the visitor to `waiting` (or removes them after the altar reading ends).
+
+**Selection:** random among eligible `waiting` visitors (eligibility: intake slot ← visitor missing `intakeAt`; bodyscan slot ← missing `poseAt`; altar slot ← `intakeAt` + `poseAt` set, no active session), gated by:
+- **Warm-up:** pool size ≥ K OR T_warmup elapsed since first registration — avoids dispatching a single lonely visitor.
+- **Anti-starvation:** a visitor who has waited longer than T_max is priority-picked over the random selection.
+
+**Recovery detectors (three layers):**
+1. **Auto-supersede on check-in:** typing a ticket number at any station screen calls `POST /api/checkin`; the dispatcher moves the visitor to `in_progress@station`, bumping any over-capacity occupant back to `waiting` (flagged `walk-up`).
+2. **T_stale auto-reap:** `reconcile()` (periodic tick) reaps any `in_progress` visitor whose `since` age exceeds `staleMs` — sends them back to `waiting`.
+3. **Socket-drop grace reap:** station screens send `station.hello {station}` on every (re)connect; the dispatcher maps connId↦station. When the last screen for a station disconnects, a grace timer starts; if no screen re-attaches within `graceMs`, all `in_progress` occupants at that station are reaped to `waiting`.
+
+**No-show:** a visitor called but not checked in after `noShowMs` is flagged `no-show`. Operator can re-pool manually; the `noShowAutoRepool` knob auto-re-pools instead.
+
+**Knobs** (all in `config.dispatcher`, env-overridable):
+
+| Knob | Env var | Default | Meaning |
+|------|---------|---------|---------|
+| `K` | `DISPATCH_K` | 3 | Warm-up pool size |
+| `warmupMs` | `DISPATCH_T_WARMUP_MS` | 60 000 | Warm-up elapsed fallback |
+| `maxWaitMs` | `DISPATCH_T_MAX_MS` | 240 000 | Anti-starvation threshold |
+| `noShowMs` | `DISPATCH_T_NOSHOW_MS` | 90 000 | No-show flag threshold |
+| `staleMs` | `DISPATCH_T_STALE_MS` | 300 000 | Stale-occupant reap threshold |
+| `graceMs` | `DISPATCH_GRACE_MS` | 20 000 | Socket-drop grace window |
+| `tickMs` | `DISPATCH_TICK_MS` | 5 000 | Reconcile cadence |
+| `autoConfirm` | `DISPATCH_AUTO_CONFIRM` | false | Skip operator confirm step |
+| `noShowAutoRepool` | `DISPATCH_NOSHOW_AUTOREPOOL` | false | Auto-re-pool no-shows |
+
+Defaults are rehearsal-fast (small K, short timers). Tune for a full-audience show via env.
+
+**Transport:** a `dispatch.state` WS broadcast carries the full `DispatchState` (slots, call board, queue, per-station online LEDs). It is pushed on every state change **and** sent to each screen on connect (screens are always in sync immediately). This channel is **screens-only — never OSC** — dispatcher logistics are deliberately kept off the `ShowEvent`/OSC contract (§9-ext).
+
+**HTTP endpoints:** `POST /api/checkin` · `GET /api/dispatch` · `POST /api/dispatch/{confirm,assign,recall,repool,complete,remove}`.
 
 ### 5.4 Output integration
 - **Anna (music):** the Brain hands her the `MusicSeed` (lyrics + tempo/key/palette) over WebSocket — rendered on a simple "now generating for visitor N" panel she reads from, and/or pushed as OSC for her rig.
@@ -196,9 +237,10 @@ Both behind a thin interface so we can swap providers:
 
 Client → brain commands (zod-validated):
 ```
-session.start  { visitorId }                         performer claims a visitor
-session.say    { sessionId, text }                   visitor utterance
-session.end    { sessionId }                         end this session
+session.start   { visitorId }                        performer claims a visitor
+session.say     { sessionId, text }                  visitor utterance
+session.end     { sessionId }                        end this session
+station.hello   { station }                          station screen identity (dispatcher use only)
 ```
 
 Brain → client messages:
@@ -212,9 +254,14 @@ oracle.done     { sessionId, text }                  full reply
 session.ended   { sessionId }
 session.error   { sessionId?, visitorId?, message }  targeted to the caller's socket
 event           { event: ShowEvent }                 OSC mirror
+dispatch.state  { slots, board, queue, flags, stationOnline }   dispatcher snapshot (screens only)
 ```
 
 The `roster` message is broadcast on every session change **and** sent to each socket on connect — the lobby (and monitor) are always correct immediately on load or reconnect.
+
+The `dispatch.state` message is broadcast on every dispatcher state change **and** sent on connect. It carries the full `DispatchState`: per-station slot occupancy and called visitors (`slots`), the public call board (`board`: `Array<{number, station}>`), the pending-confirm and waiting queues, active flags, and per-station online LED (`stationOnline`).
+
+**Dispatcher logistics are deliberately kept off the `ShowEvent`/OSC contract.** `dispatch.state` is an internal screen-to-screen channel — Anna's and Jeff's tools subscribe to `ShowEvent`s over OSC/WebSocket (§9-ext); they never see dispatcher internals. The `station.hello` client message serves only the dispatcher's socket-drop detector and is ignored by all other subsystems.
 
 ## 9-ext. External integration contract (OSC / WebSocket)
 
@@ -254,7 +301,7 @@ Maintained here — **no separate questions file**. Add to this section as new q
 **Venue & hardware**
 - How many tablets/kiosks for intake? Webcam(s) for the scan stations? A projector for Jeff?
 - How many visitors / performers run concurrently? (The session map supports N; the real constraint is TTS earpiece feeds and performer count.)
-- Who watches the `/console` monitor during the show?
+- Who operates the `/console` master overseer (and the `/dispatch` lobby station) during the show?
 
 **TTS & the earpiece** — *we're building this regardless of Anna/Jeff*
 - What in-ear receiver system do the performers use (brand/model)? How does audio reach it — wireless IEM, IFB/Comtek, or phone + earbuds?
@@ -278,11 +325,12 @@ Maintained here — **no separate questions file**. Add to this section as new q
 
 **Multi-station revision (2026-06-19 spec)** — from `docs/superpowers/specs/2026-06-19-multi-station-architecture-design.md` §15
 - **Numbering hardware** — what assigns the analog ticket number, and can it stay purely analog? Decides whether globally-unique integers hold or a day/session namespace is needed.
-- **Presence capture** — does waiting-room registration stay operator-keyed, or do we add a `/waiting` self-serve kiosk / integrate the dispenser?
+- ~~**Presence capture**~~ — ✅ **RESOLVED for MVP:** waiting-room registration stays operator-keyed (`/dispatch` arrivals panel calls `POST /api/register`). `/waiting` self-serve kiosk deferred.
 - **Choreography feed routing** — dancers' in-ears, a public loudspeaker, or both? (The channel is built either way; this is output routing.)
-- **Dispatcher knob values** — warm-up pool size `K`, `T_warmup`, `T_max` (anti-starvation), `T_noshow`, `T_stale` (per station), check-in grace window — set defaults, tune in rehearsal.
+- ~~**Dispatcher knob values**~~ — ✅ **RESOLVED for MVP:** rehearsal-fast defaults set in `config.dispatcher` (K=3, T_warmup=60s, T_max=240s, T_noshow=90s, T_stale=300s, grace=20s, tick=5s). All env-overridable — tune in rehearsal without a code change.
 - **Choreography agent model** — confirm gpt-4o vs. gpt-4o-mini (or another model) for the second live loop.
-- **No-show automation** — keep `T_noshow` operator-flagged, or auto-re-pool like `T_stale`?
+- ~~**No-show automation**~~ — ✅ **RESOLVED for MVP:** no-show is flagged by default (operator decides to re-pool). `noShowAutoRepool` knob (`DISPATCH_NOSHOW_AUTOREPOOL=true`) enables automatic re-pool for a faster-paced run.
+- **Scannable check-in (post-rehearsal)** — the current permissive check-in accepts any ticket number typed at a station screen, relying on the operator and dispatcher to catch mistakes. A wrong number typed at the wrong station silently moves the wrong visitor. Post-rehearsal: add a scannable/printable ticket (QR or barcode on the physical ticket) so check-in is unambiguous and requires no manual number entry at the station.
 
 ## 13. Risks
 - **Latency** in the voice loop (STT + LLM + TTS stacked). Mitigate with streaming (OpenAI caches prompt prefixes automatically) + a faster model on the Oracle turn (e.g. gpt-4o-mini via `ORACLE_MODEL`).

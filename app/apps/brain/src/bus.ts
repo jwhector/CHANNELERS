@@ -11,20 +11,20 @@ type ReplyFn = (msg: WsServerMsg) => void;
  * The event bus + WebSocket hub.
  *  - publish(event): a ShowEvent → all screens (wrapped) AND OSC (Anna/Jeff).
  *  - broadcast(msg): any server message (divination streaming, etc.) → all screens.
- *  - setCommandHandler: receive validated client commands with a per-socket reply fn and a stable
- *    connId for targeted responses (errors, ownership conflicts) that shouldn't go to everyone.
- *  - onConnect: called for each new socket with a reply fn + connId — used to send the current
- *    roster snapshot so the lobby is accurate immediately on load / reconnect.
- *  - onDisconnect: called with the connId when a socket closes — used to reap sessions whose
- *    owning performer has gone away (after a grace period).
+ *  - onCommand: register a command handler; multiple subsystems may register (fan-out).
+ *    Each receives every client command; subsystems early-return for commands they don't own.
+ *  - onConnect: called for each new socket with a reply fn + connId — multiple subscribers
+ *    (divination pushes roster; dispatcher pushes dispatch.state).
+ *  - onDisconnect: called with the connId when a socket closes — multiple subscribers
+ *    (divination reaps orphaned sessions; dispatcher reaps in-progress visitors on station drop).
  * OSC is optional and lazily loaded — if it can't start, the bus keeps working.
  */
 export class Bus {
   private wss: WebSocketServer;
   private osc: OscSend | null = null;
-  private onCmd: ((cmd: WsClientMsg, reply: ReplyFn, connId: string) => void) | null = null;
-  private onConnectHook: ((reply: ReplyFn, connId: string) => void) | null = null;
-  private onDisconnectHook: ((connId: string) => void) | null = null;
+  private onCmdHooks: Array<(cmd: WsClientMsg, reply: ReplyFn, connId: string) => void> = [];
+  private onConnectHooks: Array<(reply: ReplyFn, connId: string) => void> = [];
+  private onDisconnectHooks: Array<(connId: string) => void> = [];
 
   constructor(server: Server) {
     this.wss = new WebSocketServer({ server, path: "/ws" });
@@ -32,28 +32,31 @@ export class Bus {
       const connId = randomUUID();
       const reply: ReplyFn = (msg) => this.sendTo(ws, msg);
       this.sendTo(ws, { kind: "hello" });
-      this.onConnectHook?.(reply, connId);
+      for (const hook of this.onConnectHooks) hook(reply, connId);
       ws.on("message", (raw) => {
         const parsed = WsClientMsg.safeParse(safeJson(raw.toString()));
-        if (parsed.success) this.onCmd?.(parsed.data, reply, connId);
+        if (parsed.success) for (const hook of this.onCmdHooks) hook(parsed.data, reply, connId);
       });
-      ws.on("close", () => this.onDisconnectHook?.(connId));
+      ws.on("close", () => {
+        for (const hook of this.onDisconnectHooks) hook(connId);
+      });
     });
     if (config.osc.enabled) void this.initOsc();
   }
 
-  setCommandHandler(fn: (cmd: WsClientMsg, reply: ReplyFn, connId: string) => void): void {
-    this.onCmd = fn;
+  /** Register a command handler. Multiple subsystems may register; each sees every command. */
+  onCommand(fn: (cmd: WsClientMsg, reply: ReplyFn, connId: string) => void): void {
+    this.onCmdHooks.push(fn);
   }
 
-  /** Called once per new connection; use to push current state (e.g. roster) to the joiner. */
+  /** Called once per new connection; push current state (roster, dispatch.state) to the joiner. */
   onConnect(fn: (reply: ReplyFn, connId: string) => void): void {
-    this.onConnectHook = fn;
+    this.onConnectHooks.push(fn);
   }
 
-  /** Called when a socket closes; use to reap state owned by that connection. */
+  /** Called when a socket closes; reap state owned by that connection. */
   onDisconnect(fn: (connId: string) => void): void {
-    this.onDisconnectHook = fn;
+    this.onDisconnectHooks.push(fn);
   }
 
   broadcast(msg: WsServerMsg): void {

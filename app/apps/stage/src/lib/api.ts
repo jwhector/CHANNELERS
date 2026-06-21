@@ -1,4 +1,4 @@
-import type { SurveyResponse, VisitorProfile, PoseVector } from "@channelers/shared";
+import type { SurveyResponse, VisitorProfile, PoseVector, Station, DispatchState } from "@channelers/shared";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -27,4 +27,17 @@ export const api = {
   setPersona: (id: string, archetype: string) =>
     post<VisitorProfile>(`/api/visitors/${id}/persona`, { archetype }),
   verifyPose: (id: string) => post<VisitorProfile>(`/api/visitors/${id}/verify`),
+  checkin: (number: number, station: Station) =>
+    post<{ record: VisitorProfile; superseded: number[] }>("/api/checkin", { number, station }),
+  dispatch: {
+    state: () => fetch("/api/dispatch").then((r) => json<DispatchState>(r)),
+    confirm: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/confirm", { visitorId }),
+    assign: (visitorId: string, station: Station) =>
+      post<{ ok: boolean }>("/api/dispatch/assign", { visitorId, station }),
+    recall: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/recall", { visitorId }),
+    repool: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/repool", { visitorId }),
+    complete: (visitorId: string, station: Station) =>
+      post<{ ok: boolean }>("/api/dispatch/complete", { visitorId, station }),
+    remove: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/remove", { visitorId }),
+  },
 };

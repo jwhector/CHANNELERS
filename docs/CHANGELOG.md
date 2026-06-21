@@ -13,6 +13,103 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-20 — fix(stage): silence benign Vite `/ws` dev-proxy disconnect noise (EPIPE/ECONNRESET)
+
+- **What:** Added a scoped `customLogger` to `apps/stage/vite.config.ts` that drops only the Vite dev-server `ws proxy socket error: write EPIPE` / `read ECONNRESET` log lines; every other error still logs normally.
+- **Why:** Root-caused (via reproduction with the identical stack trace) to the Vite **dev-only** `/ws` proxy: when a proxied WebSocket client (a kiosk/operator screen) refreshes or navigates away **while the brain is mid-broadcast** (`roster`/`dispatch.state`), the proxy writes a frame to the just-closed socket → EPIPE. Vite already catches these (no crash), but logs an alarming stack. It is harmless — the brain is unaffected and production has no Vite proxy. Tier 3 amplified the noise by adding persistent station sockets (`useStationPresence` on `/intake /bodyscan /altar`) plus the 5s `dispatch.state` tick, widening a pre-existing race. Suppressing the log is the honest fix; the lost frame is a broadcast the disconnected client no longer needs.
+- **Files/areas:** `apps/stage/vite.config.ts` (customLogger filter).
+- **Docs touched:** this CHANGELOG. (No prod-path or protocol change.) **Note:** a running `pnpm dev` must be restarted to pick up the new Vite config.
+
+## 2026-06-20 — fix(brain): guard dispatcher assign() to waiting visitors only
+
+- **What:** Added a state guard to `assign()` in `apps/brain/src/dispatcher.ts`: the method now returns `false` immediately if the visitor doesn't exist OR their `location.state !== "waiting"`. Previously only the existence check was present, so calling `assign` on a `called` or `in_progress` visitor (e.g. via a stray API call or the `autoConfirm` path) would insert a duplicate entry into `pending`, silently over-counting slot occupancy. One focused regression test added to the `"operator actions"` block in `dispatcher.test.ts`.
+- **Why:** Surfaced by final whole-branch review. The UI only calls `assign` on queue entries that are already `waiting`, but the API should be safe independently. Simple guard prevents double-booking without any behaviour change for the normal path.
+- **Files/areas:** `apps/brain/src/dispatcher.ts` (guard in `assign`), `apps/brain/test/dispatcher.test.ts` (18th test).
+- **Docs touched:** `docs/CHANGELOG.md`.
+
+## 2026-06-20 — Tier 3 complete: dispatcher engine, /board, /dispatch, /console overhaul
+
+- **What:** Ten tasks (3.1–3.10) deliver the full visitor-logistics layer. Core engine: `createDispatcher(bus)` in `apps/brain/src/dispatcher.ts` — an in-memory slot manager (intake 2 / bodyscan 1 / altar 1, altar slot held through the whole reading and freed on `sessionEndAt`). State machine: `waiting → pending (ephemeral, reserves slot) → called → in_progress`; completion returns to `waiting`. Selection is random among eligible `waiting` visitors, gated by warm-up (pool ≥ K OR T_warmup elapsed since first registration) and anti-starvation (waited > T_max jumps the pick). Three recovery detectors: (1) permissive check-in auto-supersedes over-capacity occupants, (2) `T_stale` auto-reaps stale `in_progress`, (3) socket-drop grace reap via `station.hello` identity (`station.hello` client WS message → dispatcher tracks connId↦station; last screen for a station drops → grace timer → reap its occupants). No-show is flagged by default; `noShowAutoRepool` knob auto-re-pools. `dispatcherAutoConfirm` knob promotes `pending → called` automatically. All knobs in `config.dispatcher`, env-overridable, rehearsal-fast defaults (K=3, T_warmup=60s, T_max=240s, T_noshow=90s, T_stale=300s, grace=20s, tick=5s). New `dispatch.state` WS broadcast (screens-only, never OSC) carries slot occupancy, call board, queue, and per-station online LEDs. Bus multiplexed so divination + dispatcher coexist. New endpoints: `POST /api/checkin`, `GET /api/dispatch`, `POST /api/dispatch/{confirm,assign,recall,repool,complete,remove}`. Stage screens: `/board` (public `#N → STATION` call display), `/dispatch` (lobby-operator interface: register arrivals, confirm/skip calls, manage queue), `/console` overhauled from read-only monitor to 3-panel master overseer (visitors+controls, flow funnel+station LEDs, sessions+event log). Station screens (`/intake /bodyscan /altar`) now check in via `useStationPresence` + `station` prop on `NumberGate`.
+- **Why:** Completes the Tier 3 (logistics) build. The dispatcher replaces ad-hoc operator judgment with a structured flow that can handle multiple concurrent visitors across three stations while keeping performers and stage manager in control. `/board` tells visitors where to go; `/dispatch` gives the lobby operator a single screen; the `/console` overhaul gives the stage manager full control without leaving the page.
+- **Files/areas:** `apps/brain/src/dispatcher.ts` (new), `apps/brain/src/bus.ts` (multiplex), `apps/brain/src/app.ts` (wiring + endpoints), `apps/brain/src/config.ts` (knob block), `apps/brain/src/store.ts` (`stampMilestone`, `remove`, `clear`), `apps/brain/test/dispatcher.test.ts` (new), `apps/brain/test/endpoints.test.ts` (dispatch tests), `packages/shared/src/schemas.ts` (Station enum), `packages/shared/src/protocol.ts` (`station.hello`, `dispatch.state`), `apps/stage/src/lib/api.ts` (checkin + dispatch calls), `apps/stage/src/lib/useStationPresence.ts` (new), `apps/stage/src/components/NumberGate.tsx` (station prop), `apps/stage/src/routes/Board.tsx` (new), `apps/stage/src/routes/Dispatch.tsx` (new), `apps/stage/src/routes/Console.tsx` (overhaul), `apps/stage/src/routes/Intake.tsx`, `apps/stage/src/routes/BodyScan.tsx`, `apps/stage/src/routes/Altar.tsx` (presence wiring), `apps/stage/src/App.tsx` (routes).
+- **Docs touched:** this changelog (Tier 3 roll-up entry); `docs/ARCHITECTURE.md` (§3 route list, §8 WS protocol, new §5.x dispatcher section, §12 open questions); `app/CLAUDE.md` (route list + dispatcher note).
+
+## 2026-06-20 — Tier 3 Task 3.10: Wire station check-in + presence into `/intake`, `/bodyscan`, `/altar`
+- **What:** Added `useStationPresence` hook call (as first line of each component body, before early `return`) and `station` prop to `<NumberGate>` in all three station screens. With `station` set, NumberGate checks the visitor in (`in_progress@station`) rather than just registering. Hook placed unconditionally before the `if (!visitor)` early return in all three components to comply with Rules of Hooks. `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (69 modules, 383 kB JS). Manual browser end-to-end smoke pending human verification.
+- **Why:** Task 3.10 of the Tier 3 build — connects station screens to the dispatcher so presence LEDs light up and visitor check-in moves them to `in_progress@station`.
+- **Files/areas:** `apps/stage/src/routes/Intake.tsx`, `apps/stage/src/routes/BodyScan.tsx`, `apps/stage/src/routes/Altar.tsx`.
+- **Docs touched:** this changelog.
+
+## 2026-06-20 — Tier 3 Task 3.9: Stage `/console` master overseer overhaul (3 panels)
+- **What:** Rewrote `apps/stage/src/routes/Console.tsx` — the read-only monitor becomes the master overseer with three panels: (1) Flow funnel (registered/intake/pose/oracleReady/channelling/done counts) + per-station LEDs and occupancy from live `dispatch.state`; (2) Visitors table with inline controls (set persona dropdown, unlock pose-verify, re-pool, remove); (3) Active sessions list with reclaim/end buttons + a 50-entry scrolling event log. Subscribes to `roster`, `dispatch.state`, and `event` WS broadcasts. Auto-refreshes visitor list every 2s and on relevant events. Removed unused `useRef` import from the spec (unused import lint). `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (68 modules, 383 kB JS). Manual browser smoke pending human verification.
+- **Why:** Task 3.9 of the Tier 3 build — consolidates all operator controls into the single `/console` screen so the stage manager can manage visitor flow, persona assignment, and active sessions without leaving the page.
+- **Files/areas:** `apps/stage/src/routes/Console.tsx` (rewrite).
+- **Docs touched:** this changelog.
+
+## 2026-06-20 — Tier 3 Task 3.8: Stage `/dispatch` lobby-operator interface
+- **What:** Created `apps/stage/src/routes/Dispatch.tsx` — the lobby-operator console. Lets the operator register visitor arrivals by ticket number, confirm or skip pending calls, watch called visitors on the board with dwell timers, inspect slot occupancy per station (with per-station online LED), and manage the queue (manual assign/remove). Subscribes to live `dispatch.state` WS broadcasts via `useBrainSocket`, loads initial state from `api.dispatch.state()` on mount, and refreshes dwell timers every second via `setInterval`. Reuses existing CSS classes (`void`, `console`, `dispatch`, `field`, `arrivals`, `visitors`, `row`, `dim`, `led`/`led on`, `submit`, `end`, `choice`, `error`). Added `Dispatch` import + `/dispatch` route to `apps/stage/src/App.tsx`; added `"dispatch"` to the `SCREENS` tuple. `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (68 modules, 380 kB JS). Manual browser smoke pending human verification.
+- **Why:** Task 3.8 of the Tier 3 dispatcher build — the primary operator interface for managing visitor flow through stations during a show.
+- **Files/areas:** `apps/stage/src/routes/Dispatch.tsx` (new), `apps/stage/src/App.tsx`.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-20 — Tier 3 Task 3.7: Stage `/board` public call display
+- **What:** Created `apps/stage/src/routes/Board.tsx` — a public lobby display that shows the `board` array (`#N → STATION`) from `dispatch.state`. Subscribes to live updates via `useBrainSocket` (filters `m.kind === "dispatch.state"`), loads initial state via `api.dispatch.state()` on mount, and shows a connection LED. Added `Board` import + `/board` route to `apps/stage/src/App.tsx`; added `"board"` to the `SCREENS` tuple (Home nav link). `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (67 modules, 376 kB JS). Manual browser smoke pending human verification.
+- **Why:** Task 3.7 of the Tier 3 dispatcher build — the public call-display board. Shows visitors which number is being called to which station, updating in real time.
+- **Files/areas:** `apps/stage/src/routes/Board.tsx` (new), `apps/stage/src/App.tsx`.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-20 — Tier 3 Task 3.6: Stage API client, station presence hook, NumberGate check-in
+- **What:** Extended `apps/stage/src/lib/api.ts` with `checkin(number, station)` (returns `{record, superseded}`) and a `dispatch` group (`state/confirm/assign/recall/repool/complete/remove`) that call the Task 3.5 endpoints. Added `Station` and `DispatchState` to the shared-type import. Created new hook `apps/stage/src/lib/useStationPresence.ts` — wraps `useBrainSocket`, sends `{kind:"station.hello", station}` on every (re)connect, returns `{connected}`. Added optional `station?: Station` prop to `NumberGate`: when present, resolves via `api.checkin(...).record`; without it, falls back to existing `api.register`. All existing `NumberGate` callers (which omit `station`) continue to compile unchanged. `pnpm -r typecheck` clean (0 errors, 4 packages); `pnpm --filter @channelers/stage build` succeeds (66 modules, 376 kB JS). Manual browser smoke pending human verification.
+- **Why:** Task 3.6 of the Tier 3 dispatcher build — first stage-side task. Exposes the brain's check-in and dispatch API surface to stage screens, and lets station screens announce their role over WebSocket for the dispatcher's online LED.
+- **Files/areas:** `apps/stage/src/lib/api.ts`, `apps/stage/src/lib/useStationPresence.ts` (new), `apps/stage/src/components/NumberGate.tsx`.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-20 — Tier 3 Task 3.5: Bus multiplex; wire dispatcher + checkin/dispatch endpoints
+- **What:** Multiplexed the `Bus` class: replaced three single-slot fields (`onCmd`, `onConnectHook`, `onDisconnectHook`) with arrays and removed `setCommandHandler`. All three now append hooks so multiple subsystems can subscribe without clobbering each other. Updated `divination.ts` (`setCommandHandler` → `onCommand`). Wired `createDispatcher(bus)` into `app.ts` right after `registerDivination(bus)` with an `onClose` lifecycle hook for cleanup. Added `dispatcher.kick()` to `/api/register`, `/api/visitors/:id/intake`, and `/api/visitors/:id/pose` so slot fills are triggered immediately on relevant writes. Added six new HTTP endpoints: `POST /api/checkin`, `GET /api/dispatch`, and `POST /api/dispatch/{confirm,assign,recall,repool,complete,remove}`. Appended TDD tests: `dispatch endpoints` (check-in 200, bad-station 400, repool → waiting) and `WS broadcasts coexist` (new socket gets both `roster` and `dispatch.state` — proves the bus multiplex). TDD: RED → GREEN; all 45 brain tests pass; `pnpm -r typecheck` clean (0 errors, 4 packages). Pre-existing divination tests (including the WS session guards) still pass — confirming Tier 1 regression-free.
+- **Why:** Task 3.5 of the Tier 3 dispatcher build. Integration step: connects the dispatcher engine (Tasks 3.3–3.4) to the running brain and exposes the operator API.
+- **Files/areas:** `apps/brain/src/bus.ts`, `apps/brain/src/divination.ts`, `apps/brain/src/app.ts`, `apps/brain/test/endpoints.test.ts`.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-20 — Tier 3 Task 3.4: Dispatcher recovery — check-in, no-show, stale, supersede, station identity
+- **What:** Filled all `notImplemented` stubs in `apps/brain/src/dispatcher.ts`. Replaced the placeholder `reconcile()` with the full version: T_stale auto-reap (detector 2), no-show flag/auto-repool, autoConfirm. Added real `checkin()` (permissive create-or-fetch + in_progress, auto-supersede over-capacity occupants, walk-up flag), `recall()` (refresh called.since + clear flags), `repool()` (→ waiting), `markComplete()` (stamp milestone + free slot), `remove()` (drop from store). Added `handleCommand` (station.hello → connId↦station mapping, online LED, clears grace timer) and `handleDisconnect` (detector 3: if last screen for a station drops, sets grace timer; on expiry reaps all in_progress occupants at that station). Wired both with `bus.onCommand`/`bus.onDisconnect`. Deleted `notImplemented` function entirely. Appended 9 new unit tests (TDD: RED → GREEN); all 16 dispatcher tests pass; `pnpm -r typecheck` clean (0 errors, 4 packages).
+- **Why:** Task 3.4 of the Tier 3 dispatcher build. Completes the recovery layer: operator check-in, no-show handling, stale-occupant reaping, auto-supersede, and station socket-drop liveness.
+- **Files/areas:** `apps/brain/src/dispatcher.ts`, `apps/brain/test/dispatcher.test.ts`.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-20 — Tier 3 Task 3.3: Dispatcher engine — eligibility, warm-up, anti-starvation, confirm
+- **What:** Created `apps/brain/src/dispatcher.ts` with `createDispatcher(bus, opts)` — the core dispatch engine. Implements: eligibility predicate (intake/bodyscan/altar gate by milestone), warm-up gate (pool ≥ K OR T_warmup elapsed), anti-starvation (visitors waiting > T_max are priority-picked), slot fill per-station, `confirm()` (pending → called), `assign()` (operator manual assign), `snapshot()`/`broadcastState()`, and bus lifecycle wiring (`onConnect` sends current state). Recovery methods (`checkin`/`recall`/`repool`/`markComplete`/`remove`) left as `notImplemented()` stubs per plan — Task 3.4 replaces them. Added `store.clear()` test-isolation helper to `apps/brain/src/store.ts`. Created `apps/brain/test/dispatcher.test.ts` with 7 unit tests against a fake bus (TDD: RED → GREEN). Full suite: 31/31 pass; `pnpm -r typecheck` clean.
+- **Why:** Task 3.3 of the Tier 3 dispatcher build. Establishes the engine core needed by operator screens and the stage.
+- **Files/areas:** `apps/brain/src/dispatcher.ts` (new), `apps/brain/test/dispatcher.test.ts` (new), `apps/brain/src/store.ts` (added `clear()`).
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-20 — Tier 3 Task 3.2: Dispatcher knob config + store stampMilestone/remove
+- **What:** Added `config.dispatcher` block to `apps/brain/src/config.ts` — 9 env-overridable numeric knobs (`K`, `warmupMs`, `maxWaitMs`, `noShowMs`, `staleMs`, `graceMs`, `tickMs`) plus 2 boolean flags (`autoConfirm`, `noShowAutoRepool`) and a `slots` record for per-station capacity. All values read from `process.env` with rehearsal-fast defaults. Added `store.stampMilestone(id, field)` (operator mark-complete backstop, stamps any milestone field to `now()`) and `store.remove(id): boolean` (deletes record + frees number index) to `apps/brain/src/store.ts`. Tests appended to `apps/brain/test/store.test.ts` (TDD: 3 tests RED → GREEN); full typecheck passes clean.
+- **Why:** Dispatcher engine (Task 3.3+) needs tuneable thresholds without code changes, and store manipulation primitives for no-show reaping and operator removes.
+- **Files/areas:** `apps/brain/src/config.ts`, `apps/brain/src/store.ts`, `apps/brain/test/store.test.ts`.
+- **Docs touched:** this changelog.
+
+---
+
+## 2026-06-20 — Tier 3 Task 3.1: Station enum, station.hello, DispatchState types
+- **What:** Added shared `Station` zod enum (`["intake","bodyscan","altar"]`) to `packages/shared/src/schemas.ts`, replacing the inline `z.enum([...])` in `VisitorLocation`. Added `station.hello` variant to `WsClientMsg` discriminated union. Added `DispatchFlag`, `DispatchSlot`, `DispatchQueueEntry`, `DispatchCall`, `DispatchState` TypeScript types and `dispatch.state` variant to `WsServerMsg` in `packages/shared/src/protocol.ts`. New tests appended to `apps/brain/test/schema.test.ts` (TDD: RED then GREEN).
+- **Why:** First additive step of the Tier 3 dispatcher build — establishes the shared vocabulary consumed by all Tier 3 tasks (dispatcher logic, operator screens). Purely additive; all existing consumers still compile.
+- **Files/areas:** `packages/shared/src/schemas.ts`, `packages/shared/src/protocol.ts`, `apps/brain/test/schema.test.ts`.
+- **Docs touched:** this changelog.
+
+---
+
 ## 2026-06-19 — /bodyscan: warn when the body isn't fully in frame
 - **What:** `/bodyscan` now gives user-facing feedback when the visitor isn't framed head-to-toe. Added `bodyCoverage(vec)` (mean per-joint visibility) and `isBodyFramed(coverage, wasFramed)` (hysteresis: enter `0.65` / exit `0.55`) to `apps/stage/src/lib/pose/angles.ts`. `BodyScan.tsx` tracks the framed flag per frame (incl. the no-body case) and uses it as the record-hold gate; when not framed the camera view gets a red highlight + a "Step back so your whole body — head to toe — is in frame." overlay (un-mirrored like `.poseflash`). The hysteresis band stops the warning strobing at the threshold.
 - **Why:** The hold timer's old `bodyVisible` gate (`mean weight > 0.5`) silently refused to register a held pose whenever the legs were out of frame — the common webcam case — with **no on-screen explanation**. Visitors held a pose and nothing happened. The design (ARCHITECTURE §6) already flagged full-body framing as the real CV risk; it just had no feedback affordance.

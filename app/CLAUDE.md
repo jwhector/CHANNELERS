@@ -8,7 +8,17 @@ Update **`../docs/CHANGELOG.md`** — newest entry on top, with *what / why / fi
 ## Stack
 pnpm + TypeScript monorepo:
 - `apps/brain` — Show Brain: Fastify + `ws` + OSC + OpenAI SDK. Owns visitor data and all AI calls.
-- `apps/stage` — Vite/React; one app, role-based routes: `/intake /bodyscan /altar /channel /console /souvenir`. `/channel` is the performer page (lobby of oracle-ready visitors → teleprompter; renamed from `/station`); `/bodyscan` enrolls the pose identity token; `/altar` gates on pose-verify + persona pick → oracle-ready; `/console` is the read-only stage-manager monitor. Dispatcher screens (`/waiting /board /dispatch`) are Tier 3, designed but not built.
+- `apps/stage` — Vite/React; one app, role-based routes:
+  - `/intake` — visitor kiosk: number gate → data-only survey → handoff to Physical Challenge
+  - `/bodyscan` — pose identity token enrollment (enroll self-invented pose → poseTemplate)
+  - `/altar` — pose verify + persona pick → oracle-ready; station screens wire in via `useStationPresence` + `station` prop on `NumberGate`
+  - `/channel` — performer page: lobby of oracle-ready visitors → teleprompter (renamed from `/station`)
+  - `/console` — **master overseer** (3 panels): visitors+inline controls / flow funnel+station LEDs / active sessions+event log. No longer read-only.
+  - `/board` — public call display: `#N → STATION` from live `dispatch.state` WS broadcast
+  - `/dispatch` — lobby-operator interface: register visitor arrivals, confirm/skip pending calls, manage queue + slots
+  - `/souvenir` — QR takeaway
+  - `/waiting` — **deferred** (only remaining Tier 3 screen: waiting-room self-serve kiosk, not yet built)
+  - The **dispatcher** lives in `apps/brain/src/dispatcher.ts` (`createDispatcher(bus)`). Dispatch state rides the `dispatch.state` WS channel — **never OSC**. Dispatcher logistics are deliberately kept off the `ShowEvent`/OSC contract.
 - `packages/shared` — zod schemas, the `ShowEvent` + OSC contract, the WS divination protocol, the survey.
 - `packages/oracles` — persona library (voices, anti-slop deny-list, system-prompt builder).
 

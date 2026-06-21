@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { VisitorProfile, PoseVector, SurveyResponse } from "@channelers/shared";
+import { WsClientMsg, Station } from "@channelers/shared";
 
 describe("schema: PoseVector", () => {
   it("accepts an angle/weight vector", () => {
@@ -41,5 +42,19 @@ describe("schema: SurveyResponse", () => {
     // archetype moved to the top-level record; survey is intake answers only.
     const r = SurveyResponse.safeParse({ name: "Jo", freeText: {}, phrases: [] });
     expect(r.success).toBe(true);
+  });
+});
+
+describe("schema: Station + station.hello", () => {
+  it("exports a Station enum", () => {
+    expect(Station.safeParse("intake").success).toBe(true);
+    expect(Station.safeParse("nope").success).toBe(false);
+  });
+  it("parses a station.hello command", () => {
+    const r = WsClientMsg.safeParse({ kind: "station.hello", station: "bodyscan" });
+    expect(r.success).toBe(true);
+  });
+  it("rejects station.hello with an unknown station", () => {
+    expect(WsClientMsg.safeParse({ kind: "station.hello", station: "lobby" }).success).toBe(false);
   });
 });

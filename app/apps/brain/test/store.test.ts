@@ -49,3 +49,23 @@ describe("store upserts attach to the record by id", () => {
     expect(store.upsertSurvey("nope", { name: "x", freeText: {}, phrases: [] })).toBeUndefined();
   });
 });
+
+describe("store milestone stamp + remove", () => {
+  it("stampMilestone sets an arbitrary milestone timestamp", () => {
+    const r = store.register(NUM());
+    const out = store.stampMilestone(r.id, "sessionEndAt");
+    expect(out?.sessionEndAt).toBeTruthy();
+  });
+  it("remove deletes the record and frees the number", () => {
+    const n = NUM();
+    const r = store.register(n);
+    expect(store.remove(r.id)).toBe(true);
+    expect(store.get(r.id)).toBeUndefined();
+    expect(store.getByNumber(n)).toBeUndefined();
+    // number is now reusable → a fresh record
+    expect(store.register(n).id).not.toBe(r.id);
+  });
+  it("remove returns false for an unknown id", () => {
+    expect(store.remove("nope")).toBe(false);
+  });
+});

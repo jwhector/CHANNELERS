@@ -6,12 +6,14 @@ import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
 import { NumberGate } from "../components/NumberGate";
 import { Bar, drawSkeleton } from "../components/poseUI";
+import { useStationPresence } from "../lib/useStationPresence";
 
 type Phase = "ready" | "record" | "saving" | "enrolled";
 
 export function BodyScan() {
+  useStationPresence("bodyscan");
   const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
-  if (!visitor) return <NumberGate title="Body Scan" onResolved={setVisitor} />;
+  if (!visitor) return <NumberGate title="Body Scan" station="bodyscan" onResolved={setVisitor} />;
   return <Enroll visitor={visitor} />;
 }
 
