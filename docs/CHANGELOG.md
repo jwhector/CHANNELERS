@@ -13,6 +13,13 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — feat(stage): Task 8 — /console reads the slot array + keeps a manual override
+
+- **What:** Updated `apps/stage/src/routes/Console.tsx`'s flow/station panel to iterate the new `dispatch.slots` array (per-slot `<li>`: slot id, online LED off `s.online`, and `#N (phase dwell)` or idle/offline) instead of the removed `dispatch.stations[s]` / `dispatch.slots[s].occupants/capacity` shape. Added a hidden **Manual override** panel (`ManualCheckin` component) — type a number + pick a station → `api.checkin` → forces that visitor `in_progress@station` (the operator safety net, spec §5). Visitor table, sessions, and event-log panels unchanged; their `re-pool`/`remove` buttons keep the unchanged `api.dispatch.repool`/`remove` signatures.
+- **Why:** Task 8 of 9 (final implementation task). Brings the master overseer onto the addressable-slot state and preserves the type-a-number path as the `/console`-only override.
+- **Files/areas:** `apps/stage/src/routes/Console.tsx`.
+- **Docs touched:** this CHANGELOG. **All packages now typecheck (0 errors) and the stage build succeeds** — the first fully-green state of the redesign.
+
 ## 2026-06-21 — feat(stage): Task 7 — /dispatch 3-zone board + CSS (+ /board fold-in)
 
 - **What:** Rewrote `apps/stage/src/routes/Dispatch.tsx` as the no-scroll 3-zone lobby board (spec §6): LEFT = waiting pool (each waiting `#N` with elapsed clock + hover tooltip of name/eligibility/flags); CENTER = the slots as a responsive `auto-fill` grid of rectangles (online LED, slot id, bound number + phase; a `pending` assignment pulses beside the box with `→ Confirm call` + a skip `×`; `re-pool` action on a live occupant); RIGHT = completed (`sessionEndAt`). Header carries the live LED, a warming-up hint, a surplus-screens warning, and the operator add-`#` arrivals input (`api.register`). A 1 s interval re-renders the elapsed clocks. Appended the board styles to the **global stylesheet `apps/stage/src/styles.css`** (the one imported in `main.tsx` — there is no `index.css`): `.board-3zone`, `.zones`, `.zone`, `.pool-list/.pool-item`, `.slot-grid/.slot-wrap/.slot-box(.on/.off/.called/.in_progress)`, `.slot-head/.slot-number/.called-number`, `.pending-call`, `.pulse` + `@keyframes dispatch-pulse` (`.led`/`.led.on` already existed and are reused). **Plan fold-in:** the plan omitted `apps/stage/src/routes/Board.tsx`, which read the removed `DispatchState.board`; updated it to derive the call list from `slots` (occupant `phase === "called"` → `{ number, station }`), preserving the public `/board` "NOW SERVING" display.
