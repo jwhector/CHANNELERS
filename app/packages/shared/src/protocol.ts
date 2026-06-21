@@ -20,7 +20,12 @@ export const WsClientMsg = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session.say"), sessionId: z.string(), text: z.string() }),
   z.object({ kind: z.literal("session.rejoin"), sessionId: z.string() }),
   z.object({ kind: z.literal("session.end"), sessionId: z.string() }),
-  z.object({ kind: z.literal("station.hello"), station: Station }),
+  z.object({
+    kind: z.literal("station.hello"),
+    station: Station,
+    kioskId: z.string(),
+    slotHint: z.string().optional(),
+  }),
 ]);
 export type WsClientMsg = z.infer<typeof WsClientMsg>;
 
@@ -33,7 +38,7 @@ export type SessionSummary = {
   turns: number;
 };
 
-/** ── Dispatcher state (Tier 3) — broadcast on the dispatch.state channel, screens-only ── */
+/** ── Dispatcher state (redesign) — broadcast on the dispatch.state channel, screens-only ── */
 
 /** A review flag the operator sees on a row (spec §10). */
 export type DispatchFlag = {
@@ -41,13 +46,6 @@ export type DispatchFlag = {
   /** Present for auto-reaped: "stale" | "superseded" | "station-offline". */
   reason?: string;
   since: string;
-};
-
-/** One station's capacity + who currently holds a slot (called/in_progress/pending). */
-export type DispatchSlot = {
-  station: Station;
-  capacity: number;
-  occupants: { id: string; number: number; state: "called" | "in_progress" | "pending"; since: string }[];
 };
 
 /** A waiting visitor in the callable pool. */
@@ -61,26 +59,38 @@ export type DispatchQueueEntry = {
   flags: DispatchFlag[];
 };
 
-/** A pending (awaiting confirm) or called (on the board) assignment. */
-export type DispatchCall = {
-  id: string;
+/** One occupant pinned to a slot. `phase` is the slot-level occupancy stage. */
+export type SlotOccupant = {
+  visitorId: string;
   number: number;
-  station: Station;
+  phase: "pending" | "called" | "in_progress";
   since: string;
-  flags?: DispatchFlag[];
 };
 
+/** An addressable station slot, optionally bound to a kiosk screen (spec §3.2). */
+export type Slot = {
+  id: string;            // `${station}-${i}`, e.g. "intake-0"
+  station: Station;
+  kioskId?: string;      // present ⇒ a screen claimed this slot
+  online: boolean;       // kiosk bound AND its socket connected
+  occupant?: SlotOccupant;
+};
+
+/** A visitor who finished the whole ritual (sessionEndAt set). */
+export type DispatchDone = { id: string; number: number; name?: string; at: string };
+
 export type DispatchState = {
-  slots: Record<Station, DispatchSlot>;
-  /** Waiting + eligible visitors (the pool). */
+  /** All slots across all stations, length = sum of configured counts. */
+  slots: Slot[];
+  /** Waiting + eligible visitors NOT currently occupying a slot (the left pool). */
   queue: DispatchQueueEntry[];
-  /** Assigned, awaiting operator confirm. */
-  pending: DispatchCall[];
-  /** Called → shown on /board. */
-  board: DispatchCall[];
-  /** Station-screen online indicators (from station.hello connections). */
-  stations: Record<Station, boolean>;
-  /** False during the warm-up window (spec §9 — the deliberate early delay). */
+  /** Finished the experience (sessionEndAt) — the right column. */
+  completed: DispatchDone[];
+  /** Connected station screens with no free slot to bind (flagged for the operator). */
+  surplus: { station: Station; kioskId: string }[];
+  /** Derived: a station is "up" if ≥1 of its slots is online. */
+  stationsOnline: Record<Station, boolean>;
+  /** False during the warm-up window (spec §9 of the Tier 3 spec). */
   warmedUp: boolean;
 };
 

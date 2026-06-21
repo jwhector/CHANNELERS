@@ -51,10 +51,20 @@ describe("schema: Station + station.hello", () => {
     expect(Station.safeParse("nope").success).toBe(false);
   });
   it("parses a station.hello command", () => {
-    const r = WsClientMsg.safeParse({ kind: "station.hello", station: "bodyscan" });
+    const r = WsClientMsg.safeParse({ kind: "station.hello", station: "bodyscan", kioskId: "k1" });
     expect(r.success).toBe(true);
   });
   it("rejects station.hello with an unknown station", () => {
     expect(WsClientMsg.safeParse({ kind: "station.hello", station: "lobby" }).success).toBe(false);
+  });
+});
+
+describe("schema: station.hello identity", () => {
+  it("parses station.hello with kioskId + optional slotHint", () => {
+    expect(WsClientMsg.safeParse({ kind: "station.hello", station: "intake", kioskId: "k1" }).success).toBe(true);
+    expect(WsClientMsg.safeParse({ kind: "station.hello", station: "intake", kioskId: "k1", slotHint: "intake-1" }).success).toBe(true);
+  });
+  it("rejects station.hello missing kioskId", () => {
+    expect(WsClientMsg.safeParse({ kind: "station.hello", station: "intake" }).success).toBe(false);
   });
 });
