@@ -4,14 +4,12 @@ import { usePoseLandmarker } from "../lib/pose/usePoseLandmarker";
 import { landmarksToAngles, motionMetric, poseSimilarity, type PoseVector } from "../lib/pose/angles";
 import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
-import { NumberGate } from "../components/NumberGate";
+import { CalledGate } from "../components/CalledGate";
 import { Bar, drawSkeleton } from "../components/poseUI";
-import { useStationPresence } from "../lib/useStationPresence";
 
 export function Altar() {
-  useStationPresence("altar");
   const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
-  if (!visitor) return <NumberGate title="Altar" station="altar" onResolved={setVisitor} />;
+  if (!visitor) return <CalledGate station="altar" title="Altar" onArrived={setVisitor} />;
   return <Gate visitor={visitor} />;
 }
 

@@ -4,16 +4,14 @@ import { usePoseLandmarker } from "../lib/pose/usePoseLandmarker";
 import { bodyCoverage, isBodyFramed, landmarksToAngles, motionMetric, type PoseVector } from "../lib/pose/angles";
 import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
-import { NumberGate } from "../components/NumberGate";
+import { CalledGate } from "../components/CalledGate";
 import { Bar, drawSkeleton } from "../components/poseUI";
-import { useStationPresence } from "../lib/useStationPresence";
 
 type Phase = "ready" | "record" | "saving" | "enrolled";
 
 export function BodyScan() {
-  useStationPresence("bodyscan");
   const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
-  if (!visitor) return <NumberGate title="Body Scan" station="bodyscan" onResolved={setVisitor} />;
+  if (!visitor) return <CalledGate station="bodyscan" title="Body Scan" onArrived={setVisitor} />;
   return <Enroll visitor={visitor} />;
 }
 

@@ -13,6 +13,13 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — feat(stage): Task 6 — stations gate on confirm-at-station (CalledGate)
+
+- **What:** `apps/stage/src/routes/{Intake,BodyScan,Altar}.tsx` now gate on `<CalledGate station=… title=… onArrived={setVisitor}>` instead of `<NumberGate station=… onResolved=…>` + a direct `useStationPresence(...)` call. Removed the `NumberGate` and `useStationPresence` imports + the standalone `useStationPresence(<station>)` calls from each route (CalledGate calls `useStationPresence` internally and exposes the bound slot). The existing per-station work components (intake survey, pose enroll, altar verify+persona) are unchanged.
+- **Why:** Task 6 of 9. Replaces typing a number at a station with the explicit confirm-at-station arrival (spec §5): the screen idles until a visitor is `called` to its bound slot, then shows the number + Confirm arrival.
+- **Files/areas:** `apps/stage/src/routes/Intake.tsx`, `BodyScan.tsx`, `Altar.tsx`.
+- **Docs touched:** this CHANGELOG. The three routes typecheck clean; remaining stage errors are only `Dispatch.tsx`/`Console.tsx`/`Board.tsx` (Tasks 7–8). `NumberGate` is now unused (left in place; the new `/dispatch` + `/console` use inline inputs).
+
 ## 2026-06-21 — feat(stage): Task 5 — api.arrive, slot-aware useStationPresence, CalledGate
 
 - **What:** `apps/stage/src/lib/api.ts`: added top-level `api.arrive(visitorId)`; changed `dispatch.assign` to `(visitorId, slotId)`; `dispatch.complete` to `(visitorId)`; dropped `dispatch.recall`; fixed `checkin` return type to `{ record }` (brain no longer returns `superseded`). Rewrote `apps/stage/src/lib/useStationPresence.ts`: now sends `station.hello { station, kioskId, slotHint? }` (kioskId from `?kiosk=` else a stable `localStorage` UUID; slotHint from `?slot=`), tracks `dispatch.state.slots`, and returns this screen's bound `slot` (matched by kioskId). Created `apps/stage/src/components/CalledGate.tsx`: the confirm-at-station gate — idle until a visitor is `called` to this screen's slot, shows the number + Confirm arrival → `api.arrive` → loads the record by number → hands it up via `onArrived`.
