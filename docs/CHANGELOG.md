@@ -13,6 +13,20 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — feat(brain): Task 2 — addressable slot registry + kiosk binding lifecycle
+
+- **What:** Rewrote `apps/brain/src/dispatcher.ts` with the redesign's slot model: derives a `Map<id, SlotState>` from `config.dispatcher.slots` (one slot per configured count, id `${station}-${i}`); implements `station.hello` binding lifecycle (reclaim-by-kioskId / explicit slotHint / auto-claim next free / surplus); per-slot socket-drop → grace timer → offline + unbind; `Slot[]` snapshot with `surplus`/`stationsOnline`. Dispatch logic (`confirm`/`arrive`/`assign`/`fill`/`reconcile`/`reapOccupant`) intentionally stubbed (`notImplemented`/no-op) for Task 3. Replaced `apps/brain/test/dispatcher.test.ts` with the Task-2 slot-model test suite (6 tests: slot derivation, kiosk binding × 4, socket-drop grace). One deviation from the brief's code: `surplus` map value changed from `Station` to `{ station, kioskId }` to correctly surface `kioskId` in the snapshot — the brief destructured the map as `[kioskId, station]` but stored `connId → station`, losing the `kioskId`; fixed to `connId → { station, kioskId }` with `[...surplus.values()]` in the snapshot.
+- **Why:** Task 2 of 9 in the dispatch redesign (branch `dispatch-confirm-slots-redesign`). Lays the addressable slot registry foundation that Tasks 3–8 build on.
+- **Files/areas:** `apps/brain/src/dispatcher.ts` (rewrite), `apps/brain/test/dispatcher.test.ts` (rewrite).
+- **Docs touched:** this CHANGELOG. Expected typecheck failures (old API consumers, not new errors): `apps/brain/src/app.ts` (3 errors: `checkin`, `recall`, `assign` with 2 args); `apps/stage/src/lib/useStationPresence.ts`, `apps/stage/src/routes/Board.tsx`, `apps/stage/src/routes/Console.tsx`, `apps/stage/src/routes/Dispatch.tsx` (old `DispatchState` shape) — all addressed in Tasks 4–8.
+
+## 2026-06-21 — feat(shared): Task 1 — addressable Slot types + station.hello kiosk identity
+
+- **What:** Replaced Tier 3 `DispatchSlot`/`DispatchCall`/`DispatchState` with the redesign's `SlotOccupant`/`Slot`/`DispatchDone`/`DispatchState` (new shape: `slots: Slot[]`, `completed: DispatchDone[]`, `surplus`, `stationsOnline`). Added `kioskId: string` (required) and `slotHint?: string` to `WsClientMsg` `station.hello`. Kept `DispatchFlag` and `DispatchQueueEntry` exactly as Tier 3. Updated schema.test.ts with `station.hello identity` describe block (TDD: red → green, 9/9 tests pass).
+- **Why:** Foundation of the dispatch redesign (confirm-at-station + addressable kiosk slots + 3-zone board). This is Task 1 of 9; later tasks rewrite dispatcher.ts, app.ts, and stage consumers.
+- **Files/areas:** `app/packages/shared/src/protocol.ts`, `app/apps/brain/test/schema.test.ts`.
+- **Docs touched:** this CHANGELOG. Expected typecheck failures in `apps/brain/src/dispatcher.ts`, `apps/stage/src/lib/useStationPresence.ts`, `apps/stage/src/routes/Board.tsx`, `apps/stage/src/routes/Console.tsx`, `apps/stage/src/routes/Dispatch.tsx` — all old-shape consumers addressed in later tasks.
+
 ## 2026-06-21 — docs(diagram): granular repo/system structure diagram (draw.io)
 
 - **What:** Added a draw.io architecture diagram of the whole repository — every workspace, file, and the runtime wiring between them. Source `.drawio` plus exported PNG/SVG/PDF (editable, embedded XML). Covers `docs/` (planning), the `app/` monorepo (`apps/brain` with all 10 `src/` modules + REST endpoint list + `test/`; `apps/stage` with every route/component/lib/pose file; `packages/shared`; `packages/oracles`), and external services split into server-side (OpenAI gpt-4o, @xenova Whisper, Anna/Jeff OSC consumers) and browser-side/physical (MediaPipe, Web Speech, performer earpiece). Solid arrows = runtime call/data flow (HTTP REST, WS `/ws`, OSC, OpenAI, MediaPipe, TTS, `buildPersona()`); dashed arrows = build/import dependency (every package → `@channelers/shared`).
