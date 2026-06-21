@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
-import type { DispatchState, Station, WsServerMsg } from "@channelers/shared";
+import type { DispatchState, Slot, WsServerMsg } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
 
-const STATIONS: Station[] = ["intake", "bodyscan", "altar"];
-const dwell = (since: string) => `${Math.max(0, Math.round((Date.now() - Date.parse(since)) / 1000))}s`;
+const elapsed = (since: string) =>
+  `${Math.max(0, Math.round((Date.now() - Date.parse(since)) / 1000))}s`;
 
-/** Lobby-operator console: register arrivals, confirm calls, watch the queue + slots (spec §9). */
+/** Lobby-operator board (spec §6): waiting pool · slots · completed. No-scroll 3-zone. */
 export function Dispatch() {
   const [state, setState] = useState<DispatchState | null>(null);
   const [arrival, setArrival] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [, forceTick] = useState(0);
+  const [, tick] = useState(0);
 
   const { connected } = useBrainSocket((m: WsServerMsg) => {
     if (m.kind === "dispatch.state") setState(m.state);
@@ -19,11 +19,11 @@ export function Dispatch() {
 
   useEffect(() => {
     void api.dispatch.state().then(setState).catch(() => {});
-    const t = setInterval(() => forceTick((n) => n + 1), 1000); // refresh dwell timers
+    const t = setInterval(() => tick((n) => n + 1), 1000); // refresh elapsed clocks
     return () => clearInterval(t);
   }, []);
 
-  async function registerArrival() {
+  async function register() {
     const n = Number(arrival);
     if (!Number.isInteger(n) || n <= 0) { setError("Enter a ticket number."); return; }
     setError(null);
@@ -32,104 +32,99 @@ export function Dispatch() {
   }
 
   if (!state) {
-    return (
-      <main className="void console">
-        <header><h1>Dispatch</h1><span className={connected ? "led on" : "led"} /></header>
-        <p className="dim">Connecting…</p>
-      </main>
-    );
+    return <main className="void board"><header><h1>Dispatch</h1><span className={connected ? "led on" : "led"} /></header><p className="dim">Connecting…</p></main>;
   }
 
+  const pendingBySlot = (s: Slot) => s.occupant?.phase === "pending" ? s.occupant : undefined;
+
   return (
-    <main className="void console dispatch">
+    <main className="void board board-3zone">
       <header>
         <h1>Dispatch</h1>
         <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
         {!state.warmedUp && <span className="dim">warming up…</span>}
+        <span className="arrivals">
+          <input
+            inputMode="numeric" value={arrival} placeholder="add #"
+            onChange={(e) => setArrival(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => { if (e.key === "Enter") void register(); }}
+          />
+          <button className="submit" disabled={!arrival} onClick={() => void register()}>Add</button>
+        </span>
       </header>
-
-      <section className="field arrivals">
-        <label>Register arrival (ticket #)</label>
-        <input
-          inputMode="numeric"
-          value={arrival}
-          placeholder="000"
-          onChange={(e) => setArrival(e.target.value.replace(/[^0-9]/g, ""))}
-          onKeyDown={(e) => { if (e.key === "Enter") void registerArrival(); }}
-        />
-        <button className="submit" onClick={() => void registerArrival()} disabled={!arrival}>Add</button>
-      </section>
       {error && <p className="error">{error}</p>}
+      {state.surplus.length > 0 && (
+        <p className="error">Surplus screens: {state.surplus.map((s) => `${s.station}/${s.kioskId.slice(0, 6)}`).join(", ")}</p>
+      )}
 
-      <h3>Pending — confirm to call ({state.pending.length})</h3>
-      {state.pending.length === 0 && <p className="dim">Nothing to confirm.</p>}
-      <ul className="visitors">
-        {state.pending.map((p) => (
-          <li key={p.id}>
-            <div className="row">
-              <strong>#{p.number}</strong>
-              <span className="dim">→ {p.station}</span>
-              <button className="submit" onClick={() => void api.dispatch.confirm(p.id)}>Confirm call</button>
-              <button className="end" onClick={() => void api.dispatch.repool(p.id)}>Skip</button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="zones">
+        {/* LEFT — waiting pool */}
+        <section className="zone pool">
+          <h3>Waiting ({state.queue.length})</h3>
+          <ul className="pool-list">
+            {state.queue.map((v) => (
+              <li key={v.id} className="pool-item" title={`${v.name || "(no name)"} · eligible: ${v.eligible.join(", ") || "—"}${v.flags.length ? " · " + v.flags.map((f) => f.type).join(",") : ""}`}>
+                <strong>#{v.number}</strong>
+                <span className="dim">{elapsed(v.waitingSince)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
 
-      <h3>Called — on the board ({state.board.length})</h3>
-      <ul className="visitors">
-        {state.board.map((c) => (
-          <li key={c.id}>
-            <div className="row">
-              <strong>#{c.number}</strong>
-              <span className="dim">→ {c.station} · {dwell(c.since)}</span>
-              {c.flags?.some((f) => f.type === "no-show") && <span className="error">NO-SHOW</span>}
-              <button className="submit" onClick={() => void api.dispatch.recall(c.id)}>Re-call</button>
-              <button className="end" onClick={() => void api.dispatch.repool(c.id)}>Re-pool</button>
-            </div>
-          </li>
-        ))}
-      </ul>
+        {/* CENTER — slots */}
+        <section className="zone slots">
+          <h3>Stations</h3>
+          <div className="slot-grid">
+            {state.slots.map((s) => {
+              const pend = pendingBySlot(s);
+              return (
+                <div key={s.id} className="slot-wrap">
+                  {pend && (
+                    <div className="pending-call pulse">
+                      <span>#{pend.number}</span>
+                      <span className="arrow">→</span>
+                      <button className="submit" onClick={() => void api.dispatch.confirm(pend.visitorId)}>Confirm call</button>
+                      <button className="end" title="skip" onClick={() => void api.dispatch.repool(pend.visitorId)}>×</button>
+                    </div>
+                  )}
+                  <div className={`slot-box ${s.online ? "on" : "off"} ${s.occupant ? s.occupant.phase : ""}`}>
+                    <div className="slot-head">
+                      <span className={s.online ? "led on" : "led"} />
+                      <code>{s.id}</code>
+                    </div>
+                    <div className="slot-body">
+                      {s.occupant && s.occupant.phase !== "pending" ? (
+                        <>
+                          <div className="slot-number">#{s.occupant.number}</div>
+                          <div className="dim">{s.occupant.phase} · {elapsed(s.occupant.since)}</div>
+                          <div className="slot-actions">
+                            <button className="end" onClick={() => void api.dispatch.repool(s.occupant!.visitorId)}>re-pool</button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="dim">{s.online ? "idle" : "offline"}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
-      <h3>Slots</h3>
-      <ul className="visitors">
-        {STATIONS.map((s) => {
-          const slot = state.slots[s];
-          return (
-            <li key={s}>
-              <div className="row">
-                <strong>{s}</strong>
-                <span className="dim">{slot.occupants.length}/{slot.capacity}</span>
-                <span className={state.stations[s] ? "led on" : "led"} title={state.stations[s] ? "screen online" : "screen offline"} />
-                <span className="dim">{slot.occupants.map((o) => `#${o.number}(${o.state})`).join("  ")}</span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-
-      <h3>Queue ({state.queue.length})</h3>
-      {state.queue.length === 0 && <p className="dim">Pool empty.</p>}
-      <ul className="visitors">
-        {state.queue.map((v) => (
-          <li key={v.id}>
-            <div className="row">
-              <strong>#{v.number}</strong>
-              <span className="dim">{v.name || "(no name)"}</span>
-              <span className="dim">eligible: {v.eligible.join(", ") || "—"} · {dwell(v.waitingSince)}</span>
-              {v.flags.map((f, i) => (
-                <span key={i} className="dim">[{f.type}{f.reason ? `:${f.reason}` : ""}]</span>
-              ))}
-              {v.eligible.map((s) => (
-                <button key={s} className="choice" onClick={() => void api.dispatch.assign(v.id, s)}>
-                  assign {s}
-                </button>
-              ))}
-              <button className="end" onClick={() => void api.dispatch.remove(v.id)}>remove</button>
-            </div>
-          </li>
-        ))}
-      </ul>
+        {/* RIGHT — completed */}
+        <section className="zone completed">
+          <h3>Completed ({state.completed.length})</h3>
+          <ul className="pool-list">
+            {state.completed.map((v) => (
+              <li key={v.id} className="pool-item" title={v.name || "(no name)"}>
+                <strong>#{v.number}</strong>
+                <span className="dim">done</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
     </main>
   );
 }

@@ -21,7 +21,10 @@ export function Board() {
     void api.dispatch.state().then(setState).catch(() => {});
   }, []);
 
-  const board = state?.board ?? [];
+  // Derive the call list from slots: a visitor in the `called` phase sits at its slot's station.
+  const board = (state?.slots ?? [])
+    .filter((s) => s.occupant?.phase === "called")
+    .map((s) => ({ id: s.occupant!.visitorId, number: s.occupant!.number, station: s.station }));
 
   return (
     <main className="void board">

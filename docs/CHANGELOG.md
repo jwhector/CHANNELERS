@@ -13,6 +13,13 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — feat(stage): Task 7 — /dispatch 3-zone board + CSS (+ /board fold-in)
+
+- **What:** Rewrote `apps/stage/src/routes/Dispatch.tsx` as the no-scroll 3-zone lobby board (spec §6): LEFT = waiting pool (each waiting `#N` with elapsed clock + hover tooltip of name/eligibility/flags); CENTER = the slots as a responsive `auto-fill` grid of rectangles (online LED, slot id, bound number + phase; a `pending` assignment pulses beside the box with `→ Confirm call` + a skip `×`; `re-pool` action on a live occupant); RIGHT = completed (`sessionEndAt`). Header carries the live LED, a warming-up hint, a surplus-screens warning, and the operator add-`#` arrivals input (`api.register`). A 1 s interval re-renders the elapsed clocks. Appended the board styles to the **global stylesheet `apps/stage/src/styles.css`** (the one imported in `main.tsx` — there is no `index.css`): `.board-3zone`, `.zones`, `.zone`, `.pool-list/.pool-item`, `.slot-grid/.slot-wrap/.slot-box(.on/.off/.called/.in_progress)`, `.slot-head/.slot-number/.called-number`, `.pending-call`, `.pulse` + `@keyframes dispatch-pulse` (`.led`/`.led.on` already existed and are reused). **Plan fold-in:** the plan omitted `apps/stage/src/routes/Board.tsx`, which read the removed `DispatchState.board`; updated it to derive the call list from `slots` (occupant `phase === "called"` → `{ number, station }`), preserving the public `/board` "NOW SERVING" display.
+- **Why:** Task 7 of 9. Gives the lobby operator the readable slot-centric board the redesign is built around, and keeps `/board` working under the new state shape.
+- **Files/areas:** `apps/stage/src/routes/Dispatch.tsx` (rewrite), `apps/stage/src/routes/Board.tsx` (derive calls from slots), `apps/stage/src/styles.css` (board styles).
+- **Docs touched:** this CHANGELOG. After this task the only remaining stage typecheck errors are in `Console.tsx` (Task 8).
+
 ## 2026-06-21 — feat(stage): Task 6 — stations gate on confirm-at-station (CalledGate)
 
 - **What:** `apps/stage/src/routes/{Intake,BodyScan,Altar}.tsx` now gate on `<CalledGate station=… title=… onArrived={setVisitor}>` instead of `<NumberGate station=… onResolved=…>` + a direct `useStationPresence(...)` call. Removed the `NumberGate` and `useStationPresence` imports + the standalone `useStationPresence(<station>)` calls from each route (CalledGate calls `useStationPresence` internally and exposes the bound slot). The existing per-station work components (intake survey, pose enroll, altar verify+persona) are unchanged.
