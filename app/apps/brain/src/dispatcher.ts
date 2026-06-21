@@ -136,7 +136,7 @@ export function createDispatcher(
       const s = slots.get(slotId);
       if (!s || s.connId) return; // reconnected
       s.kioskId = undefined; // unbind
-      reapOccupant(s, "kiosk-offline"); // no-op here; real impl in Task 3
+      reapOccupant(s, "kiosk-offline"); // repool the slot's occupant
       broadcastState();
     }, knobs.graceMs);
     offlineTimers.set(slotId, timer);
@@ -223,8 +223,10 @@ export function createDispatcher(
     const v = store.get(visitorId);
     if (!v) return false;
     const station = slot?.station ?? (v.location.station as Station | undefined);
-    const field = station === "intake" ? "intakeAt" : station === "bodyscan" ? "poseAt" : "sessionEndAt";
-    if (station) store.stampMilestone(visitorId, field);
+    if (station) {
+      const field = station === "intake" ? "intakeAt" : station === "bodyscan" ? "poseAt" : "sessionEndAt";
+      store.stampMilestone(visitorId, field);
+    }
     freeSlotOf(visitorId);
     store.setLocation(visitorId, { state: "waiting", since: nowIso() });
     clearFlags(visitorId);
@@ -234,9 +236,11 @@ export function createDispatcher(
 
   function remove(visitorId: string): boolean {
     freeSlotOf(visitorId);
-    flags.delete(visitorId);
     const ok = store.remove(visitorId);
-    if (ok) broadcastState();
+    if (ok) {
+      flags.delete(visitorId);
+      broadcastState();
+    }
     return ok;
   }
 
