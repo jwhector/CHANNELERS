@@ -13,6 +13,13 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — docs(diagram): granular repo/system structure diagram (draw.io)
+
+- **What:** Added a draw.io architecture diagram of the whole repository — every workspace, file, and the runtime wiring between them. Source `.drawio` plus exported PNG/SVG/PDF (editable, embedded XML). Covers `docs/` (planning), the `app/` monorepo (`apps/brain` with all 10 `src/` modules + REST endpoint list + `test/`; `apps/stage` with every route/component/lib/pose file; `packages/shared`; `packages/oracles`), and external services split into server-side (OpenAI gpt-4o, @xenova Whisper, Anna/Jeff OSC consumers) and browser-side/physical (MediaPipe, Web Speech, performer earpiece). Solid arrows = runtime call/data flow (HTTP REST, WS `/ws`, OSC, OpenAI, MediaPipe, TTS, `buildPersona()`); dashed arrows = build/import dependency (every package → `@channelers/shared`).
+- **Why:** Requested as a granular, specific map of the codebase structure for onboarding/context transfer. Mirrors ARCHITECTURE.md §3 layout but at file granularity and as an editable visual.
+- **Files/areas:** two complementary draw.io renderings of the same architecture (built across a context boundary, both kept): `docs/diagrams/repo-structure.drawio` (+ `.drawio.png`/`.svg`/`.pdf`) and `docs/CHANNELERS-architecture.drawio` (+ `.png`/`.drawio.png`/`.svg`/`.pdf`). No code changed.
+- **Docs touched:** this CHANGELOG; new `docs/diagrams/` directory.
+
 ## 2026-06-20 — fix(stage): silence benign Vite `/ws` dev-proxy disconnect noise (EPIPE/ECONNRESET)
 
 - **What:** Added a scoped `customLogger` to `apps/stage/vite.config.ts` that drops only the Vite dev-server `ws proxy socket error: write EPIPE` / `read ECONNRESET` log lines; every other error still logs normally.
