@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram name="CHANNELERS-repo-structure">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2500" pageHeight="1300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title + legend -->
+        <mxCell id="title" value="CHANNELERS — Repository &amp; System Structure  (pnpm + TypeScript monorepo)" style="text;html=1;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#222222;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="2420" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" value="Solid arrow = runtime call / data flow      Dashed arrow = build/import dependency (every package imports @channelers/shared)      Containers = folders / workspaces" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#555555;" vertex="1" parent="1">
+          <mxGeometry x="40" y="66" width="2420" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ================= DOCS ================= -->
+        <mxCell id="docs" value="docs/  —  planning · source of truth" style="swimlane;startSize=40;html=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=13;verticalAlign=top;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="400" height="500" as="geometry" />
+        </mxCell>
+        <mxCell id="d1" value="&lt;b&gt;ARCHITECTURE.md&lt;/b&gt; — design · data model · roadmap · §11 open questions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="docs">
+          <mxGeometry x="20" y="55" width="360" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="d2" value="&lt;b&gt;CHANGELOG.md&lt;/b&gt; — what's been built &amp; why (read first)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="docs">
+          <mxGeometry x="20" y="129" width="360" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="d3" value="&lt;b&gt;CLAUDE.md&lt;/b&gt; — decisions &amp; conventions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="docs">
+          <mxGeometry x="20" y="189" width="360" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="d4" value="&lt;b&gt;intake.md&lt;/b&gt; — the absurdist intake survey" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="docs">
+          <mxGeometry x="20" y="243" width="360" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="d5" value="&lt;b&gt;emails.md · annaoxygenwebsite.md&lt;/b&gt; — the brief" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="docs">
+          <mxGeometry x="20" y="297" width="360" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="d6" value="&lt;b&gt;CHANNELERS vibes.pdf&lt;/b&gt; — visual reference (_vibes_render/)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="docs">
+          <mxGeometry x="20" y="357" width="360" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="d7" value="&lt;b&gt;superpowers/&lt;/b&gt; — plans/ + specs/ (SDD design docs: multi-station, dispatcher)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="docs">
+          <mxGeometry x="20" y="411" width="360" height="64" as="geometry" />
+        </mxCell>
+
+        <!-- ================= EXTERNAL (client) ================= -->
+        <mxCell id="extc" value="Browser-side &amp; physical (client runtime)" style="swimlane;startSize=40;html=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=13;verticalAlign=top;align=center;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="660" width="400" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="xm" value="&lt;b&gt;MediaPipe Tasks-for-Web&lt;/b&gt;&#xa;in-browser pose CV (Pose Landmarker)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="extc">
+          <mxGeometry x="20" y="50" width="360" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="xw" value="&lt;b&gt;Web Speech API&lt;/b&gt;&#xa;SpeechSynthesis (TTS) · SpeechRecognition (STT)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="extc">
+          <mxGeometry x="20" y="122" width="360" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="xe" value="&lt;b&gt;Performer earpiece&lt;/b&gt;&#xa;whisper TTS in-ear / hidden teleprompter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="extc">
+          <mxGeometry x="20" y="190" width="360" height="64" as="geometry" />
+        </mxCell>
+
+        <!-- ================= EXTERNAL (server) ================= -->
+        <mxCell id="extr" value="External services (server-side)" style="swimlane;startSize=40;html=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=13;verticalAlign=top;align=center;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="2000" y="120" width="460" height="400" as="geometry" />
+        </mxCell>
+        <mxCell id="xo" value="&lt;b&gt;OpenAI API&lt;/b&gt; — gpt-4o&#xa;intake→seeds transform + live oracle LLM (streamed)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="extr">
+          <mxGeometry x="20" y="55" width="420" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="xx" value="&lt;b&gt;@xenova/transformers&lt;/b&gt;&#xa;local Whisper STT (runs in-process in brain)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="extr">
+          <mxGeometry x="20" y="137" width="420" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="xa" value="&lt;b&gt;Anna — music rig&lt;/b&gt;&#xa;MusicSeed + ShowEvents over OSC / WebSocket" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="extr">
+          <mxGeometry x="20" y="209" width="420" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="xj" value="&lt;b&gt;Jeff — visuals / TouchDesigner&lt;/b&gt;&#xa;ShowEvents over OSC (light/projection cues)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="extr">
+          <mxGeometry x="20" y="281" width="420" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ================= APP MONOREPO ================= -->
+        <mxCell id="app" value="app/  —  pnpm + TypeScript monorepo   (pnpm-workspace.yaml · tsconfig.base.json · .env)" style="swimlane;startSize=40;html=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=14;verticalAlign=top;align=center;" vertex="1" parent="1">
+          <mxGeometry x="480" y="120" width="1480" height="1090" as="geometry" />
+        </mxCell>
+
+        <!-- STAGE -->
+        <mxCell id="stage" value="apps/stage  —  Vite + React SPA  (role-based routes · :5173)" style="swimlane;startSize=40;html=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;verticalAlign=top;align=center;" vertex="1" parent="app">
+          <mxGeometry x="20" y="60" width="700" height="640" as="geometry" />
+        </mxCell>
+
+        <mxCell id="stroutes" value="src/routes/  —  one screen per role (App.tsx · main.tsx mount the router)" style="swimlane;startSize=30;html=1;whiteSpace=wrap;fillColor=#eef3fc;strokeColor=#6c8ebf;fontStyle=0;fontSize=11;verticalAlign=top;align=left;spacingLeft=6;" vertex="1" parent="stage">
+          <mxGeometry x="15" y="50" width="670" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="r1" value="&lt;b&gt;Intake.tsx&lt;/b&gt;&#xa;kiosk survey" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="stroutes">
+          <mxGeometry x="10" y="40" width="205" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="r2" value="&lt;b&gt;BodyScan.tsx&lt;/b&gt;&#xa;pose enroll" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="stroutes">
+          <mxGeometry x="222" y="40" width="205" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="r3" value="&lt;b&gt;Altar.tsx&lt;/b&gt;&#xa;pose verify + persona pick" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="stroutes">
+          <mxGeometry x="434" y="40" width="205" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="r4" value="&lt;b&gt;Channel.tsx&lt;/b&gt;&#xa;performer teleprompter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="stroutes">
+          <mxGeometry x="10" y="92" width="205" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="r5" value="&lt;b&gt;Console.tsx&lt;/b&gt;&#xa;master overseer (3 panels)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="stroutes">
+          <mxGeometry x="222" y="92" width="205" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="r6" value="&lt;b&gt;Board.tsx&lt;/b&gt;&#xa;public call board #N→STATION" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="stroutes">
+          <mxGeometry x="434" y="92" width="205" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="r7" value="&lt;b&gt;Dispatch.tsx&lt;/b&gt;&#xa;lobby operator (register/confirm)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="stroutes">
+          <mxGeometry x="10" y="144" width="205" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="r8" value="&lt;b&gt;Souvenir.tsx&lt;/b&gt;&#xa;QR takeaway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="stroutes">
+          <mxGeometry x="222" y="144" width="205" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="r9" value="&lt;i&gt;/waiting — deferred&lt;/i&gt;&#xa;(Tier 3 self-serve kiosk)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#b3b3b3;fontSize=10;dashed=1;" vertex="1" parent="stroutes">
+          <mxGeometry x="434" y="144" width="205" height="42" as="geometry" />
+        </mxCell>
+
+        <mxCell id="stcomp" value="src/components/" style="swimlane;startSize=28;html=1;whiteSpace=wrap;fillColor=#eef3fc;strokeColor=#6c8ebf;fontSize=11;verticalAlign=top;align=left;spacingLeft=6;" vertex="1" parent="stage">
+          <mxGeometry x="15" y="272" width="320" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="nm1" value="&lt;b&gt;NumberGate.tsx&lt;/b&gt; — ticket # gate (+ station prop)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=6;" vertex="1" parent="stcomp">
+          <mxGeometry x="10" y="36" width="300" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="nm2" value="&lt;b&gt;poseUI.tsx&lt;/b&gt; — skeleton + telemetry overlay" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=6;" vertex="1" parent="stcomp">
+          <mxGeometry x="10" y="78" width="300" height="36" as="geometry" />
+        </mxCell>
+
+        <mxCell id="stlib" value="src/lib/" style="swimlane;startSize=28;html=1;whiteSpace=wrap;fillColor=#eef3fc;strokeColor=#6c8ebf;fontSize=11;verticalAlign=top;align=left;spacingLeft=6;" vertex="1" parent="stage">
+          <mxGeometry x="350" y="272" width="335" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="l1" value="&lt;b&gt;api.ts&lt;/b&gt; — REST client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=6;" vertex="1" parent="stlib">
+          <mxGeometry x="10" y="36" width="315" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="l2" value="&lt;b&gt;useBrainSocket.ts&lt;/b&gt; — WS client (auto-reconnect)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=6;" vertex="1" parent="stlib">
+          <mxGeometry x="10" y="76" width="315" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="l3" value="&lt;b&gt;useStationPresence.ts&lt;/b&gt; — station.hello LED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=6;" vertex="1" parent="stlib">
+          <mxGeometry x="10" y="116" width="315" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="l4" value="&lt;b&gt;sessionHandle.ts&lt;/b&gt; — rejoin key (localStorage)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=6;" vertex="1" parent="stlib">
+          <mxGeometry x="10" y="156" width="315" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="l5" value="&lt;b&gt;speech.ts&lt;/b&gt; — browser TTS (earpiece)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=6;" vertex="1" parent="stlib">
+          <mxGeometry x="10" y="196" width="315" height="34" as="geometry" />
+        </mxCell>
+
+        <mxCell id="stpose" value="src/lib/pose/  —  the &quot;human QR code&quot; (MediaPipe)" style="swimlane;startSize=28;html=1;whiteSpace=wrap;fillColor=#eef3fc;strokeColor=#6c8ebf;fontSize=11;verticalAlign=top;align=left;spacingLeft=6;" vertex="1" parent="stage">
+          <mxGeometry x="15" y="404" width="320" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="p1" value="&lt;b&gt;usePoseLandmarker.ts&lt;/b&gt;&#xa;webcam + Pose Landmarker hook" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=6;" vertex="1" parent="stpose">
+          <mxGeometry x="10" y="36" width="300" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="p2" value="&lt;b&gt;angles.ts&lt;/b&gt; — pose → angle vector (invariant)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=6;" vertex="1" parent="stpose">
+          <mxGeometry x="10" y="84" width="300" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="p3" value="&lt;b&gt;landmarks.ts&lt;/b&gt; — 33-landmark joints + skeleton" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=6;" vertex="1" parent="stpose">
+          <mxGeometry x="10" y="132" width="300" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- BRAIN -->
+        <mxCell id="brain" value="apps/brain  —  Show Brain · Fastify + ws + node-osc + OpenAI  (:8787)" style="swimlane;startSize=40;html=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=13;verticalAlign=top;align=center;" vertex="1" parent="app">
+          <mxGeometry x="740" y="60" width="720" height="640" as="geometry" />
+        </mxCell>
+        <mxCell id="b1" value="&lt;b&gt;index.ts&lt;/b&gt; — boot: buildApp() → listen" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="brain">
+          <mxGeometry x="15" y="50" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="b2" value="&lt;b&gt;app.ts&lt;/b&gt; — Fastify REST routes (composition root)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd9a8;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;fontStyle=1;" vertex="1" parent="brain">
+          <mxGeometry x="15" y="106" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="b3" value="&lt;b&gt;bus.ts&lt;/b&gt; — WS /ws hub + OSC publisher (fan-out hooks)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="brain">
+          <mxGeometry x="15" y="162" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="b4" value="&lt;b&gt;dispatcher.ts&lt;/b&gt; — slot engine + state machine + recovery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="brain">
+          <mxGeometry x="15" y="218" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="b5" value="&lt;b&gt;divination.ts&lt;/b&gt; — STT→LLM→TTS session loop" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="brain">
+          <mxGeometry x="15" y="274" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="b6" value="&lt;b&gt;transform.ts&lt;/b&gt; — intake → Seeds (gpt-4o · zod · stub)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="brain">
+          <mxGeometry x="360" y="50" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="b7" value="&lt;b&gt;store.ts&lt;/b&gt; — in-memory visitor store (by id / number)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="brain">
+          <mxGeometry x="360" y="106" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="b8" value="&lt;b&gt;stt.ts&lt;/b&gt; — Whisper transcription (@xenova)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="brain">
+          <mxGeometry x="360" y="162" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="b9" value="&lt;b&gt;config.ts&lt;/b&gt; — env: models · OSC · dispatcher knobs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="brain">
+          <mxGeometry x="360" y="218" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="b10" value="&lt;b&gt;node-osc.d.ts&lt;/b&gt; — OSC type shim" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="brain">
+          <mxGeometry x="360" y="274" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="broutes" value="&lt;b&gt;REST endpoints&lt;/b&gt; (app.ts)&#xa;GET  /api/health · /api/visitors · /visitors/by-number/:n · /api/dispatch&#xa;POST /api/register · /visitors/:id/{intake,pose,persona,verify,scan,seeds}&#xa;POST /api/checkin · /api/stt · /api/demo/echo&#xa;POST /api/dispatch/{confirm,assign,recall,repool,complete,remove}" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;align=left;spacingLeft=8;verticalAlign=top;spacingTop=6;" vertex="1" parent="brain">
+          <mxGeometry x="15" y="340" width="690" height="155" as="geometry" />
+        </mxCell>
+        <mxCell id="btest" value="&lt;b&gt;test/&lt;/b&gt; (vitest) — dispatcher · endpoints · schema · store · smoke" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="brain">
+          <mxGeometry x="15" y="505" width="690" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- SHARED -->
+        <mxCell id="shared" value="packages/shared  —  @channelers/shared  (zod schemas + contracts)" style="swimlane;startSize=40;html=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=13;verticalAlign=top;align=center;" vertex="1" parent="app">
+          <mxGeometry x="20" y="720" width="700" height="300" as="geometry" />
+        </mxCell>
+        <mxCell id="s1" value="&lt;b&gt;schemas.ts&lt;/b&gt; — VisitorProfile · SurveyResponse · PoseVector · Seeds · Station" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="shared">
+          <mxGeometry x="15" y="50" width="330" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="&lt;b&gt;events.ts&lt;/b&gt; — ShowEvent union + OSC_ADDRESSES / toOsc()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="shared">
+          <mxGeometry x="15" y="118" width="330" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="&lt;b&gt;protocol.ts&lt;/b&gt; — WsClient/ServerMsg + DispatchState types" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="shared">
+          <mxGeometry x="15" y="186" width="330" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="&lt;b&gt;survey.ts&lt;/b&gt; — the intake question set" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="shared">
+          <mxGeometry x="360" y="50" width="325" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" value="&lt;b&gt;archetypes.ts&lt;/b&gt; — child · tree · drugged_ai (labels)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="shared">
+          <mxGeometry x="360" y="118" width="325" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="s6" value="&lt;b&gt;index.ts&lt;/b&gt; — barrel export" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#efe6f3;strokeColor=#9673a6;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="shared">
+          <mxGeometry x="360" y="186" width="325" height="58" as="geometry" />
+        </mxCell>
+
+        <!-- ORACLES -->
+        <mxCell id="oracles" value="packages/oracles  —  @channelers/oracles  (persona library)" style="swimlane;startSize=40;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;verticalAlign=top;align=center;" vertex="1" parent="app">
+          <mxGeometry x="740" y="720" width="720" height="300" as="geometry" />
+        </mxCell>
+        <mxCell id="o1" value="&lt;b&gt;personas.ts&lt;/b&gt; — PERSONAS: child · tree · drugged_ai" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="oracles">
+          <mxGeometry x="15" y="50" width="330" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="o2" value="&lt;b&gt;buildPrompt.ts&lt;/b&gt; — system-prompt builder + turn prefill" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="oracles">
+          <mxGeometry x="360" y="50" width="335" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="o3" value="&lt;b&gt;denylist.ts&lt;/b&gt; — anti-slop deny-list (kills helpful-assistant register)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="oracles">
+          <mxGeometry x="15" y="130" width="330" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="o4" value="&lt;b&gt;index.ts&lt;/b&gt; — barrel export (buildPersona)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdf6dd;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="oracles">
+          <mxGeometry x="360" y="130" width="335" height="64" as="geometry" />
+        </mxCell>
+
+        <!-- ================= EDGES — runtime (solid) ================= -->
+        <mxCell id="e1" value="HTTP REST :8787" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#b85450;fontColor=#b85450;fontSize=11;" edge="1" parent="1" source="l1" target="b2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="WebSocket /ws" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#b85450;fontColor=#b85450;fontSize=11;" edge="1" parent="1" source="l2" target="b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="OSC + WS ShowEvents" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;fontSize=11;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="b3" target="xa">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="OSC ShowEvents" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;fontSize=11;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="b3" target="xj">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="seeds (gpt-4o)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;fontSize=11;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="b6" target="xo">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="oracle LLM (stream)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;fontSize=11;" edge="1" parent="1" source="b5" target="xo">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="Whisper STT" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;fontSize=11;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="b8" target="xx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="buildPersona()" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;fontSize=11;" edge="1" parent="1" source="b5" target="o2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="landmarks" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;fontSize=11;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="p1" target="xm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="TTS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;fontSize=11;" edge="1" parent="1" source="l5" target="xw">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" value="audio" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#333333;fontSize=11;" edge="1" parent="1" source="xw" target="xe">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ================= EDGES — dependencies (dashed) ================= -->
+        <mxCell id="dep1" value="import" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=#9673a6;fontColor=#9673a6;fontSize=11;endArrow=open;" edge="1" parent="app" source="stage" target="shared">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dep2" value="import" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=#9673a6;fontColor=#9673a6;fontSize=11;endArrow=open;" edge="1" parent="app" source="brain" target="shared">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dep3" value="import types" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=#9673a6;fontColor=#9673a6;fontSize=11;endArrow=open;" edge="1" parent="app" source="oracles" target="shared">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dep4" value="import (buildPersona)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=#9673a6;fontColor=#9673a6;fontSize=11;endArrow=open;" edge="1" parent="app" source="brain" target="oracles">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

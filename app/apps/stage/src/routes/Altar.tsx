@@ -4,18 +4,22 @@ import { usePoseLandmarker } from "../lib/pose/usePoseLandmarker";
 import { landmarksToAngles, motionMetric, poseSimilarity, type PoseVector } from "../lib/pose/angles";
 import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
-import { NumberGate } from "../components/NumberGate";
+import { CalledGate } from "../components/CalledGate";
 import { Bar, drawSkeleton } from "../components/poseUI";
 import { useStationPresence } from "../lib/useStationPresence";
+import { useReleaseToGate } from "../lib/useReleaseToGate";
 
 export function Altar() {
-  useStationPresence("altar");
+  const { connected, slot } = useStationPresence("altar");
   const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
-  if (!visitor) return <NumberGate title="Altar" station="altar" onResolved={setVisitor} />;
-  return <Gate visitor={visitor} />;
+
+  useReleaseToGate(visitor, slot, false, () => setVisitor(null));
+
+  if (!visitor) return <CalledGate station="altar" title="Altar" connected={connected} slot={slot} onArrived={setVisitor} />;
+  return <Gate visitor={visitor} connected={connected} />;
 }
 
-function Gate({ visitor }: { visitor: VisitorProfile }) {
+function Gate({ visitor, connected }: { visitor: VisitorProfile; connected: boolean }) {
   const template = (visitor.poseTemplate as PoseVector | undefined) ?? null;
   const [stillness] = useState(0.05);
   const [matchThresh] = useState(0.9);
@@ -75,7 +79,10 @@ function Gate({ visitor }: { visitor: VisitorProfile }) {
 
   return (
     <main className="void">
-      <h1>Altar</h1>
+      <header>
+        <h1>Altar</h1>
+        <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
+      </header>
       <p className="dim">Number {visitor.number} · {visitor.survey?.name ?? "—"}</p>
       {ready && <p className="poseflash">ORACLE READY — proceed to be channelled.</p>}
       {error && <p className="error">{error}</p>}

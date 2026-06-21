@@ -4,20 +4,28 @@ import { usePoseLandmarker } from "../lib/pose/usePoseLandmarker";
 import { bodyCoverage, isBodyFramed, landmarksToAngles, motionMetric, type PoseVector } from "../lib/pose/angles";
 import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
-import { NumberGate } from "../components/NumberGate";
+import { CalledGate } from "../components/CalledGate";
 import { Bar, drawSkeleton } from "../components/poseUI";
 import { useStationPresence } from "../lib/useStationPresence";
+import { useReleaseToGate } from "../lib/useReleaseToGate";
 
 type Phase = "ready" | "record" | "saving" | "enrolled";
 
 export function BodyScan() {
-  useStationPresence("bodyscan");
+  const { connected, slot } = useStationPresence("bodyscan");
   const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
-  if (!visitor) return <NumberGate title="Body Scan" station="bodyscan" onResolved={setVisitor} />;
-  return <Enroll visitor={visitor} />;
+  const [done, setDone] = useState(false);
+
+  useReleaseToGate(visitor, slot, done, () => {
+    setVisitor(null);
+    setDone(false);
+  });
+
+  if (!visitor) return <CalledGate station="bodyscan" title="Body Scan" connected={connected} slot={slot} onArrived={setVisitor} />;
+  return <Enroll visitor={visitor} connected={connected} onEnrolled={() => setDone(true)} />;
 }
 
-function Enroll({ visitor }: { visitor: VisitorProfile }) {
+function Enroll({ visitor, connected, onEnrolled }: { visitor: VisitorProfile; connected: boolean; onEnrolled?: () => void }) {
   const [stillness, setStillness] = useState(0.05);
   const [recordSec, setRecordSec] = useState(3.5);
   const [phase, setPhase] = useState<Phase>("ready");
@@ -48,6 +56,7 @@ function Enroll({ visitor }: { visitor: VisitorProfile }) {
     try {
       await api.enrollPose(visitor.id, vec);
       setPhaseBoth("enrolled");
+      onEnrolled?.();
     } catch (e) {
       setError(String(e));
       setPhaseBoth("ready");
@@ -93,7 +102,10 @@ function Enroll({ visitor }: { visitor: VisitorProfile }) {
 
   return (
     <main className="void">
-      <h1>Body Scan</h1>
+      <header>
+        <h1>Body Scan</h1>
+        <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
+      </header>
       <p className="dim">Number {visitor.number} · invent and hold a shape — it becomes your key.</p>
 
       <div className={`posestage${showFrameHint ? " unframed" : ""}`}>

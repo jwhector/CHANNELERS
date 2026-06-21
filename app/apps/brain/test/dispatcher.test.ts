@@ -3,7 +3,6 @@ import { store } from "../src/store";
 import { createDispatcher, type DispatcherBus } from "../src/dispatcher";
 import type { WsServerMsg, DispatchState } from "@channelers/shared";
 
-// A fake bus that captures broadcasts and exposes the hook fns the engine registers.
 function fakeBus() {
   const broadcasts: WsServerMsg[] = [];
   let connectFn: ((reply: (m: WsServerMsg) => void, c: string) => void) | null = null;
@@ -19,7 +18,8 @@ function fakeBus() {
     bus, broadcasts,
     fireConnect: (reply: (m: WsServerMsg) => void, c = "c1") => connectFn?.(reply, c),
     fireDisconnect: (c: string) => disconnectFn?.(c),
-    fireCommand: (cmd: any, c: string) => commandFn?.(cmd, () => {}, c),
+    hello: (station: string, kioskId: string, connId: string, slotHint?: string) =>
+      commandFn?.({ kind: "station.hello", station, kioskId, slotHint }, () => {}, connId),
     lastState: (): DispatchState | undefined => {
       const m = [...broadcasts].reverse().find((x) => x.kind === "dispatch.state");
       return m && m.kind === "dispatch.state" ? m.state : undefined;
@@ -27,219 +27,191 @@ function fakeBus() {
   };
 }
 
-// Knobs with a tiny warm-up pool so a couple of registrations are immediately dispatchable.
-const KNOBS = { K: 2, warmupMs: 60_000, maxWaitMs: 240_000, tickMs: 5_000 };
-const NUM = () => 100_000 + Math.floor(Math.random() * 800_000);
+// Counts chosen to exercise multi-slot + singletons; engine must derive everything from these.
+const SLOTS = { intake: 3, bodyscan: 2, altar: 1 } as const;
+const KNOBS = { slots: SLOTS, K: 1, warmupMs: 0, graceMs: 20_000, tickMs: 5_000 };
 
 let f: ReturnType<typeof fakeBus>;
-let dispatcher: ReturnType<typeof createDispatcher>;
+let d: ReturnType<typeof createDispatcher>;
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-06-20T00:00:00.000Z"));
+  vi.setSystemTime(new Date("2026-06-21T00:00:00.000Z"));
   store.clear();
   f = fakeBus();
-  dispatcher = createDispatcher(f.bus, { knobs: KNOBS, autoStart: false });
+  d = createDispatcher(f.bus, { knobs: KNOBS, autoStart: false });
 });
-afterEach(() => { dispatcher.stop(); vi.useRealTimers(); });
+afterEach(() => { d.stop(); vi.useRealTimers(); });
 
-describe("warm-up gate", () => {
-  it("does not assign until the pool reaches K", () => {
-    const a = store.register(NUM());
-    dispatcher.kick();
-    expect(f.lastState()?.warmedUp).toBe(false);
-    expect(f.lastState()?.pending.length).toBe(0);
+describe("slot derivation from config counts", () => {
+  it("creates one slot per configured count, named ${station}-${i}, all offline", () => {
+    const s = d.snapshot();
+    expect(s.slots.map((x) => x.id).sort()).toEqual(
+      ["altar-0", "bodyscan-0", "bodyscan-1", "intake-0", "intake-1", "intake-2"],
+    );
+    expect(s.slots.every((x) => x.online === false && !x.kioskId)).toBe(true);
+    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false });
+  });
+});
 
-    store.register(NUM()); // now 2 waiting ≥ K
-    dispatcher.kick();
-    expect(f.lastState()?.warmedUp).toBe(true);
-    expect(f.lastState()!.pending.length).toBeGreaterThan(0);
+describe("kiosk binding", () => {
+  it("auto-claims the next free slot and marks it online", () => {
+    f.hello("intake", "kioskA", "connA");
+    const s = d.snapshot();
+    const bound = s.slots.filter((x) => x.station === "intake" && x.online);
+    expect(bound.length).toBe(1);
+    expect(bound[0].kioskId).toBe("kioskA");
+    expect(s.stationsOnline.intake).toBe(true);
   });
 
-  it("warms up via T_warmup even below K", () => {
+  it("binds the explicit slotHint when given", () => {
+    f.hello("intake", "kioskB", "connB", "intake-2");
+    const slot = d.snapshot().slots.find((x) => x.id === "intake-2");
+    expect(slot?.online).toBe(true);
+    expect(slot?.kioskId).toBe("kioskB");
+  });
+
+  it("reclaims the same slot when the same kioskId reconnects", () => {
+    f.hello("bodyscan", "kioskC", "conn1");
+    const first = d.snapshot().slots.find((x) => x.kioskId === "kioskC")!.id;
+    f.fireDisconnect("conn1");
+    vi.advanceTimersByTime(5); // within grace
+    f.hello("bodyscan", "kioskC", "conn2");
+    const again = d.snapshot().slots.find((x) => x.kioskId === "kioskC")!.id;
+    expect(again).toBe(first);
+    expect(d.snapshot().slots.find((x) => x.id === again)!.online).toBe(true);
+  });
+
+  it("flags a surplus screen when no slot is free (altar has 1)", () => {
+    f.hello("altar", "kioskD", "connD");
+    f.hello("altar", "kioskE", "connE"); // no free altar slot
+    const s = d.snapshot();
+    expect(s.slots.filter((x) => x.station === "altar" && x.online).length).toBe(1);
+    expect(s.surplus.some((x) => x.station === "altar" && x.kioskId === "kioskE")).toBe(true);
+  });
+});
+
+describe("socket-drop → slot offline after grace", () => {
+  it("takes the slot offline and unbinds it after the grace window", () => {
+    f.hello("intake", "kioskF", "connF");
+    expect(d.snapshot().stationsOnline.intake).toBe(true);
+    f.fireDisconnect("connF");
+    // still bound during grace
+    expect(d.snapshot().slots.some((x) => x.kioskId === "kioskF")).toBe(true);
+    vi.advanceTimersByTime(KNOBS.graceMs + 10);
+    const s = d.snapshot();
+    expect(s.slots.some((x) => x.kioskId === "kioskF")).toBe(false);
+    expect(s.stationsOnline.intake).toBe(false);
+  });
+});
+
+const NUM = () => 500000 + Math.floor(Math.random() * 400000);
+
+describe("pinned dispatch only fills free ONLINE slots", () => {
+  it("does not dispatch when no slot is online", () => {
     store.register(NUM());
-    dispatcher.kick();
-    expect(f.lastState()?.warmedUp).toBe(false);
-    vi.setSystemTime(new Date("2026-06-20T00:02:00.000Z")); // +2min > warmupMs
-    dispatcher.kick();
-    expect(f.lastState()?.warmedUp).toBe(true);
-  });
-});
-
-describe("eligibility + fill", () => {
-  it("a fresh visitor is eligible for intake and bodyscan, not altar", () => {
-    store.register(NUM()); store.register(NUM());
-    dispatcher.kick();
-    const q = f.lastState()!.queue.concat(); // some may now be pending
-    // After fill, intake(2) + bodyscan(1) slots take up to 3 picks from 2 visitors.
-    const pend = f.lastState()!.pending;
-    expect(pend.every((p) => p.station === "intake" || p.station === "bodyscan")).toBe(true);
+    d.kick();
+    expect(d.snapshot().slots.every((s) => !s.occupant)).toBe(true);
   });
 
-  it("respects slot capacity: intake holds at most 2 pending+called+in_progress", () => {
+  it("pins a pending occupant to an online slot, then confirm→arrive progress the phase", () => {
+    f.hello("intake", "kioskA", "connA"); // intake-0 online
+    const v = store.register(NUM());
+    d.kick();
+    const pendingSlot = d.snapshot().slots.find((s) => s.occupant?.phase === "pending");
+    expect(pendingSlot?.occupant?.visitorId).toBe(v.id);
+    expect(pendingSlot?.station).toBe("intake");
+
+    expect(d.confirm(v.id)).toBe(true);
+    expect(store.get(v.id)?.location).toMatchObject({ state: "called", station: "intake" });
+    expect(d.snapshot().slots.find((s) => s.occupant?.visitorId === v.id)?.occupant?.phase).toBe("called");
+
+    expect(d.arrive(v.id)).toBe(true);
+    expect(store.get(v.id)?.location).toMatchObject({ state: "in_progress", station: "intake" });
+    expect(d.snapshot().slots.find((s) => s.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
+  });
+
+  it("effective capacity = online slots: 2 online intake slots hold at most 2 occupants", () => {
+    f.hello("intake", "kA", "cA");
+    f.hello("intake", "kB", "cB"); // 2 of 3 intake slots online
     for (let i = 0; i < 5; i++) store.register(NUM());
-    dispatcher.kick();
-    const intakePending = f.lastState()!.pending.filter((p) => p.station === "intake").length;
-    expect(intakePending).toBeLessThanOrEqual(2);
+    d.kick();
+    const intakeOccupied = d.snapshot().slots.filter((s) => s.station === "intake" && s.occupant).length;
+    expect(intakeOccupied).toBe(2);
   });
 });
 
-describe("confirm promotes pending → called", () => {
-  it("moves the visitor to called and onto the board", () => {
-    const a = store.register(NUM());
-    store.register(NUM());
-    dispatcher.kick();
-    const p = f.lastState()!.pending[0];
-    expect(dispatcher.confirm(p.id)).toBe(true);
-    expect(store.get(p.id)?.location.state).toBe("called");
-    expect(f.lastState()!.board.some((b) => b.id === p.id)).toBe(true);
-    expect(f.lastState()!.pending.some((x) => x.id === p.id)).toBe(false);
-  });
-
-  it("confirm returns false for a non-pending id", () => {
-    expect(dispatcher.confirm("nope")).toBe(false);
+describe("completion frees the slot", () => {
+  it("an in_progress intake occupant with intakeAt set is freed on the next kick", () => {
+    f.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d.kick(); d.confirm(v.id); d.arrive(v.id);
+    store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] }); // stamps intakeAt
+    d.kick();
+    expect(d.snapshot().slots.find((s) => s.occupant?.visitorId === v.id)).toBeUndefined();
+    expect(store.get(v.id)?.location.state).toBe("waiting");
   });
 });
 
-describe("anti-starvation", () => {
-  it("prioritises a visitor waiting longer than T_max", () => {
-    const old = store.register(NUM());
-    vi.setSystemTime(new Date("2026-06-20T00:05:00.000Z")); // old has waited 5min > maxWaitMs(4min)
-    for (let i = 0; i < 3; i++) store.register(NUM());
-    dispatcher.kick();
-    // the starving visitor must be among those picked
-    const picked = f.lastState()!.pending.map((p) => p.id);
-    expect(picked).toContain(old.id);
+describe("recovery", () => {
+  it("T_stale reaps an in_progress occupant with no completion", () => {
+    const d2 = createDispatcher(f.bus, { knobs: { ...KNOBS, staleMs: 300_000 }, autoStart: false });
+    f.hello("bodyscan", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); d2.confirm(v.id); d2.arrive(v.id);
+    vi.setSystemTime(new Date("2026-06-21T00:06:00.000Z"));
+    d2.kick();
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    d2.stop();
+  });
+
+  it("flags a no-show by default", () => {
+    const d2 = createDispatcher(f.bus, { knobs: { ...KNOBS, noShowMs: 90_000 }, autoStart: false });
+    f.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); d2.confirm(v.id); // called
+    vi.setSystemTime(new Date("2026-06-21T00:02:00.000Z"));
+    d2.kick();
+    expect(store.get(v.id)?.location.state).toBe("called");
+    const slot = d2.snapshot().slots.find((s) => s.occupant?.visitorId === v.id);
+    expect(slot?.occupant?.phase).toBe("called");
+    d2.stop();
+  });
+
+  it("socket-drop after grace repools the slot's occupant", () => {
+    f.hello("altar", "kA", "cA");
+    const v = store.register(NUM());
+    store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] });
+    store.setPoseTemplate(v.id, { angles: [0], weights: [1] }); // now altar-eligible
+    store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
+    d.kick(); d.confirm(v.id); d.arrive(v.id); // in_progress@altar
+    f.fireDisconnect("cA");
+    vi.advanceTimersByTime(KNOBS.graceMs + 10);
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    expect(d.snapshot().slots.find((s) => s.id === "altar-0")?.occupant).toBeUndefined();
   });
 });
 
-const STALE = { K: 1, warmupMs: 0, staleMs: 300_000, noShowMs: 90_000, graceMs: 20_000, tickMs: 5_000 };
-
-describe("check-in (permissive + reconcile)", () => {
-  it("places the visitor in_progress at the station and flags an uncalled walk-up", () => {
-    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
-    const n = NUM();
-    const { record } = d.checkin(n, "bodyscan");
-    expect(store.get(record.id)?.location).toMatchObject({ state: "in_progress", station: "bodyscan" });
-    const q = d.snapshot();
-    const slot = q.slots.bodyscan.occupants.find((o) => o.id === record.id);
-    expect(slot?.state).toBe("in_progress");
-    d.stop();
+describe("operator backstops", () => {
+  it("assign pins a waiting visitor to a specific free online slot", () => {
+    f.hello("intake", "kA", "cA"); // intake-0
+    const v = store.register(NUM());
+    expect(d.assign(v.id, "intake-0")).toBe(true);
+    expect(d.snapshot().slots.find((s) => s.id === "intake-0")?.occupant?.visitorId).toBe(v.id);
   });
-
-  it("auto-supersedes the prior occupant of a 1-slot station", () => {
-    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
-    const a = d.checkin(NUM(), "altar").record;
-    const b = d.checkin(NUM(), "altar").record;
-    expect(store.get(a.id)?.location.state).toBe("waiting"); // a walked off
-    expect(store.get(b.id)?.location).toMatchObject({ state: "in_progress", station: "altar" });
-    d.stop();
+  it("repool clears a visitor's slot back to waiting", () => {
+    f.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d.kick(); d.confirm(v.id);
+    expect(d.repool(v.id)).toBe(true);
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    expect(d.snapshot().slots.every((s) => s.occupant?.visitorId !== v.id)).toBe(true);
   });
-});
-
-describe("recovery reconciliation", () => {
-  it("T_stale reaps an in_progress visitor with no completion", () => {
-    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
-    const r = d.checkin(NUM(), "bodyscan").record;
-    vi.setSystemTime(new Date("2026-06-20T00:06:00.000Z")); // +6min > staleMs(5min)
-    d.kick();
-    expect(store.get(r.id)?.location.state).toBe("waiting");
-    d.stop();
-  });
-
-  it("flags a no-show by default (no auto-repool)", () => {
-    const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0 }, autoStart: false });
-    store.register(NUM());
-    d.kick();
-    const p = d.snapshot().pending[0];
-    d.confirm(p.id); // now called
-    vi.setSystemTime(new Date("2026-06-20T00:02:00.000Z")); // +2min > noShowMs
-    d.kick();
-    expect(store.get(p.id)?.location.state).toBe("called"); // NOT repooled
-    expect(d.snapshot().board[0]?.flags?.some((fl) => fl.type === "no-show")).toBe(true);
-    d.stop();
-  });
-
-  it("auto-repools a no-show when noShowAutoRepool is on", () => {
-    const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0, noShowAutoRepool: true }, autoStart: false });
-    store.register(NUM());
-    d.kick();
-    const p = d.snapshot().pending[0];
-    d.confirm(p.id);
-    vi.setSystemTime(new Date("2026-06-20T00:02:00.000Z"));
-    d.kick();
-    expect(store.get(p.id)?.location.state).toBe("waiting");
-    d.stop();
-  });
-});
-
-describe("operator actions", () => {
-  it("repool returns a called visitor to waiting", () => {
-    const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0 }, autoStart: false });
-    store.register(NUM());
-    d.kick();
-    const p = d.snapshot().pending[0];
-    d.confirm(p.id);
-    expect(d.repool(p.id)).toBe(true);
-    expect(store.get(p.id)?.location.state).toBe("waiting");
-    d.stop();
-  });
-  it("markComplete stamps the milestone and frees the slot", () => {
-    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
-    const r = d.checkin(NUM(), "intake").record;
-    expect(d.markComplete(r.id, "intake")).toBe(true);
-    expect(store.get(r.id)?.intakeAt).toBeTruthy();
-    expect(store.get(r.id)?.location.state).toBe("waiting");
-    d.stop();
-  });
-  it("remove deletes the record", () => {
-    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
-    const r = d.checkin(NUM(), "intake").record;
-    expect(d.remove(r.id)).toBe(true);
-    expect(store.get(r.id)).toBeUndefined();
-    d.stop();
-  });
-  it("assign returns false for an in_progress visitor and true for a waiting visitor", () => {
-    const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0 }, autoStart: false });
-    // Put a visitor in_progress
-    const r = d.checkin(NUM(), "intake").record;
-    expect(store.get(r.id)?.location.state).toBe("in_progress");
-    // assign on an in_progress visitor must be rejected (no double-booking)
-    expect(d.assign(r.id, "intake")).toBe(false);
-    expect(store.get(r.id)?.location.state).toBe("in_progress");
-    expect(d.snapshot().pending.some((p) => p.id === r.id)).toBe(false);
-    // assign on a fresh waiting visitor succeeds
-    const w = store.register(NUM());
-    expect(d.assign(w.id, "bodyscan")).toBe(true);
-    expect(d.snapshot().pending.some((p) => p.id === w.id)).toBe(true);
-    d.stop();
-  });
-  it("recall refreshes since for a called visitor and returns false for unknown id", () => {
-    const d = createDispatcher(f.bus, { knobs: { ...STALE, K: 1, warmupMs: 0 }, autoStart: false });
-    store.register(NUM());
-    d.kick();
-    const p = d.snapshot().pending[0];
-    d.confirm(p.id);
-    const calledSince = store.get(p.id)!.location.since;
-    vi.setSystemTime(new Date("2026-06-20T00:01:00.000Z"));
-    expect(d.recall(p.id)).toBe(true);
-    const loc = store.get(p.id)!.location;
-    expect(loc.state).toBe("called");
-    expect(loc.since > calledSince).toBe(true);
-    expect(d.recall("nope")).toBe(false);
-    d.stop();
-  });
-});
-
-describe("station identity (online LED + detector 3)", () => {
-  it("station.hello marks a station online; disconnect after grace reaps its in_progress occupant", () => {
-    const d = createDispatcher(f.bus, { knobs: STALE, autoStart: false });
-    f.fireCommand({ kind: "station.hello", station: "bodyscan" }, "conn-A");
-    expect(d.snapshot().stations.bodyscan).toBe(true);
-    const r = d.checkin(NUM(), "bodyscan").record;
-    f.fireDisconnect("conn-A"); // last screen for bodyscan dropped → grace timer
-    expect(d.snapshot().stations.bodyscan).toBe(false);
-    vi.advanceTimersByTime(STALE.graceMs + 10);
-    expect(store.get(r.id)?.location.state).toBe("waiting"); // reaped
-    d.stop();
+  it("remove deletes the record and frees its slot", () => {
+    f.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d.kick(); d.confirm(v.id);
+    expect(d.remove(v.id)).toBe(true);
+    expect(store.get(v.id)).toBeUndefined();
+    expect(d.snapshot().slots.every((s) => s.occupant?.visitorId !== v.id)).toBe(true);
   });
 });

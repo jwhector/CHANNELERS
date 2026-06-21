@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { SURVEY, type SurveyResponse, type VibeAxis, type VisitorProfile } from "@channelers/shared";
 import { api } from "../lib/api";
-import { NumberGate } from "../components/NumberGate";
+import { CalledGate } from "../components/CalledGate";
 import { useStationPresence } from "../lib/useStationPresence";
+import { useReleaseToGate } from "../lib/useReleaseToGate";
 
 export function Intake() {
-  useStationPresence("intake");
+  const { connected, slot } = useStationPresence("intake");
   const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
   const [name, setName] = useState("");
   const [freeText, setFreeText] = useState<Record<string, string>>({});
@@ -13,7 +14,18 @@ export function Intake() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!visitor) return <NumberGate title="Intake" station="intake" onResolved={setVisitor} />;
+  function resetKiosk() {
+    setVisitor(null);
+    setName("");
+    setFreeText({});
+    setPhrases({});
+    setDone(false);
+    setError(null);
+  }
+
+  useReleaseToGate(visitor, slot, done, resetKiosk);
+
+  if (!visitor) return <CalledGate station="intake" title="Intake" connected={connected} slot={slot} onArrived={setVisitor} />;
 
   async function submit() {
     if (!visitor) return;
@@ -27,8 +39,9 @@ export function Intake() {
       })),
     };
     try {
-      await api.submitIntake(visitor.id, survey);
       setDone(true);
+      setTimeout(resetKiosk, 5000);
+      await api.submitIntake(visitor.id, survey);
     } catch (e) {
       setError(String(e));
     }
@@ -37,7 +50,10 @@ export function Intake() {
   if (done) {
     return (
       <main className="void">
-        <h1>Processed.</h1>
+        <header>
+          <h1>Processed.</h1>
+          <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
+        </header>
         <p className="dim">
           Number {visitor.number} — proceed to the Physical Challenge when called.
         </p>
@@ -47,7 +63,10 @@ export function Intake() {
 
   return (
     <main className="void form">
-      <h1>Intake</h1>
+      <header>
+        <h1>Intake</h1>
+        <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
+      </header>
       <p className="dim">Number {visitor.number}</p>
       {SURVEY.map((f) => {
         if (f.kind === "phrase") {

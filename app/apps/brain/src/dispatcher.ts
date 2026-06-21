@@ -1,13 +1,12 @@
 import { config } from "./config";
 import { store, type VisitorRecord } from "./store";
 import type {
-  Station, DispatchState, DispatchSlot, DispatchQueueEntry, DispatchCall, DispatchFlag,
+  Station, DispatchState, Slot, SlotOccupant, DispatchDone, DispatchQueueEntry, DispatchFlag,
   WsServerMsg, WsClientMsg,
 } from "@channelers/shared";
 
 const STATION_ORDER: Station[] = ["intake", "bodyscan", "altar"];
 
-/** The minimal bus surface the dispatcher needs (the real Bus implements all of these). */
 export interface DispatcherBus {
   broadcast(msg: WsServerMsg): void;
   onConnect(fn: (reply: (m: WsServerMsg) => void, connId: string) => void): void;
@@ -16,16 +15,24 @@ export interface DispatcherBus {
 }
 
 type Knobs = typeof config.dispatcher;
-type Pending = { station: Station; since: string };
+
+/** Internal slot record. `occupant` mirrors the visitor's location phase for called/in_progress. */
+type SlotState = {
+  id: string;
+  station: Station;
+  kioskId?: string;
+  connId?: string;
+  occupant?: SlotOccupant;
+};
 
 export interface Dispatcher {
-  checkin(num: number, station: Station): { record: VisitorRecord; superseded: number[] };
   confirm(visitorId: string): boolean;
-  assign(visitorId: string, station: Station): boolean;
-  recall(visitorId: string): boolean;
+  arrive(visitorId: string): boolean;
+  assign(visitorId: string, slotId: string): boolean;
   repool(visitorId: string): boolean;
-  markComplete(visitorId: string, station: Station): boolean;
+  markComplete(visitorId: string): boolean;
   remove(visitorId: string): boolean;
+  checkin(num: number, station: Station): { record: VisitorRecord };
   clearFlags(visitorId: string): void;
   snapshot(): DispatchState;
   kick(): void;
@@ -37,15 +44,41 @@ export function createDispatcher(
   opts: { knobs?: Partial<Knobs>; autoStart?: boolean } = {},
 ): Dispatcher {
   const knobs: Knobs = { ...config.dispatcher, ...opts.knobs };
-  const pending = new Map<string, Pending>(); // visitorId → assignment awaiting confirm
-  const flags = new Map<string, DispatchFlag[]>(); // visitorId → review flags
-  const stationConns = new Map<string, Station>(); // connId → station (from station.hello)
-  const offlineTimers = new Map<Station, ReturnType<typeof setTimeout>>();
+
+  // Derive the addressable slots from the configured per-station counts.
+  const slots = new Map<string, SlotState>();
+  for (const station of STATION_ORDER) {
+    const count = knobs.slots[station] ?? 0;
+    for (let i = 0; i < count; i++) {
+      const id = `${station}-${i}`;
+      slots.set(id, { id, station });
+    }
+  }
+
+  const flags = new Map<string, DispatchFlag[]>();
+  const surplus = new Map<string, { station: Station; kioskId: string }>(); // connId → {station, kioskId} (connected screen with no free slot)
+  const offlineTimers = new Map<string, ReturnType<typeof setTimeout>>(); // slotId → grace timer
 
   const nowIso = () => new Date().toISOString();
   const ageMs = (iso: string) => Date.now() - Date.parse(iso);
 
-  // ── predicates (spec §3.3) ──
+  function addFlag(id: string, ff: DispatchFlag): void {
+    const arr = flags.get(id) ?? [];
+    if (!arr.some((x) => x.type === ff.type && x.reason === ff.reason)) arr.push(ff);
+    flags.set(id, arr);
+  }
+  function clearFlags(id: string): void {
+    flags.delete(id);
+  }
+
+  const slotsOf = (station: Station) => [...slots.values()].filter((s) => s.station === station);
+  const isOnline = (s: SlotState) => !!s.connId;
+  const occupiedVisitorIds = () =>
+    new Set([...slots.values()].flatMap((s) => (s.occupant ? [s.occupant.visitorId] : [])));
+  const slotOfVisitor = (visitorId: string) =>
+    [...slots.values()].find((s) => s.occupant?.visitorId === visitorId);
+
+  // ── eligibility (spec §3.3 of the Tier 3 spec, unchanged) ──
   function eligibleStations(v: VisitorRecord): Station[] {
     if (v.location.state !== "waiting") return [];
     const out: Station[] = [];
@@ -54,286 +87,281 @@ export function createDispatcher(
     if (v.intakeAt && v.poseAt && !v.sessionEndAt) out.push("altar");
     return out;
   }
-  /** A station's completion milestone. Altar is held through the reading → frees on session end. */
-  function completionMilestoneSet(v: VisitorRecord, s: Station): boolean {
-    if (s === "intake") return !!v.intakeAt;
-    if (s === "bodyscan") return !!v.poseAt;
-    return !!v.sessionEndAt;
-  }
-  function occupancy(s: Station): number {
-    const live = store.list().filter(
-      (v) =>
-        (v.location.state === "called" || v.location.state === "in_progress") &&
-        v.location.station === s,
-    ).length;
-    const pend = [...pending.values()].filter((p) => p.station === s).length;
-    return live + pend;
-  }
-  function addFlag(id: string, f: DispatchFlag): void {
-    const arr = flags.get(id) ?? [];
-    if (!arr.some((x) => x.type === f.type && x.reason === f.reason)) arr.push(f);
-    flags.set(id, arr);
-  }
-  function clearFlags(id: string): void {
-    flags.delete(id);
-  }
-  function stationOnline(s: Station): boolean {
-    return [...stationConns.values()].includes(s);
+
+  // ── kiosk binding (spec §4) ──
+  function bind(station: Station, kioskId: string, connId: string, slotHint?: string): void {
+    // 1. reclaim: this kioskId already owns a slot of this station
+    const owned = slotsOf(station).find((s) => s.kioskId === kioskId);
+    if (owned) {
+      const t = offlineTimers.get(owned.id);
+      if (t) { clearTimeout(t); offlineTimers.delete(owned.id); }
+      owned.connId = connId;
+      surplus.delete(connId);
+      broadcastState();
+      return;
+    }
+    // 2. explicit slotHint → take that slot (newest wins on collision)
+    let target = slotHint ? slots.get(slotHint) : undefined;
+    if (target && target.station !== station) target = undefined;
+    // 3. else auto-claim the next free (unbound) slot
+    if (!target) target = slotsOf(station).find((s) => !s.kioskId);
+    if (!target) {
+      surplus.set(connId, { station, kioskId }); // 4. no free slot
+      broadcastState();
+      return;
+    }
+    if (target.kioskId && target.connId && target.connId !== connId) {
+      addFlag(`slot:${target.id}`, { type: "auto-reaped", reason: "kiosk-collision", since: nowIso() });
+    }
+    const t = offlineTimers.get(target.id);
+    if (t) { clearTimeout(t); offlineTimers.delete(target.id); }
+    target.kioskId = kioskId;
+    target.connId = connId;
+    surplus.delete(connId);
+    broadcastState();
   }
 
-  // ── warm-up + selection ──
+  function handleCommand(cmd: WsClientMsg, connId: string): void {
+    if (cmd.kind !== "station.hello") return;
+    bind(cmd.station, cmd.kioskId, connId, cmd.slotHint);
+  }
+
+  function handleDisconnect(connId: string): void {
+    if (surplus.delete(connId)) { broadcastState(); return; }
+    const slot = [...slots.values()].find((s) => s.connId === connId);
+    if (!slot) return;
+    slot.connId = undefined; // offline immediately; binding held through grace for reclaim
+    const slotId = slot.id;
+    const timer = setTimeout(() => {
+      offlineTimers.delete(slotId);
+      const s = slots.get(slotId);
+      if (!s || s.connId) return; // reconnected
+      s.kioskId = undefined; // unbind
+      reapOccupant(s, "kiosk-offline"); // repool the slot's occupant
+      broadcastState();
+    }, knobs.graceMs);
+    offlineTimers.set(slotId, timer);
+    broadcastState();
+  }
+
+  // ── selection (anti-starvation over random; excludes occupied + non-waiting) ──
+  function select(station: Station): VisitorRecord | undefined {
+    const occupied = occupiedVisitorIds();
+    const eligible = store.list().filter(
+      (v) => !occupied.has(v.id) && eligibleStations(v).includes(station),
+    );
+    if (eligible.length === 0) return undefined;
+    const starving = eligible.filter((v) => ageMs(v.location.since) > knobs.maxWaitMs);
+    const pool = starving.length > 0 ? starving : eligible;
+    if (starving.length > 0) {
+      return pool.reduce((oldest, v) =>
+        Date.parse(v.location.since) < Date.parse(oldest.location.since) ? v : oldest);
+    }
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function fill(): void {
+    if (!warmedUp()) return;
+    for (const slot of slots.values()) {
+      if (!isOnline(slot) || slot.occupant) continue;
+      const pick = select(slot.station);
+      if (!pick) continue;
+      slot.occupant = { visitorId: pick.id, number: pick.number, phase: "pending", since: nowIso() };
+      if (knobs.autoConfirm) confirm(pick.id);
+    }
+  }
+
+  function confirm(visitorId: string): boolean {
+    const slot = slotOfVisitor(visitorId);
+    if (!slot || slot.occupant?.phase !== "pending") return false;
+    slot.occupant.phase = "called";
+    slot.occupant.since = nowIso();
+    store.setLocation(visitorId, { state: "called", station: slot.station, since: nowIso() });
+    clearFlags(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function arrive(visitorId: string): boolean {
+    const slot = slotOfVisitor(visitorId);
+    if (!slot || slot.occupant?.phase !== "called") return false;
+    slot.occupant.phase = "in_progress";
+    slot.occupant.since = nowIso();
+    store.setLocation(visitorId, { state: "in_progress", station: slot.station, since: nowIso() });
+    clearFlags(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function assign(visitorId: string, slotId: string): boolean {
+    const v = store.get(visitorId);
+    const slot = slots.get(slotId);
+    if (!v || v.location.state !== "waiting" || !slot || !isOnline(slot) || slot.occupant) return false;
+    if (occupiedVisitorIds().has(visitorId)) return false;
+    slot.occupant = { visitorId, number: v.number, phase: "pending", since: nowIso() };
+    if (knobs.autoConfirm) confirm(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function freeSlotOf(visitorId: string): void {
+    const slot = slotOfVisitor(visitorId);
+    if (slot) slot.occupant = undefined;
+  }
+
+  function repool(visitorId: string): boolean {
+    const v = store.get(visitorId);
+    if (!v) return false;
+    freeSlotOf(visitorId);
+    store.setLocation(visitorId, { state: "waiting", since: nowIso() });
+    clearFlags(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function markComplete(visitorId: string): boolean {
+    const slot = slotOfVisitor(visitorId);
+    const v = store.get(visitorId);
+    if (!v) return false;
+    const station = slot?.station ?? (v.location.station as Station | undefined);
+    if (station) {
+      const field = station === "intake" ? "intakeAt" : station === "bodyscan" ? "poseAt" : "sessionEndAt";
+      store.stampMilestone(visitorId, field);
+    }
+    freeSlotOf(visitorId);
+    store.setLocation(visitorId, { state: "waiting", since: nowIso() });
+    clearFlags(visitorId);
+    broadcastState();
+    return true;
+  }
+
+  function remove(visitorId: string): boolean {
+    freeSlotOf(visitorId);
+    const ok = store.remove(visitorId);
+    if (ok) {
+      flags.delete(visitorId);
+      broadcastState();
+    }
+    return ok;
+  }
+
+  /**
+   * Manual operator override (spec §5 / decision log) — the `/console` type-a-number
+   * safety net for when a station screen misbehaves. Forces the visitor in_progress at
+   * `station`, bypassing the slot/confirm flow. Best-effort: if a free online slot exists
+   * at that station, pin the visitor to it so the board reflects it; otherwise just force
+   * the location (the screen may be offline — the override must still work).
+   */
+  function checkin(num: number, station: Station): { record: VisitorRecord } {
+    const record = store.getByNumber(num) ?? store.register(num);
+    freeSlotOf(record.id); // drop any existing slot pin → no split state
+    store.setLocation(record.id, { state: "in_progress", station, since: nowIso() });
+    clearFlags(record.id);
+    const slot = slotsOf(station).find((s) => isOnline(s) && !s.occupant);
+    if (slot) slot.occupant = { visitorId: record.id, number: record.number, phase: "in_progress", since: nowIso() };
+    broadcastState();
+    return { record };
+  }
+
+  function completionMilestoneSet(v: VisitorRecord, station: Station): boolean {
+    if (station === "intake") return !!v.intakeAt;
+    if (station === "bodyscan") return !!v.poseAt;
+    return !!v.sessionEndAt; // altar held through the reading
+  }
+
+  function reapOccupant(slot: SlotState, reason: string): void {
+    const occ = slot.occupant;
+    slot.occupant = undefined;
+    if (!occ) return;
+    if (store.get(occ.visitorId)) {
+      store.setLocation(occ.visitorId, { state: "waiting", since: nowIso() });
+      addFlag(occ.visitorId, { type: "auto-reaped", reason, since: nowIso() });
+    }
+  }
+
+  function reconcile(): void {
+    for (const slot of slots.values()) {
+      const occ = slot.occupant;
+      if (!occ) continue;
+      const v = store.get(occ.visitorId);
+      if (!v) { slot.occupant = undefined; continue; }
+      if (occ.phase === "in_progress") {
+        if (completionMilestoneSet(v, slot.station)) {
+          slot.occupant = undefined;
+          store.setLocation(v.id, { state: "waiting", since: nowIso() });
+        } else if (ageMs(occ.since) > knobs.staleMs) {
+          reapOccupant(slot, "stale");
+        }
+      } else if (occ.phase === "called") {
+        if (ageMs(occ.since) > knobs.noShowMs) {
+          if (knobs.noShowAutoRepool) reapOccupant(slot, "no-show");
+          else addFlag(v.id, { type: "no-show", since: nowIso() });
+        }
+      }
+    }
+    if (knobs.autoConfirm) {
+      for (const slot of slots.values()) {
+        if (slot.occupant?.phase === "pending") confirm(slot.occupant.visitorId);
+      }
+    }
+  }
+
+  function kick(): void {
+    reconcile();
+    fill();
+    broadcastState();
+  }
+
+  // ── snapshot ──
+  function toSlot(s: SlotState): Slot {
+    return { id: s.id, station: s.station, kioskId: s.kioskId, online: isOnline(s), occupant: s.occupant };
+  }
+  function queueEntries(): DispatchQueueEntry[] {
+    const occupied = occupiedVisitorIds();
+    return store.list()
+      .filter((v) => !occupied.has(v.id) && eligibleStations(v).length > 0)
+      .map((v) => ({
+        id: v.id, number: v.number, name: v.survey?.name,
+        eligible: eligibleStations(v), waitingSince: v.location.since,
+        flags: flags.get(v.id) ?? [],
+      }));
+  }
+  function completedEntries(): DispatchDone[] {
+    return store.list()
+      .filter((v) => !!v.sessionEndAt)
+      .map((v) => ({ id: v.id, number: v.number, name: v.survey?.name, at: v.sessionEndAt as string }));
+  }
+  function snapshot(): DispatchState {
+    const slotList = [...slots.values()].map(toSlot);
+    const stationsOnline = {
+      intake: slotsOf("intake").some(isOnline),
+      bodyscan: slotsOf("bodyscan").some(isOnline),
+      altar: slotsOf("altar").some(isOnline),
+    };
+    return {
+      slots: slotList,
+      queue: queueEntries(),
+      completed: completedEntries(),
+      surplus: [...surplus.values()],
+      stationsOnline,
+      warmedUp: warmedUp(),
+    };
+  }
+  function broadcastState(): void {
+    bus.broadcast({ kind: "dispatch.state", state: snapshot() });
+  }
+
+  // warm-up (Task 3 uses this in fill; defined here for the snapshot)
   function warmedUp(): boolean {
     const visitors = store.list();
-    const pool = visitors.filter((v) => eligibleStations(v).length > 0);
+    const occupied = occupiedVisitorIds();
+    const pool = visitors.filter((v) => !occupied.has(v.id) && eligibleStations(v).length > 0);
     if (pool.length >= knobs.K) return true;
     const earliest = visitors.reduce<number | null>((min, v) => {
       const t = Date.parse(v.createdAt);
       return min === null || t < min ? t : min;
     }, null);
     return earliest !== null && Date.now() - earliest >= knobs.warmupMs;
-  }
-  function select(s: Station): VisitorRecord | undefined {
-    const eligible = store.list().filter((v) => !pending.has(v.id) && eligibleStations(v).includes(s));
-    if (eligible.length === 0) return undefined;
-    const starving = eligible.filter((v) => ageMs(v.location.since) > knobs.maxWaitMs);
-    if (starving.length > 0) {
-      return starving.reduce((oldest, v) =>
-        Date.parse(v.location.since) < Date.parse(oldest.location.since) ? v : oldest,
-      );
-    }
-    return eligible[Math.floor(Math.random() * eligible.length)];
-  }
-
-  // ── core loop ──
-  function fill(): void {
-    if (!warmedUp()) return;
-    for (const s of STATION_ORDER) {
-      let free = knobs.slots[s] - occupancy(s);
-      while (free > 0) {
-        const pick = select(s);
-        if (!pick) break;
-        pending.set(pick.id, { station: s, since: nowIso() });
-        if (knobs.autoConfirm) confirm(pick.id);
-        free--;
-      }
-    }
-  }
-  function reconcile(): void {
-    const visitors = store.list();
-    // in_progress: completion frees the slot; otherwise T_stale auto-reap (detector 2).
-    for (const v of visitors) {
-      if (v.location.state !== "in_progress" || !v.location.station) continue;
-      if (completionMilestoneSet(v, v.location.station)) {
-        store.setLocation(v.id, { state: "waiting", since: nowIso() });
-        pending.delete(v.id);
-      } else if (ageMs(v.location.since) > knobs.staleMs) {
-        store.setLocation(v.id, { state: "waiting", since: nowIso() });
-        addFlag(v.id, { type: "auto-reaped", reason: "stale", since: nowIso() });
-      }
-    }
-    // called: no-show past T_noshow → flag (or auto-repool if the knob is on).
-    for (const v of visitors) {
-      if (v.location.state !== "called") continue;
-      if (ageMs(v.location.since) <= knobs.noShowMs) continue;
-      if (knobs.noShowAutoRepool) {
-        pending.delete(v.id);
-        store.setLocation(v.id, { state: "waiting", since: nowIso() });
-        addFlag(v.id, { type: "auto-reaped", reason: "no-show", since: nowIso() });
-      } else {
-        addFlag(v.id, { type: "no-show", since: nowIso() });
-      }
-    }
-    if (knobs.autoConfirm) for (const id of [...pending.keys()]) confirm(id);
-  }
-
-  function confirm(visitorId: string): boolean {
-    const p = pending.get(visitorId);
-    if (!p) return false;
-    const v = store.get(visitorId);
-    if (!v) { pending.delete(visitorId); return false; }
-    pending.delete(visitorId);
-    store.setLocation(visitorId, { state: "called", station: p.station, since: nowIso() });
-    clearFlags(visitorId);
-    broadcastState();
-    return true;
-  }
-  function assign(visitorId: string, station: Station): boolean {
-    const v = store.get(visitorId);
-    // Only assign a waiting visitor — prevents double-booking a slot if the visitor
-    // is already called or in_progress (e.g. via a stray API call or autoConfirm path).
-    if (!v || v.location.state !== "waiting") return false;
-    pending.set(visitorId, { station, since: nowIso() });
-    if (knobs.autoConfirm) confirm(visitorId);
-    broadcastState();
-    return true;
-  }
-
-  function evaluate(): void {
-    reconcile();
-    fill();
-    broadcastState();
-  }
-  function kick(): void {
-    evaluate();
-  }
-
-  // ── snapshot + broadcast ──
-  function snapshot(): DispatchState {
-    const visitors = store.list();
-    const slots = {} as Record<Station, DispatchSlot>;
-    for (const s of STATION_ORDER) {
-      const live = visitors
-        .filter(
-          (v) =>
-            (v.location.state === "called" || v.location.state === "in_progress") &&
-            v.location.station === s,
-        )
-        .map((v) => ({
-          id: v.id,
-          number: v.number,
-          state: v.location.state as "called" | "in_progress",
-          since: v.location.since,
-        }));
-      const pend = [...pending.entries()]
-        .filter(([, p]) => p.station === s)
-        .map(([id, p]) => ({
-          id,
-          number: store.get(id)?.number ?? -1,
-          state: "pending" as const,
-          since: p.since,
-        }));
-      slots[s] = { station: s, capacity: knobs.slots[s], occupants: [...live, ...pend] };
-    }
-    const queue: DispatchQueueEntry[] = visitors
-      .filter((v) => eligibleStations(v).length > 0)
-      .map((v) => ({
-        id: v.id,
-        number: v.number,
-        name: v.survey?.name,
-        eligible: eligibleStations(v),
-        waitingSince: v.location.since,
-        flags: flags.get(v.id) ?? [],
-      }));
-    const pendingList: DispatchCall[] = [...pending.entries()].map(([id, p]) => ({
-      id,
-      number: store.get(id)?.number ?? -1,
-      station: p.station,
-      since: p.since,
-      flags: flags.get(id) ?? [],
-    }));
-    const board: DispatchCall[] = visitors
-      .filter((v) => v.location.state === "called" && !!v.location.station)
-      .map((v) => ({
-        id: v.id,
-        number: v.number,
-        station: v.location.station as Station,
-        since: v.location.since,
-        flags: flags.get(v.id) ?? [],
-      }));
-    const stations: Record<Station, boolean> = {
-      intake: stationOnline("intake"),
-      bodyscan: stationOnline("bodyscan"),
-      altar: stationOnline("altar"),
-    };
-    return { slots, queue, pending: pendingList, board, stations, warmedUp: warmedUp() };
-  }
-  function broadcastState(): void {
-    bus.broadcast({ kind: "dispatch.state", state: snapshot() });
-  }
-
-  function checkin(num: number, station: Station): { record: VisitorRecord; superseded: number[] } {
-    const record = store.getByNumber(num) ?? store.register(num);
-    const wasCalledHere = record.location.state === "called" && record.location.station === station;
-    store.setLocation(record.id, { state: "in_progress", station, since: nowIso() });
-    pending.delete(record.id);
-    clearFlags(record.id);
-    if (!wasCalledHere) addFlag(record.id, { type: "walk-up", since: nowIso() });
-
-    // Auto-supersede (detector 1): keep the station within capacity by re-pooling the oldest.
-    const superseded: number[] = [];
-    const here = store
-      .list()
-      .filter(
-        (v) =>
-          v.location.state === "in_progress" && v.location.station === station && v.id !== record.id,
-      )
-      .sort((a, b) => Date.parse(a.location.since) - Date.parse(b.location.since)); // oldest first
-    const overBy = here.length + 1 - knobs.slots[station];
-    for (const old of here.slice(0, Math.max(0, overBy))) {
-      store.setLocation(old.id, { state: "waiting", since: nowIso() });
-      addFlag(old.id, { type: "auto-reaped", reason: "superseded", since: nowIso() });
-      superseded.push(old.number);
-    }
-    kick();
-    return { record, superseded };
-  }
-
-  function recall(visitorId: string): boolean {
-    const v = store.get(visitorId);
-    if (!v || v.location.state !== "called" || !v.location.station) return false;
-    store.setLocation(visitorId, { state: "called", station: v.location.station, since: nowIso() });
-    clearFlags(visitorId);
-    broadcastState();
-    return true;
-  }
-
-  function repool(visitorId: string): boolean {
-    const v = store.get(visitorId);
-    if (!v) return false;
-    pending.delete(visitorId);
-    store.setLocation(visitorId, { state: "waiting", since: nowIso() });
-    clearFlags(visitorId);
-    kick();
-    return true;
-  }
-
-  function markComplete(visitorId: string, station: Station): boolean {
-    const v = store.get(visitorId);
-    if (!v) return false;
-    const field =
-      station === "intake" ? "intakeAt" : station === "bodyscan" ? "poseAt" : "sessionEndAt";
-    store.stampMilestone(visitorId, field);
-    pending.delete(visitorId);
-    store.setLocation(visitorId, { state: "waiting", since: nowIso() });
-    clearFlags(visitorId);
-    kick();
-    return true;
-  }
-
-  function remove(visitorId: string): boolean {
-    pending.delete(visitorId);
-    flags.delete(visitorId);
-    const ok = store.remove(visitorId);
-    if (ok) kick();
-    return ok;
-  }
-
-  // station.hello → connId↦station; drives the online LED and detector 3 (socket-drop reap).
-  function handleCommand(cmd: WsClientMsg, connId: string): void {
-    if (cmd.kind !== "station.hello") return;
-    stationConns.set(connId, cmd.station);
-    const t = offlineTimers.get(cmd.station);
-    if (t) { clearTimeout(t); offlineTimers.delete(cmd.station); }
-    broadcastState();
-  }
-  function handleDisconnect(connId: string): void {
-    const station = stationConns.get(connId);
-    if (!station) return;
-    stationConns.delete(connId);
-    if (stationOnline(station)) { broadcastState(); return; } // another screen still up
-    const timer = setTimeout(() => {
-      offlineTimers.delete(station);
-      if (stationOnline(station)) return; // came back within grace
-      for (const v of store.list()) {
-        if (v.location.state === "in_progress" && v.location.station === station) {
-          store.setLocation(v.id, { state: "waiting", since: nowIso() });
-          addFlag(v.id, { type: "auto-reaped", reason: "station-offline", since: nowIso() });
-        }
-      }
-      kick();
-    }, knobs.graceMs);
-    offlineTimers.set(station, timer);
-    broadcastState();
   }
 
   // ── lifecycle ──
@@ -342,24 +370,12 @@ export function createDispatcher(
   bus.onDisconnect((connId) => handleDisconnect(connId));
 
   let tick: ReturnType<typeof setInterval> | null = null;
-  if (opts.autoStart !== false) tick = setInterval(() => evaluate(), knobs.tickMs);
+  if (opts.autoStart !== false) tick = setInterval(() => kick(), knobs.tickMs);
   function stop(): void {
     if (tick) clearInterval(tick);
     for (const t of offlineTimers.values()) clearTimeout(t);
     offlineTimers.clear();
   }
 
-  return {
-    checkin,
-    confirm,
-    assign,
-    recall,
-    repool,
-    markComplete,
-    remove,
-    clearFlags,
-    snapshot,
-    kick,
-    stop,
-  };
+  return { confirm, arrive, assign, repool, markComplete, remove, checkin, clearFlags, snapshot, kick, stop };
 }

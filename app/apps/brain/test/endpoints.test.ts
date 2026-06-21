@@ -131,15 +131,13 @@ describe("divination guards", () => {
 });
 
 describe("dispatch endpoints", () => {
-  it("check-in puts a visitor in_progress and appears in GET /api/dispatch", async () => {
+  it("manual check-in override forces a visitor in_progress", async () => {
     const ci = await app.inject({ method: "POST", url: "/api/checkin", payload: { number: 4001, station: "bodyscan" } });
     expect(ci.statusCode).toBe(200);
     expect(ci.json().record.location).toMatchObject({ state: "in_progress", station: "bodyscan" });
 
-    const state = await app.inject({ method: "GET", url: "/api/dispatch" });
-    expect(state.statusCode).toBe(200);
-    const occ = state.json().slots.bodyscan.occupants;
-    expect(occ.some((o: any) => o.number === 4001)).toBe(true);
+    const lookup = await app.inject({ method: "GET", url: "/api/visitors/by-number/4001" });
+    expect(lookup.json().location).toMatchObject({ state: "in_progress", station: "bodyscan" });
   });
 
   it("400s a check-in with a bad station", async () => {
@@ -176,5 +174,41 @@ describe("WS broadcasts coexist (bus multiplex)", () => {
     ws.close();
     expect(kinds).toContain("roster");
     expect(kinds).toContain("dispatch.state");
+  });
+});
+
+describe("arrive + assign-by-slot endpoints", () => {
+  it("a bound kiosk: assign→confirm→arrive drives called→in_progress over HTTP", async () => {
+    if (!app.server.address()) await app.listen({ host: "127.0.0.1", port: 0 }); // coexist with the WS-coexistence test's listen
+    const addr = app.server.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
+
+    // register BEFORE binding: with no online slot yet, the register-kick can't auto-pin anyone
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { number: 5101 } });
+    const id = reg.json().id;
+
+    // bind an intake kiosk to intake-0 over a real socket (binding does not auto-fill)
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    await new Promise<void>((r) => ws.on("open", () => r()));
+    ws.send(JSON.stringify({ kind: "station.hello", station: "intake", kioskId: "kioskZ", slotHint: "intake-0" }));
+    await new Promise((r) => setTimeout(r, 50));
+
+    // deterministically pin THIS visitor to the online slot, then confirm→arrive
+    const asg = await app.inject({ method: "POST", url: "/api/dispatch/assign", payload: { visitorId: id, slotId: "intake-0" } });
+    expect(asg.json().ok).toBe(true);
+    const conf = await app.inject({ method: "POST", url: "/api/dispatch/confirm", payload: { visitorId: id } });
+    expect(conf.json().ok).toBe(true);
+    const arrive = await app.inject({ method: "POST", url: "/api/dispatch/arrive", payload: { visitorId: id } });
+    expect(arrive.json().ok).toBe(true);
+
+    const lookup = await app.inject({ method: "GET", url: "/api/visitors/by-number/5101" });
+    expect(lookup.json().location).toMatchObject({ state: "in_progress", station: "intake" });
+    ws.close();
+  });
+
+  it("assign requires a slotId and 400s on a missing one", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { number: 5102 } });
+    const res = await app.inject({ method: "POST", url: "/api/dispatch/assign", payload: { visitorId: reg.json().id } });
+    expect(res.statusCode).toBe(400);
   });
 });

@@ -85,13 +85,14 @@ export function Console() {
       </ul>
       {dispatch && (
         <ul className="visitors">
-          {(["intake", "bodyscan", "altar"] as const).map((s) => (
-            <li key={s}>
+          {dispatch.slots.map((s) => (
+            <li key={s.id}>
               <div className="row">
-                <strong>{s}</strong>
-                <span className={dispatch.stations[s] ? "led on" : "led"} title={dispatch.stations[s] ? "online" : "offline"} />
-                <span className="dim">{dispatch.slots[s].occupants.length}/{dispatch.slots[s].capacity}</span>
-                <span className="dim">{dispatch.slots[s].occupants.map((o) => `#${o.number}(${o.state} ${dwell(o.since)})`).join("  ")}</span>
+                <strong>{s.id}</strong>
+                <span className={s.online ? "led on" : "led"} title={s.online ? "online" : "offline"} />
+                <span className="dim">
+                  {s.occupant ? `#${s.occupant.number} (${s.occupant.phase} ${dwell(s.occupant.since)})` : (s.online ? "idle" : "offline")}
+                </span>
               </div>
             </li>
           ))}
@@ -125,6 +126,9 @@ export function Console() {
         ))}
       </ul>
 
+      <h3>Manual override</h3>
+      <ManualCheckin />
+
       {/* ── Panel 3: sessions + events ── */}
       <h3>Active sessions ({roster.length})</h3>
       {roster.length === 0 && <p className="dim">None.</p>}
@@ -149,5 +153,34 @@ export function Console() {
         ))}
       </ul>
     </main>
+  );
+}
+
+/** Hidden operator safety net (spec §5): force a visitor in_progress@station via /api/checkin. */
+function ManualCheckin() {
+  const [num, setNum] = useState("");
+  const [station, setStation] = useState<"intake" | "bodyscan" | "altar">("intake");
+  const [msg, setMsg] = useState<string | null>(null);
+  async function go() {
+    const n = Number(num);
+    if (!Number.isInteger(n) || n <= 0) { setMsg("enter a number"); return; }
+    try {
+      const r = await api.checkin(n, station);
+      setMsg(`#${r.record.number} → in_progress @ ${station}`);
+      setNum("");
+    } catch (e) { setMsg(String(e)); }
+  }
+  return (
+    <div className="row">
+      <input className="choice" inputMode="numeric" value={num} placeholder="#"
+        onChange={(e) => setNum(e.target.value.replace(/[^0-9]/g, ""))} style={{ width: "4rem" }} />
+      <select className="choice" value={station} onChange={(e) => setStation(e.target.value as typeof station)}>
+        <option value="intake">intake</option>
+        <option value="bodyscan">bodyscan</option>
+        <option value="altar">altar</option>
+      </select>
+      <button className="choice" onClick={() => void go()}>force check-in</button>
+      {msg && <span className="dim">{msg}</span>}
+    </div>
   );
 }
