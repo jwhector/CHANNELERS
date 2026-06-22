@@ -6,8 +6,36 @@ API. It works both **same-machine** (import the core) and **across a NAT boundar
 venue dials home to a cloud controller), and ships with a CLI REPL and a self-contained browser
 playground.
 
-> This README documents the **generic bridge** (Plan A). The **comprehensive typed facade**
-> (`createLive(provider)` → `live.track(2).volume.set(…)`) is documented in **Plan B**.
+> The **typed facade** (`createLive(provider)` → `live.track(2).volume.set(…)`) is the recommended
+> surface, documented immediately below. The generic `send`/`query`/`subscribe` verbs underneath it
+> remain available as an escape hatch (`live.raw.*`).
+
+---
+
+## Typed facade (recommended)
+
+```ts
+// browser / remote
+import { AbletonBridgeClient, createLive } from "ableton-osc-bridge/client";
+const live = createLive(new AbletonBridgeClient("wss://venue/ws", { token }));
+
+// same machine as Ableton
+import { createAbletonLive, createLive } from "ableton-osc-bridge";
+const live = createLive(createAbletonLive());
+
+live.song.startPlaying();
+live.song.tempo.set(124);
+await live.track(2).volume.get();      // → number
+live.track(2).mute.set(true);
+live.track(0).clip(3).fire();
+live.track(0).device(0).parameter(5).value.subscribe((v) => …);
+live.song.beat.subscribe((n) => …);
+live.raw.send("/live/song/get/track_data", [0, 12, "track.name"]); // escape hatch
+```
+
+Every member carries JSDoc with its description and OSC address — hover to discover the surface.
+Anything the facade doesn't type (bulk `track_data`, MIDI note ops, `midimap`) is reachable via `live.raw.*`.
+The facade is generated from `src/manifest.ts`; edit it and run `pnpm --filter ableton-osc-bridge generate`.
 
 ---
 

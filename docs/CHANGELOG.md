@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-22 — Built ableton-osc-bridge typed facade (Plan B)
+
+- **What:** Added the comprehensive, fully typed facade on top of Plan A's `VerbProvider` seam: a curated `manifest.ts` of the AbletonOSC surface, a generator (`scripts/generate-facade.ts`) emitting `src/facade/generated.ts` with per-member JSDoc (doc + OSC address), `createLive(provider)`, a drift-guard test, and full coverage transcribed from the readme. `live.track(2).volume.set(…)`, `live.clip(0,0).fire()`, `live.song.beat.subscribe(…)` work identically over the local core and the network client; `live.raw.*` is the escape hatch.
+- **Why:** Maximal DX so getting Ableton to behave takes minimal application-specific wiring (Jared's call; spec §2/§5).
+- **Files/areas:** `app/packages/ableton-osc-bridge/src/manifest.ts`, `scripts/generate-facade.ts`, `src/facade/**`. Branch `ableton-osc-bridge`.
+- **Verification:** `pnpm --filter ableton-osc-bridge test` + `typecheck` green (incl. facade behavior matrix + drift guard).
+- **Docs touched:** this entry; package `README.md`.
+
 ## 2026-06-22 — ableton-osc-bridge: security hardening (secure-by-default daemon)
 
 - **What:** Hardened the daemon after an automated commit security review flagged 4 issues. The daemon's WS/HTTP server and the OSC reply Server now **bind to loopback by default**; binding a non-loopback interface **requires a token** (`serve()` throws otherwise). WS upgrades are gated by `verifyClient`: an **Origin allowlist** rejects cross-site browser connections (anti-CSWSH) while allowing loopback origins and no-Origin non-browser clients, and the **token is compared in constant time** (`crypto.timingSafeEqual`). New env: `BRIDGE_HTTP_HOST`, `ABLETON_OSC_RECV_HOST`. Added 3 daemon security tests (non-loopback-without-token throws; cross-site Origin rejected / no-Origin allowed; token enforced).
