@@ -15,6 +15,7 @@
     "serve": "tsx src/cli.ts serve",
     "repl": "tsx src/cli.ts repl",
     "ping": "tsx src/cli.ts test",
+    "generate": "tsx scripts/generate-facade.ts",
     "dev": "tsx watch src/cli.ts serve",
     "test": "vitest run",
     "test:watch": "vitest",
