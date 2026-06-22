@@ -52,22 +52,25 @@ export function CalledGate({
             no slot bound — open with <code>?kiosk=&lt;id&gt;</code>
           </p>
         )}
-        {slot && !occ && (
+        {slot && (!occ || occ.phase === "pending") && (
           <div className="crt-standby">
-            <SegmentNumber value={0} className="seg-dim" />
             <p className="crt-eyebrow">▮ standby</p>
+            <SegmentNumber value={0} className="seg-dim" />
             <p className="crt-sub">awaiting designation</p>
-            <span className="crt-mark" aria-hidden>↖ you?</span>
           </div>
         )}
         {occ && occ.phase !== "in_progress" && occ.phase !== "pending" && (
           <div className="crt-called">
-            <p className="crt-eyebrow">now serving</p>
-            <SegmentNumber value={occ.number} glitch />
-            <button className="crt-iam" disabled={busy} onClick={() => void confirmArrival()}>
-              {busy ? "…" : "I AM"}
-            </button>
-            <p className="crt-sub">confirm to proceed</p>
+            <div className="crt-readout">
+              <p className="crt-eyebrow">now serving</p>
+              <SegmentNumber value={occ.number} glitch/>
+            </div>
+            <div className="crt-confirm">
+              <button className="crt-iam" disabled={busy} onClick={() => void confirmArrival()}>
+                {busy ? "…" : "I AM"}
+              </button>
+              <p className="crt-sub">confirm to proceed</p>
+            </div>
           </div>
         )}
         {error && <p className="crt-err">SIGNAL LOST — {error}</p>}
