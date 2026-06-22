@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-22 — Design spec: `ableton-osc-bridge` (reusable Ableton ↔ web-app OSC bridge)
+
+- **What:** Brainstormed and wrote a design spec for a **standalone, reusable** package that bridges AbletonOSC (UDP `11000`/`11001`) to any web app. Three layers in one package: a pure **core** (`AbletonLive`: send/query/subscribe + reply correlation), a **daemon** (runs next to Ableton; local serve + outbound **dial-home** to a remote controller; serves a browser playground), and a browser-safe **client**. Generic transport covers the whole address space (typed sugar deferred). Topology targets a **cloud Brain + venue Ableton** split: daemon dials home over one authed `wss`, raw OSC never leaves the venue LAN. Dev tools: a REPL + a self-contained browser playground. Develops at `app/packages/ableton-osc-bridge/` with zero `@channelers/*` imports so it lifts out cleanly.
+- **Why:** Jared wants an Ableton OSC connection he can develop here and reuse across other projects, decoupled from CHANNELERS specifics and well-documented for reuse.
+- **Files/areas:** `docs/superpowers/specs/2026-06-22-ableton-osc-bridge-design.md` (new). No code yet. Branch `ableton-osc-bridge`.
+- **Open / follow-ups:** the CHANNELERS Brain integration is **out of scope** for the package (thin later consumer); the **cloud Brain** is itself a shift from the documented "local Show Brain" and needs an `ARCHITECTURE.md` §11 note; final package name + OSC library (`osc` vs `node-osc`) TBD at implementation.
+- **Docs touched:** this entry; the new design spec.
+
 ## 2026-06-22 — Tier 2 docs reconciliation follow-up (gaps from Task 7)
 
 - **What:** Caught and fixed stale spots the Task 7 pass missed. `ARCHITECTURE.md`: §1 ASCII diagram (`intake → dance score`/`oracle persona` → `persona-set → choreo pass`/`per-turn → oracle + cues`; label `transform` → `AI generation`) + the "three flows" list rewritten as generation-split + two-live-loops; §4 data model (removed `DanceScore`, added `ChoreoScore`, `Seeds = { music }`). §5.4 dancers line now points at the `choreo.*` channel + `/choreo`. `docs/CLAUDE.md`: LLM-models line now covers the music-only transform + the choreographer (`CHOREO_MODEL`).
