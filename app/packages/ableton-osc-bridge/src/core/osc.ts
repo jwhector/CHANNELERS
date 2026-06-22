@@ -12,12 +12,18 @@ export interface OscIoConfig {
   host: string;
   sendPort: number;
   recvPort: number;
+  /**
+   * Interface the reply/listen Server binds to. Defaults to loopback so the
+   * unauthenticated OSC reply port is not exposed on the network. Only set this
+   * (e.g. "0.0.0.0") when Ableton runs on a *different* machine than the daemon.
+   */
+  recvHost?: string;
 }
 
 /** Real OSC IO backed by node-osc: a Client to send (11000) + a Server to receive (11001). */
 export function createNodeOscIo(cfg: OscIoConfig): OscIo {
   const client = new Client(cfg.host, cfg.sendPort);
-  const server = new Server(cfg.recvPort, "0.0.0.0");
+  const server = new Server(cfg.recvPort, cfg.recvHost ?? "127.0.0.1");
   let handler: ((address: string, args: OscArg[]) => void) | null = null;
   server.on("message", (msg) => {
     const [address, ...args] = msg;

@@ -8,6 +8,8 @@ export interface BridgeConfig {
   host: string;
   sendPort: number;
   recvPort: number;
+  recvHost?: string;
+  httpHost: string;
   httpPort: number;
   token?: string;
   dialUrl?: string;
@@ -19,6 +21,8 @@ export function readConfig(env: NodeJS.ProcessEnv): BridgeConfig {
     host: env.ABLETON_OSC_HOST ?? "127.0.0.1",
     sendPort: Number(env.ABLETON_OSC_SEND_PORT ?? 11000),
     recvPort: Number(env.ABLETON_OSC_RECV_PORT ?? 11001),
+    recvHost: env.ABLETON_OSC_RECV_HOST || undefined,
+    httpHost: env.BRIDGE_HTTP_HOST ?? "127.0.0.1",
     httpPort: Number(env.BRIDGE_HTTP_PORT ?? 8788),
     token: env.BRIDGE_TOKEN || undefined,
     dialUrl: env.BRIDGE_DIAL_URL || undefined,
@@ -27,9 +31,9 @@ export function readConfig(env: NodeJS.ProcessEnv): BridgeConfig {
 }
 
 async function runServe(cfg: BridgeConfig): Promise<void> {
-  const live = createAbletonLive({ host: cfg.host, sendPort: cfg.sendPort, recvPort: cfg.recvPort, defaultTimeoutMs: cfg.queryTimeoutMs });
-  const handle = serve({ provider: live, port: cfg.httpPort, token: cfg.token });
-  console.log(`[bridge] serving playground + ws on http://127.0.0.1:${handle.port}  (Ableton ${cfg.host}:${cfg.sendPort}/${cfg.recvPort})`);
+  const live = createAbletonLive({ host: cfg.host, sendPort: cfg.sendPort, recvPort: cfg.recvPort, recvHost: cfg.recvHost, defaultTimeoutMs: cfg.queryTimeoutMs });
+  const handle = serve({ provider: live, host: cfg.httpHost, port: cfg.httpPort, token: cfg.token });
+  console.log(`[bridge] serving playground + ws on http://${cfg.httpHost}:${handle.port}  (Ableton ${cfg.host}:${cfg.sendPort}/${cfg.recvPort})`);
   if (cfg.dialUrl) {
     const { dialHome } = await import("./daemon/dial-home");
     dialHome({ provider: live, url: cfg.dialUrl, token: cfg.token });

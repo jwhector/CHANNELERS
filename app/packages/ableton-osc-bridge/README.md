@@ -1,7 +1,7 @@
 # `ableton-osc-bridge`
 
 A standalone, reusable bridge that lets **any web app** drive and observe **Ableton Live** (via
-[AbletonOSC](https://github.com/ideoll/AbletonOSC)) over a generic `send` / `query` / `subscribe`
+[AbletonOSC](https://github.com/ideoforms/AbletonOSC)) over a generic `send` / `query` / `subscribe`
 API. It works both **same-machine** (import the core) and **across a NAT boundary** (a daemon at the
 venue dials home to a cloud controller), and ships with a CLI REPL and a self-contained browser
 playground.
@@ -160,12 +160,14 @@ daemon's local serve port over the LAN. Either way the raw OSC stays on the venu
 
 | Env | Default | Meaning |
 |---|---|---|
-| `ABLETON_OSC_HOST` | `127.0.0.1` | where AbletonOSC listens |
+| `ABLETON_OSC_HOST` | `127.0.0.1` | where AbletonOSC listens (send target) |
 | `ABLETON_OSC_SEND_PORT` | `11000` | command port |
 | `ABLETON_OSC_RECV_PORT` | `11001` | reply/listen port |
-| `BRIDGE_HTTP_PORT` | `8788` | local serve: playground + WS for LAN clients |
+| `ABLETON_OSC_RECV_HOST` | `127.0.0.1` | interface the OSC reply Server binds to. Set to `0.0.0.0` **only** when Ableton runs on a different machine than the daemon |
+| `BRIDGE_HTTP_HOST` | `127.0.0.1` | interface the daemon binds. Loopback by default; a non-loopback host **requires** `BRIDGE_TOKEN` (serve refuses otherwise) |
+| `BRIDGE_HTTP_PORT` | `8788` | local serve: playground + WS |
 | `BRIDGE_DIAL_URL` | _(unset)_ | remote controller `wss://` URL (enables dial-home) |
-| `BRIDGE_TOKEN` | _(required when networked)_ | shared bearer token |
+| `BRIDGE_TOKEN` | _(required to bind non-loopback)_ | shared bearer token |
 | `BRIDGE_QUERY_TIMEOUT_MS` | `1000` | default `query` timeout |
 
 ---
@@ -196,10 +198,24 @@ the protocol in TS; any language can speak it over plain JSON.
 
 ## Security
 
-- Authenticate every (re)connection with a **shared bearer token** (`BRIDGE_TOKEN`, passed as
-  `?token=…`). Use `wss://` (TLS terminated by the cloud platform / reverse proxy).
+Secure-by-default — the bridge can fully control Ableton, so the defaults keep the control surface
+local:
+
+- **Loopback by default.** Both the daemon's WS/HTTP server and the OSC reply receiver bind to
+  `127.0.0.1`. To bind a non-loopback interface you **must** set `BRIDGE_TOKEN` — `serve()` throws
+  otherwise.
+- **Token auth, constant-time.** When set, `BRIDGE_TOKEN` is required on every (re)connection and
+  compared with `crypto.timingSafeEqual`. Use `wss://` (TLS terminated by the cloud platform /
+  reverse proxy).
+- **Origin allowlist (anti-CSWSH).** Browser WS upgrades from a cross-site `Origin` are rejected;
+  loopback Origins (the served playground) and non-browser clients (no `Origin`: the REPL, dial-home,
+  anything using `ws`) are allowed. Add extra browser origins via `serve({ allowedOrigins: [...] })`.
 - **Never expose AbletonOSC's UDP ports (`11000`/`11001`) to the internet** — they are
-  unauthenticated. Only the authenticated WS should cross the network.
+  unauthenticated. Only the authenticated WS should cross the network; raw OSC stays on the LAN.
+
+> **Known limitation:** browsers can't set WS headers, so the token rides in the URL query (`?token=`).
+> Over `wss://` it's encrypted in transit, but may appear in proxy/access logs. A future hardening
+> will also accept the token via the `Sec-WebSocket-Protocol` subprotocol for non-browser clients.
 
 ---
 

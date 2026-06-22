@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-22 — ableton-osc-bridge: security hardening (secure-by-default daemon)
+
+- **What:** Hardened the daemon after an automated commit security review flagged 4 issues. The daemon's WS/HTTP server and the OSC reply Server now **bind to loopback by default**; binding a non-loopback interface **requires a token** (`serve()` throws otherwise). WS upgrades are gated by `verifyClient`: an **Origin allowlist** rejects cross-site browser connections (anti-CSWSH) while allowing loopback origins and no-Origin non-browser clients, and the **token is compared in constant time** (`crypto.timingSafeEqual`). New env: `BRIDGE_HTTP_HOST`, `ABLETON_OSC_RECV_HOST`. Added 3 daemon security tests (non-loopback-without-token throws; cross-site Origin rejected / no-Origin allowed; token enforced).
+- **Why:** The bridge can fully control Ableton, and AbletonOSC itself is unauthenticated — the defaults must keep the control surface local and refuse silent network exposure. (Spec security model was right; the defaults didn't enforce it.)
+- **Files/areas:** `app/packages/ableton-osc-bridge/src/daemon/serve.ts`, `src/core/osc.ts`, `src/core/live.ts`, `src/cli.ts`, `test/daemon.test.ts`; docs: spec §12/§15, package README.
+- **Verification:** `pnpm --filter ableton-osc-bridge test` (32 passed) + `typecheck` green.
+- **Open / follow-up:** browsers can't set WS headers, so the token still rides in the URL query (encrypted under `wss://` but loggable) — future: accept it via `Sec-WebSocket-Protocol` for non-browser clients (spec §15).
+- **Docs touched:** this entry; spec; README.
+
 ## 2026-06-22 — Built ableton-osc-bridge foundation (generic bridge, Plan A)
 
 - **What:** Implemented Plan A of the reusable bridge at `app/packages/ableton-osc-bridge`: the `VerbProvider` seam, the pure `Correlator`, the `AbletonLive` core (node-osc, startup-resubscribe), the daemon (`attachConnection` + `serve` with token auth + a self-contained browser playground), the browser-safe `AbletonBridgeClient` (reconnect/resubscribe), the CLI (`serve`/`repl`/`test`), `dial-home`, and an end-to-end integration test (mock Ableton ↔ daemon ↔ client). Generic `send`/`query`/`subscribe` over the whole AbletonOSC surface; cloud topology works (dial-home).

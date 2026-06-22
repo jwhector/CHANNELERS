@@ -327,13 +327,20 @@ README structured as:
 
 | Env | Default | Meaning |
 |---|---|---|
-| `ABLETON_OSC_HOST` | `127.0.0.1` | where AbletonOSC listens |
+| `ABLETON_OSC_HOST` | `127.0.0.1` | where AbletonOSC listens (send target) |
 | `ABLETON_OSC_SEND_PORT` | `11000` | command port |
 | `ABLETON_OSC_RECV_PORT` | `11001` | reply/listen port |
-| `BRIDGE_HTTP_PORT` | `8788` | local serve: playground + WS for LAN clients |
+| `ABLETON_OSC_RECV_HOST` | `127.0.0.1` | OSC reply Server bind interface; `0.0.0.0` only for remote Ableton |
+| `BRIDGE_HTTP_HOST` | `127.0.0.1` | daemon bind interface; non-loopback **requires** `BRIDGE_TOKEN` |
+| `BRIDGE_HTTP_PORT` | `8788` | local serve: playground + WS |
 | `BRIDGE_DIAL_URL` | _(unset)_ | remote controller `wss://` URL (enables dial-home) |
-| `BRIDGE_TOKEN` | _(required when networked)_ | shared bearer token |
+| `BRIDGE_TOKEN` | _(required to bind non-loopback)_ | shared bearer token |
 | `BRIDGE_QUERY_TIMEOUT_MS` | `1000` | default `query` timeout |
+
+**Secure-by-default:** both the daemon and the OSC reply receiver bind to **loopback** unless
+explicitly configured; binding a non-loopback interface requires a token (`serve()` throws
+otherwise). Tokens are compared in constant time; browser WS upgrades from cross-site Origins are
+rejected (anti-CSWSH); non-browser clients (no `Origin`) are allowed.
 
 ## 13. Testing strategy
 
@@ -373,6 +380,9 @@ README structured as:
   `docs/ARCHITECTURE.md` §11.
 - **Publish build** — adding a `dist` (ESM + `.d.ts`) build + swapping `exports` to built paths is an
   additive, post-workshop step; develops as source meanwhile (§4).
+- **Token transport hardening** — browsers can't set WS headers, so the token currently rides in the
+  URL query (encrypted under `wss://` but loggable). Future: also accept it via the
+  `Sec-WebSocket-Protocol` subprotocol for non-browser clients (REPL, dial-home, the cloud Brain).
 - **Final package name & scope** (`ableton-osc-bridge` vs scoped) — confirm before publish.
 - **Manifest completeness** — transcribing the whole readme is mechanical but sizable; if a property
   is missing, app code falls back to `live.raw.*` until the manifest line is added + regenerated.

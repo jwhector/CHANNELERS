@@ -1,8 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
+import { WebSocket } from "ws";
 import { attachConnection, type Conn } from "../src/daemon/daemon";
 import type { ServerMessage } from "../src/protocol";
 import type { VerbProvider, Subscription } from "../src/transport";
 import { serve } from "../src/daemon/serve";
+
+/** Open a WS and resolve whether the upgrade was accepted or rejected. */
+function tryConnect(url: string, options?: { origin?: string }): Promise<"open" | "rejected"> {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(url, options);
+    ws.on("open", () => { ws.close(); resolve("open"); });
+    ws.on("error", () => resolve("rejected"));
+  });
+}
 
 const noopProvider: VerbProvider = {
   send: () => {},
@@ -83,5 +93,26 @@ describe("serve playground", () => {
     expect(res.status).toBe(200);
     expect(body).toContain("ableton-osc-bridge");
     expect(body).toContain("Subscribe"); // a control from the full page
+  });
+});
+
+describe("serve security", () => {
+  it("refuses to bind a non-loopback host without a token", () => {
+    expect(() => serve({ provider: noopProvider, port: 8801, host: "0.0.0.0" })).toThrow(/token/);
+  });
+
+  it("allows a no-Origin (non-browser) client but rejects a cross-site browser Origin", async () => {
+    const handle = serve({ provider: noopProvider, port: 8802 });
+    expect(await tryConnect("ws://127.0.0.1:8802/ws")).toBe("open");
+    expect(await tryConnect("ws://127.0.0.1:8802/ws", { origin: "http://evil.example" })).toBe("rejected");
+    await handle.close();
+  });
+
+  it("enforces the token when set (constant-time)", async () => {
+    const handle = serve({ provider: noopProvider, port: 8803, token: "s3cret-token" });
+    expect(await tryConnect("ws://127.0.0.1:8803/ws?token=s3cret-token")).toBe("open");
+    expect(await tryConnect("ws://127.0.0.1:8803/ws?token=wrong")).toBe("rejected");
+    expect(await tryConnect("ws://127.0.0.1:8803/ws")).toBe("rejected");
+    await handle.close();
   });
 });

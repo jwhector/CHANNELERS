@@ -7,6 +7,8 @@ export interface AbletonLiveConfig {
   host?: string;
   sendPort?: number;
   recvPort?: number;
+  /** Interface the OSC reply Server binds to (default loopback). Set for a remote-Ableton setup. */
+  recvHost?: string;
   defaultTimeoutMs?: number;
 }
 
@@ -62,6 +64,7 @@ export function createAbletonLive(cfg: AbletonLiveConfig = {}): AbletonLive {
     host: cfg.host ?? "127.0.0.1",
     sendPort: cfg.sendPort ?? 11000,
     recvPort: cfg.recvPort ?? 11001,
+    recvHost: cfg.recvHost,
   });
   return new AbletonLive(io, { defaultTimeoutMs: cfg.defaultTimeoutMs });
 }
