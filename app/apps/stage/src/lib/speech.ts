@@ -1,11 +1,49 @@
-/** Browser TTS — feeds the performer's earpiece in whisper mode. Swap for ElevenLabs later. */
-export function speak(text: string, opts?: { rate?: number; pitch?: number }): void {
-  if (!("speechSynthesis" in window) || !text.trim()) return;
+let current: HTMLAudioElement | null = null;
+
+/** Stop any in-flight oracle audio — MP3 playback and/or browser speech. */
+export function stopSpeaking(): void {
+  if (current) {
+    current.pause();
+    current = null;
+  }
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
+/** Browser speechSynthesis — the offline fallback when the brain has no ElevenLabs key. */
+function speakViaBrowser(text: string): void {
+  if (!("speechSynthesis" in window)) return;
   const u = new SpeechSynthesisUtterance(text);
-  if (opts?.rate) u.rate = opts.rate;
-  if (opts?.pitch) u.pitch = opts.pitch;
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(u);
+}
+
+/**
+ * Speak the oracle's line into the performer's earpiece. Pulls an ElevenLabs MP3 from the brain
+ * (/api/tts, per-archetype voice); on 204 (no key) or any error, falls back to browser TTS.
+ */
+export async function speak(text: string, opts: { archetype?: string } = {}): Promise<void> {
+  if (!text.trim()) return;
+  stopSpeaking();
+  try {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text, archetype: opts.archetype ?? "" }),
+    });
+    if (res.ok && res.status !== 204) {
+      const url = URL.createObjectURL(await res.blob());
+      const audio = new Audio(url);
+      current = audio;
+      const done = () => URL.revokeObjectURL(url);
+      audio.onended = done;
+      audio.onerror = done;
+      await audio.play();
+      return;
+    }
+  } catch {
+    /* network/playback failed — fall through to browser TTS */
+  }
+  speakViaBrowser(text);
 }
 
 export interface Recognizer {
@@ -21,12 +59,7 @@ export interface RecognizerHandlers {
   onError?: (message: string) => void;
 }
 
-/** Cursor/Electron cannot reach Google's cloud Web Speech backend (logs: network error despite online). */
-export function isEmbeddedBrowser(): boolean {
-  return /\bElectron\b/i.test(navigator.userAgent);
-}
-
-/** Decode recorded audio to 16 kHz mono WAV for the brain's local Whisper endpoint. */
+/** Decode recorded audio to 16 kHz mono WAV for the brain's Whisper endpoint. */
 async function blobToWav(blob: Blob): Promise<Blob> {
   const ctx = new AudioContext({ sampleRate: 16000 });
   try {
@@ -72,8 +105,8 @@ async function transcribeViaBrain(wav: Blob): Promise<string> {
   return String(data.text ?? "").trim();
 }
 
-/** MediaRecorder STT → brain Whisper. Works in Cursor/Electron where cloud Web Speech fails. */
-function createBrainSttRecognizer(handlers: RecognizerHandlers): Recognizer {
+/** MediaRecorder STT → the brain's Whisper endpoint (OpenAI when keyed, else local). */
+export function createRecognizer(handlers: RecognizerHandlers): Recognizer {
   const supported = typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
   let mediaRecorder: MediaRecorder | null = null;
   let stream: MediaStream | null = null;
@@ -96,29 +129,17 @@ function createBrainSttRecognizer(handlers: RecognizerHandlers): Recognizer {
             void (async () => {
               const blob = new Blob(chunks, { type: mediaRecorder?.mimeType || "audio/webm" });
               try {
-                // #region agent log
-                fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',runId:'post-fix',location:'speech.ts:brain-stt-start',message:'brain stt transcribe start',data:{blobBytes:blob.size,mime:blob.type},timestamp:Date.now(),hypothesisId:'H7'})}).catch(()=>{});
-                // #endregion
                 const wav = await blobToWav(blob);
                 const text = await transcribeViaBrain(wav);
-                // #region agent log
-                fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',runId:'post-fix',location:'speech.ts:brain-stt-result',message:'brain stt transcribe done',data:{textLen:text.length,hasText:!!text,wavBytes:wav.size},timestamp:Date.now(),hypothesisId:'H7'})}).catch(()=>{});
-                // #endregion
                 if (text) handlers.onFinal(text);
                 else handlers.onError?.("Didn't catch anything — try again.");
-              } catch (err) {
-                // #region agent log
-                fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',runId:'post-fix',location:'speech.ts:brain-stt-error',message:'brain stt transcribe failed',data:{err:String(err)},timestamp:Date.now(),hypothesisId:'H7'})}).catch(()=>{});
-                // #endregion
+              } catch {
                 handlers.onError?.("Transcription failed — try again or type the visitor's words.");
               }
               handlers.onEnd?.();
             })();
           };
           mediaRecorder.start();
-          // #region agent log
-          fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',runId:'post-fix',location:'speech.ts:brain-stt-recorder',message:'brain stt recorder started',data:{mime:mediaRecorder.mimeType},timestamp:Date.now(),hypothesisId:'H7'})}).catch(()=>{});
-          // #endregion
           handlers.onStart?.();
         } catch {
           handlers.onError?.("Microphone blocked — allow mic access for this site, then retry.");
@@ -130,106 +151,4 @@ function createBrainSttRecognizer(handlers: RecognizerHandlers): Recognizer {
       if (mediaRecorder?.state === "recording") mediaRecorder.stop();
     },
   };
-}
-
-/** Chrome/Edge cloud Web Speech STT. Calls handlers for each lifecycle event. */
-function createWebSpeechRecognizer(handlers: RecognizerHandlers): Recognizer {
-  const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  if (!Ctor) {
-    // #region agent log
-    fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',location:'speech.ts:createRecognizer',message:'STT ctor missing',data:{userAgent:navigator.userAgent},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-    // #endregion
-    return { start: () => {}, stop: () => {}, supported: false };
-  }
-
-  const rec = new Ctor();
-  rec.lang = "en-US";
-  rec.interimResults = false;
-  rec.continuous = false;
-  let startedAt = 0;
-  let gotStart = false;
-
-  rec.onstart = () => {
-    gotStart = true;
-    startedAt = Date.now();
-    console.debug("[STT] started");
-    // #region agent log
-    fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',location:'speech.ts:onstart',message:'STT started',data:{lang:rec.lang,continuous:rec.continuous},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
-    handlers.onStart?.();
-  };
-
-  rec.onresult = (e: any) => {
-    const transcript = e?.results?.[0]?.[0]?.transcript;
-    console.debug("[STT] result:", transcript);
-    // #region agent log
-    fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',location:'speech.ts:onresult',message:'STT result',data:{hasTranscript:!!transcript,transcriptLen:transcript?String(transcript).length:0},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
-    if (transcript) handlers.onFinal(String(transcript));
-  };
-
-  rec.onend = () => {
-    console.debug("[STT] ended");
-    // #region agent log
-    fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',location:'speech.ts:onend',message:'STT ended',data:{gotStart,elapsedMs:startedAt?Date.now()-startedAt:0},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
-    gotStart = false;
-    handlers.onEnd?.();
-  };
-
-  rec.onerror = (e: any) => {
-    const code: string = e?.error ?? "unknown";
-    const message: string | undefined = e?.message;
-    console.warn("[STT] error:", code);
-    // #region agent log
-    fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',location:'speech.ts:onerror',message:'STT error',data:{code,message,gotStart,elapsedMs:startedAt?Date.now()-startedAt:0,online:navigator.onLine,secureContext:window.isSecureContext,protocol:location.protocol,host:location.host},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
-    if (code === "aborted") return;
-    const msg =
-      code === "not-allowed" || code === "service-not-allowed"
-        ? "Microphone blocked — allow mic access for this site, then retry."
-        : code === "no-speech"
-          ? "Didn't catch anything — try again."
-          : code === "audio-capture"
-            ? "No microphone found."
-            : code === "network"
-              ? "Speech service unreachable (check network/VPN)."
-              : `Speech error: ${code}`;
-    handlers.onError?.(msg);
-  };
-
-  return {
-    start: () => {
-      gotStart = false;
-      startedAt = 0;
-      // #region agent log
-      fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',location:'speech.ts:start',message:'STT start() called',data:{online:navigator.onLine,secureContext:window.isSecureContext,protocol:location.protocol,host:location.host,userAgent:navigator.userAgent},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
-      try {
-        rec.start();
-      } catch (err) {
-        console.warn("[STT] start() threw:", err);
-        // #region agent log
-        fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',location:'speech.ts:start-throw',message:'STT start() threw',data:{err:String(err)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-        // #endregion
-      }
-    },
-    stop: () => {
-      try {
-        rec.stop();
-      } catch {
-        /* already stopped */
-      }
-    },
-    supported: true,
-  };
-}
-
-/** Always use brain-side Whisper — cloud Web Speech fails with `network` in Chrome and Electron (logs). */
-export function createRecognizer(handlers: RecognizerHandlers): Recognizer {
-  const embedded = isEmbeddedBrowser();
-  // #region agent log
-  fetch('http://127.0.0.1:7562/ingest/da9653ed-3e12-460e-b9be-18d71e0d2a0c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ee986'},body:JSON.stringify({sessionId:'6ee986',runId:'post-fix',location:'speech.ts:createRecognizer',message:'STT backend selected',data:{backend:'brain',embedded,userAgent:navigator.userAgent},timestamp:Date.now(),hypothesisId:'H8'})}).catch(()=>{});
-  // #endregion
-  return createBrainSttRecognizer(handlers);
 }
