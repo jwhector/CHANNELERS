@@ -89,6 +89,12 @@ export const MusicSeed = z.object({
 });
 export type MusicSeed = z.infer<typeof MusicSeed>;
 
+/** Choreography first-pass: an NL movement "score" generated at persona-set (spec §7). */
+export const ChoreoScore = z.object({
+  score: z.string(),
+});
+export type ChoreoScore = z.infer<typeof ChoreoScore>;
+
 export const OraclePersona = z.object({
   archetype: z.string(),
   systemPrompt: z.string(),

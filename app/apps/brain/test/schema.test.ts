@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { VisitorProfile, PoseVector, SurveyResponse } from "@channelers/shared";
+import { VisitorProfile, PoseVector, SurveyResponse, ChoreoScore } from "@channelers/shared";
 import { WsClientMsg, Station } from "@channelers/shared";
 
 describe("schema: PoseVector", () => {
@@ -66,5 +66,14 @@ describe("schema: station.hello identity", () => {
   });
   it("rejects station.hello missing kioskId", () => {
     expect(WsClientMsg.safeParse({ kind: "station.hello", station: "intake" }).success).toBe(false);
+  });
+});
+
+describe("schema: ChoreoScore", () => {
+  it("parses a movement score", () => {
+    expect(ChoreoScore.safeParse({ score: "Step forward. Freeze." }).success).toBe(true);
+  });
+  it("rejects a missing score", () => {
+    expect(ChoreoScore.safeParse({}).success).toBe(false);
   });
 });

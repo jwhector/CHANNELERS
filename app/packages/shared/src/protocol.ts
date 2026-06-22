@@ -120,6 +120,8 @@ export type WsServerMsg =
   | { kind: "session.transcript"; sessionId: string; role: "visitor" | "oracle"; text: string }
   | { kind: "oracle.delta"; sessionId: string; text: string }
   | { kind: "oracle.done"; sessionId: string; text: string }
+  | { kind: "choreo.delta"; sessionId: string; text: string }
+  | { kind: "choreo.done"; sessionId: string; text: string }
   | { kind: "session.ended"; sessionId: string }
   | { kind: "session.error"; sessionId?: string; visitorId?: string; message: string }
   | { kind: "roster"; sessions: SessionSummary[] }

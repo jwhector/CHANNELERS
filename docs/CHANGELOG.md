@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — Tier 2 Task 2: `ChoreoScore` type + `choreo.delta`/`choreo.done` WS messages
+
+- **What:** Task 2 of the Tier 2 plan — the shared data vocabulary for the choreography layer (purely additive). Added `ChoreoScore = { score: string }` (the NL movement first-pass) to `packages/shared/src/schemas.ts`, and `choreo.delta`/`choreo.done` ({ sessionId, text }) to the `WsServerMsg` union in `protocol.ts` — screens-only, off the `ShowEvent`/OSC contract (same precedent as `dispatch.state`/`tuning.*`).
+- **Why:** Foundation consumed by the brain choreo engine (Task 4–5) and the `/choreo` view (Task 6).
+- **Files/areas:** `packages/shared/src/schemas.ts`, `packages/shared/src/protocol.ts`, `apps/brain/test/schema.test.ts` (+2 tests).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test schema` 11 tests pass.
+- **Docs touched:** this entry.
+
 ## 2026-06-21 — Tier 2 Task 1: slim `Seeds` to music-only (delete dead dance/persona seeds)
 
 - **What:** Implemented Task 1 of the Tier 2 choreography plan (`docs/superpowers/plans/2026-06-21-tier2-choreography-layer.md`, §7 pipeline split). `Seeds` is now `{ music }` — the `DanceScore` schema/type and the `dance` + `persona` fields are deleted (both were dead: the live loop builds its persona via `buildPersona()`, and nothing read `seeds.dance`). `transform()`'s offline stub and live JSON prompt are now music-only. Also added a brain **vitest setup file** (`test/setup.ts`, wired via `vitest.config.ts` `setupFiles`) that forces `OPENAI_API_KEY=""` so the AI-dependent paths (transform, oracle, and the coming choreographer) take their deterministic offline fallbacks in tests — `app/.env` has a real key, which would otherwise make the suite hit the live API (non-deterministic, slow, costly). STT/TTS tests are unaffected (they already `vi.mock("../src/config")`).
