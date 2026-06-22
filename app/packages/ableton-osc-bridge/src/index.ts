@@ -6,3 +6,5 @@ export { serve, type ServeOptions, type ServeHandle } from "./daemon/serve";
 export { attachConnection, type Conn } from "./daemon/daemon";
 export { createLive } from "./facade/index";
 export * from "./facade/generated";
+export { createBridgeHost, type BridgeHost, type AgentSocket } from "./host";
+export { ChannelController, type Channel } from "./controller";
