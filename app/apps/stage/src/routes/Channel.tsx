@@ -9,7 +9,7 @@ import {
 } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
-import { speak, createRecognizer, type Recognizer } from "../lib/speech";
+import { speak, stopSpeaking, createRecognizer, type Recognizer } from "../lib/speech";
 import { loadHandle, saveHandle, clearHandle } from "../lib/sessionHandle";
 import { AlteredStateConsole } from "../components/AlteredStateConsole";
 
@@ -49,6 +49,8 @@ export function Channel() {
   whisperRef.current = whisper;
   const mySessionIdRef = useRef(mySessionId);
   mySessionIdRef.current = mySessionId;
+  // Archetype of the live session, read inside WS handlers (closures can't see fresh sessionMeta).
+  const archetypeRef = useRef<string | null>(null);
   // sessionId of an in-flight rejoin attempt, so we can recognise its success/failure replies.
   const rejoiningRef = useRef<string | null>(null);
 
@@ -89,7 +91,8 @@ export function Channel() {
           setLive("");
           setTeleprompter(m.opening);
           setError(null);
-          if (whisperRef.current) speak(m.opening);
+          archetypeRef.current = m.archetype;
+          if (whisperRef.current) void speak(m.opening, { archetype: m.archetype });
         }
         break;
 
@@ -105,6 +108,7 @@ export function Channel() {
         setLive("");
         setTeleprompter(m.teleprompter);
         setError(null);
+        archetypeRef.current = m.archetype;
         // Intentionally no speak() here — don't blast TTS into the earpiece on a silent reconnect.
         break;
 
@@ -123,12 +127,14 @@ export function Channel() {
         setHistory((h) => [...h, { role: "oracle", text: m.text }]);
         setTeleprompter(m.text);
         setLive("");
-        if (whisperRef.current) speak(m.text);
+        if (whisperRef.current) void speak(m.text, { archetype: archetypeRef.current ?? undefined });
         break;
 
       case "session.ended":
         if (m.sessionId !== mySessionIdRef.current) break;
         clearHandle();
+        stopSpeaking();
+        archetypeRef.current = null;
         setMySessionId(null);
         mySessionIdRef.current = null;
         setSessionMeta(null);
