@@ -13,6 +13,21 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — Dev seed: fabricate an oracle-ready visitor (`seed:visitor`)
+
+- **What:** A dev-only script that creates a fully channellable visitor so `/channel` can be tested without walking someone through the intake + body-scan kiosks. `pnpm seed` (root alias for `pnpm --filter @channelers/brain seed:visitor`) drives the **existing** public endpoints in order — `register` → `intake` (a plausible filled survey) → `persona` (archetype) → `verify` — which stamps `personaAt` + `poseVerifiedAt` and leaves `sessionEndAt` unset, exactly the predicate the performer lobby uses (`Channel.tsx`: `!!v.personaAt && !!v.poseVerifiedAt && !v.sessionEndAt`). Flags: `--name`, `--archetype` (validated against `ARCHETYPES`), `--number`. Auto-picks the first free ticket number ≥ 9000 so dev dummies stay visually distinct from real ones. Requires the brain to be running; prints a friendly hint on `ECONNREFUSED`. **No new brain routes and no UI changes** — it's pure HTTP orchestration over the routes a real visitor already hits.
+- **Why:** Jared needed to iterate on the `/channel` performer page without the kiosk flow. A seed script (vs. a new always-on dev endpoint or a UI button) keeps the production surface untouched and is repeatable from the terminal.
+- **Files/areas:** brain — new `apps/brain/src/seed.ts`; `apps/brain/package.json` (`seed:visitor` script); root `app/package.json` (`seed` alias).
+- **Verification:** `pnpm --filter @channelers/brain typecheck` 0 errors. Ran end-to-end against a live brain: default + `--name/--archetype` runs both produced visitors that satisfy the oracle-ready predicate via `GET /api/visitors`; bad `--archetype` fails cleanly with the valid list. (In-memory store, so seeded dummies clear on brain restart.)
+- **Docs touched:** this entry.
+
+## 2026-06-21 — Altered-State Console operator reference doc
+
+- **What:** New operator-facing reference `docs/altered-state-console.md` explaining every control in the `/channel` ALTERED STATE panel — presets, sampling (temperature/top_p/presence+frequency penalty/max_tokens), effects + the `effectsDriveSampling` nudge math, the text pipeline (promptDrift/outputMangle/tone/semanticDrift/hallucinationBudget/microDrift), and scope — with the real behavior (clamps, buffering, negative-penalty caveat), practical recipes, and gotchas.
+- **Why:** Jared asked for a plain explanation of what each parameter does, kept in the docs dir so operators can run the panel without reading the source.
+- **Files/areas:** `docs/altered-state-console.md` (new); `ARCHITECTURE.md` §5.3 pointer.
+- **Docs touched:** this entry; the new reference; `ARCHITECTURE.md`.
+
 ## 2026-06-21 — Cloud STT/TTS for the divination loop (Whisper + ElevenLabs)
 
 - **What:** The live divination voice loop moved off the local/browser speech paths onto cloud APIs, both key-gated with the offline fallbacks preserved (plan `docs/superpowers/plans/2026-06-21-whisper-stt-elevenlabs-tts.md`). **STT:** the brain's `/api/stt` now uses the **OpenAI Whisper API** (`STT_MODEL`, default `whisper-1`) when `OPENAI_API_KEY` is set, falling back to the existing local Xenova `whisper-tiny.en` when unkeyed **or on an API error** (so the mic never hard-fails mid-show). The stage's WAV recording pipeline is unchanged. **TTS:** new brain `/api/tts` ElevenLabs proxy (`synthesizeSpeech` → MP3; `ELEVENLABS_MODEL`, default `eleven_flash_v2_5`; key stays server-side) with **per-archetype voices** (`voiceId` on each persona + `voiceForArchetype` resolver in `packages/oracles`); the performer's `speak()` pulls the MP3 and plays it, falling back to browser `speechSynthesis` on 204 (no key) or error, and stops audio on session end. The `whisper (TTS)` toggle and one-shot-on-`oracle.done` timing are unchanged. Also removed the dead browser Web Speech recognizer and leftover `.cursor` debug-log instrumentation from the two rewritten speech files.
