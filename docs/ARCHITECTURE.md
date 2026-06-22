@@ -11,10 +11,10 @@ One local service — the **Show Brain** — owns visitor data and all AI calls,
        INTAKE                        SHOW BRAIN (the hub)               PERFORMERS / OUTPUT
  ┌──────────────────┐         ┌────────────────────────────┐       ┌─────────────────────┐
  │ Intake app       │  submit │ • visitor profiles (DB)    │ seeds │ Oracle performer     │
- │ (tablets/kiosks) │────────▶│ • transform (OpenAI):      │──────▶│  earpiece (TTS) /    │
+ │ (tablets/kiosks) │────────▶│ • AI generation (OpenAI):  │──────▶│  earpiece (TTS) /    │
  │  + vibe-phrase Qs│         │     intake → music seed    │       │  hidden teleprompter │
- │                  │         │     intake → dance score   │       ├─────────────────────┤
- │ Scan stations:   │  events │     intake → oracle persona│ OSC/  │ Anna  (music rig)    │
+ │                  │         │  persona-set → choreo pass │       ├─────────────────────┤
+ │ Scan stations:   │  events │  per-turn → oracle + cues  │ OSC/  │ Anna  (music rig)    │
  │  • pose CV       │────────▶│ • live divination loop:    │ MIDI  │   ← lyrics / params  │
  │  • fiducial cards│         │     STT → LLM → TTS         │──────▶├─────────────────────┤
  └──────────────────┘         │ • operator console (web)   │ events│ Jeff  (visuals / TD) │
@@ -25,8 +25,8 @@ One local service — the **Show Brain** — owns visitor data and all AI calls,
 Three flows pass through it:
 
 1. **Intake capture** → a structured visitor *profile*.
-2. **Transform** → three *seeds*: a music seed, a dance/movement score, and a customized Oracle persona.
-3. **Live divination** → STT → Oracle LLM → TTS into the performer's earpiece (or a hidden teleprompter).
+2. **Generation, split by input-readiness (§5.2, §5.6):** intake → a *music seed* (early, archetype-agnostic); persona-set → a *choreography first-pass* (needs the archetype); session-start → the *Oracle persona* (built fresh from the record).
+3. **Two live loops (§5.6, §8):** per visitor turn, STT → Oracle LLM → TTS into the performer's earpiece (or a hidden teleprompter), fanning out in parallel to a choreographer that streams movement cues.
 
 ## 2. Principles
 
@@ -114,12 +114,13 @@ type ScanResult =
   | { kind: "fiducial"; cards: { id: number; slot: number }[] }
 
 type MusicSeed   = { mood: string; tempoBpm: number; key: string; lyricThemes: string[]; synthPalette: string[] }
-type DanceScore  = { qualities: string[]; spatial: string; spiritAnimalShape: string; cues: string[] }
 type OraclePersona = { archetype: string; systemPrompt: string; openingLine: string }
+type ChoreoScore = { score: string }   // NL movement first-pass, generated at persona-set (§5.6)
 
-/** Seeds.persona is deprecated in the new flow — persona is built fresh in divination.start
- *  from the visitor's top-level `archetype` field (set at the altar). Music seed still applies. */
-type Seeds = { music: MusicSeed; dance: DanceScore; persona: OraclePersona }
+/** Tier 2 (§7) narrowed Seeds to music-only — the dead `persona` seed and the archetype-agnostic
+ *  `dance` seed were removed. Persona is built fresh in divination.start from the record's top-level
+ *  `archetype` (set at the altar); choreography lives in ChoreoScore, stored separately on the record. */
+type Seeds = { music: MusicSeed }
 
 // the bus envelope every subscriber sees
 type ShowEvent =
@@ -208,7 +209,7 @@ Defaults are rehearsal-fast (small K, short timers). Tune for a full-audience sh
 ### 5.4 Output integration
 - **Anna (music):** the Brain hands her the `MusicSeed` (lyrics + tempo/key/palette) over WebSocket — rendered on a simple "now generating for visitor N" panel she reads from, and/or pushed as OSC for her rig.
 - **Jeff (visuals):** the Brain emits `ShowEvent`s over OSC; his system (likely TouchDesigner/Resolume) reacts (e.g. `scan.pose` → trigger a light-cone cue; `divination.started` → shift the projection).
-- **Dancers:** the `DanceScore` shows on the `/oracle` or a dedicated screen.
+- **Dancers:** the live choreographer (§5.6) streams NL movement cues on the `choreo.*` WS channel to the `/choreo` screen; the first-pass `ChoreoScore` (generated at persona-set) seeds it. In-ear vs loudspeaker routing is deferred (§12).
 
 ### 5.5 Persona voice — avoiding the generic-AI register
 The enemy isn't "AI" — the show is *about* transactional AI — it's the **helpful-assistant register**: hedging, balance, bullet lists, "as an AI I can't…," safety-theater, and the tell-tale vocabulary. Killing that is mostly prompting + sampling, and for a workshop that gets us 80–90% of the way with no training at all:

@@ -13,6 +13,13 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-22 — Tier 2 docs reconciliation follow-up (gaps from Task 7)
+
+- **What:** Caught and fixed stale spots the Task 7 pass missed. `ARCHITECTURE.md`: §1 ASCII diagram (`intake → dance score`/`oracle persona` → `persona-set → choreo pass`/`per-turn → oracle + cues`; label `transform` → `AI generation`) + the "three flows" list rewritten as generation-split + two-live-loops; §4 data model (removed `DanceScore`, added `ChoreoScore`, `Seeds = { music }`). §5.4 dancers line now points at the `choreo.*` channel + `/choreo`. `docs/CLAUDE.md`: LLM-models line now covers the music-only transform + the choreographer (`CHOREO_MODEL`).
+- **Why:** The Tier 2 roll-up claimed docs were reconciled, but a self-audit found the §1 diagram, §4 model, §5.4, and `docs/CLAUDE.md` still described the old three-seed pipeline.
+- **Files/areas:** `docs/ARCHITECTURE.md` (§1, §4, §5.4), `docs/CLAUDE.md`.
+- **Docs touched:** this entry.
+
 ## 2026-06-21 — Tier 2 complete: choreography layer (roll-up) + docs reconciliation
 
 - **What:** Tier 2 of the multi-station spec is built (Tasks 1–6 above; plan `docs/superpowers/plans/2026-06-21-tier2-choreography-layer.md`). A second live AI loop runs alongside the oracle: the **choreography first-pass** `f(intake, archetype)` generates at persona-set, and each visitor utterance **fans out** in `divination.say()` to a choreographer that streams NL movement cues on a screens-only `choreo.delta`/`choreo.done` channel, with a **live-toggleable** `reactToOracle` timing (react to the oracle reply, or run independently). `transform()` is now music-only (dead dance/persona seeds removed, spec §7). A read-only `/choreo` view renders the cues + the toggle. Model = gpt-4o (`CHOREO_MODEL`); offline fallbacks throughout. **Task 7 (this entry):** reconciled the source-of-truth docs — `ARCHITECTURE.md` §5.2 (transform music-only), new **§5.6 Choreography**, §8 (`choreo.*` WS messages + off-OSC note), §12 (choreography-model question **resolved** → gpt-4o, closing the spec's "Sonnet 4.6" drift; feed routing + cue de-mux still open); `app/CLAUDE.md` (`/choreo` route, choreographer in `packages/oracles`, `choreo.ts`, music-only transform, offline-test note).
