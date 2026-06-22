@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — Tier 2 Task 3: choreographer prompt builders (`packages/oracles`)
+
+- **What:** Task 3 of the Tier 2 plan — pure prompt builders for the choreographer agent (no API calls; mirrors `buildPrompt.ts`). New `packages/oracles/src/choreographer.ts` exports `CHOREO_CLARITY_INSTRUCTION` (the §8 "clarity mirror" of the oracle's `ANTI_SLOP_INSTRUCTION`: one concrete, present-tense, immediately-performable cue), `CHOREO_SCORE_INSTRUCTION`, `buildChoreoFirstPassPrompt(survey, archetype) → {system,user}`, `buildChoreoSystemPrompt(survey, archetype, firstPass)`, and `buildChoreoTurnPrompt({visitor, oracle?})` (includes the oracle reply only when the timing mode reacts to it). Exported from the package index.
+- **Why:** Keeps the choreographer's content as DATA/prompt-building (like the oracle personas), separate from the brain's API calls (Task 4–5).
+- **Files/areas:** `packages/oracles/src/choreographer.ts` (new), `packages/oracles/src/index.ts`, `apps/brain/test/choreographer.test.ts` (new, 3 tests).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test choreographer` 3 tests pass.
+- **Docs touched:** this entry.
+
 ## 2026-06-21 — Tier 2 Task 2: `ChoreoScore` type + `choreo.delta`/`choreo.done` WS messages
 
 - **What:** Task 2 of the Tier 2 plan — the shared data vocabulary for the choreography layer (purely additive). Added `ChoreoScore = { score: string }` (the NL movement first-pass) to `packages/shared/src/schemas.ts`, and `choreo.delta`/`choreo.done` ({ sessionId, text }) to the `WsServerMsg` union in `protocol.ts` — screens-only, off the `ShowEvent`/OSC contract (same precedent as `dispatch.state`/`tuning.*`).
