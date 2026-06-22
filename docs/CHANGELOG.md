@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-22 — Built ableton-osc-bridge foundation (generic bridge, Plan A)
+
+- **What:** Implemented Plan A of the reusable bridge at `app/packages/ableton-osc-bridge`: the `VerbProvider` seam, the pure `Correlator`, the `AbletonLive` core (node-osc, startup-resubscribe), the daemon (`attachConnection` + `serve` with token auth + a self-contained browser playground), the browser-safe `AbletonBridgeClient` (reconnect/resubscribe), the CLI (`serve`/`repl`/`test`), `dial-home`, and an end-to-end integration test (mock Ableton ↔ daemon ↔ client). Generic `send`/`query`/`subscribe` over the whole AbletonOSC surface; cloud topology works (dial-home).
+- **Why:** Jared wants a reusable, well-documented Ableton↔web-app bridge decoupled from CHANNELERS (spec `docs/superpowers/specs/2026-06-22-ableton-osc-bridge-design.md`). Plan B adds the comprehensive typed facade on the same seam.
+- **Files/areas:** `app/packages/ableton-osc-bridge/**`. Branch `ableton-osc-bridge`.
+- **Verification:** `pnpm --filter ableton-osc-bridge test` + `typecheck` green.
+- **Docs touched:** this entry; package `README.md`.
+
 ## 2026-06-22 — Design spec: `ableton-osc-bridge` (reusable Ableton ↔ web-app OSC bridge)
 
 - **What:** Brainstormed and wrote a design spec for a **standalone, reusable** package that bridges AbletonOSC (UDP `11000`/`11001`) to any web app. One package, three entry points: a node **core** (`AbletonLive`: send/query/subscribe + reply correlation over `node-osc`), a browser-safe **client** (`AbletonBridgeClient`, WS), and a **daemon** (runs next to Ableton; local serve + outbound **dial-home** to a remote controller; serves a browser playground). The headline is a **comprehensive, fully typed facade** (`createLive(provider)` → `live.track(2).volume.set(…)`, `live.clip(0,0).fire()`, `live.song.beat.subscribe(…)`) **codegen'd from a curated manifest** of the whole AbletonOSC surface, with emitted JSDoc (docs + OSC address) for first-class autocomplete. The facade rides a `VerbProvider` seam, so the **same calls work over the local core and the network client** unchanged; the generic verbs remain as a `live.raw.*` escape hatch. Topology targets a **cloud Brain + venue Ableton** split: daemon dials home over one authed `wss`, raw OSC never leaves the venue LAN. Dev tools: a REPL + a self-contained browser playground. Develops at `app/packages/ableton-osc-bridge/` with zero `@channelers/*` imports so it lifts out cleanly.
