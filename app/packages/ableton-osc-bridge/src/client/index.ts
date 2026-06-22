@@ -115,3 +115,6 @@ export class AbletonBridgeClient implements VerbProvider {
     }
   }
 }
+
+export { createLive } from "../facade/index";
+export * from "../facade/generated";
