@@ -1,19 +1,5 @@
-import { appendFileSync } from "node:fs";
-import { join } from "node:path";
 import { pipeline, env } from "@xenova/transformers";
-
-const DEBUG_LOG = join(process.cwd(), "..", "..", "..", ".cursor", "debug-6ee986.log");
-
-function debugLog(location: string, message: string, data: Record<string, unknown>) {
-  try {
-    appendFileSync(
-      DEBUG_LOG,
-      `${JSON.stringify({ sessionId: "6ee986", runId: "post-fix", location, message, data, timestamp: Date.now(), hypothesisId: "H8" })}\n`,
-    );
-  } catch {
-    /* ignore */
-  }
-}
+import { config } from "./config";
 
 let transcriberPromise: ReturnType<typeof pipeline> | null = null;
 
@@ -55,13 +41,35 @@ function wavToFloat32(wav: Buffer): Float32Array {
   throw new Error("wav data chunk missing");
 }
 
-/** Transcribe 16-bit mono WAV audio via local Whisper (runs on the Show Brain, not in the browser). */
-export async function transcribeWav(wav: Buffer): Promise<string> {
+/** Local Whisper fallback (Xenova/whisper-tiny.en) — runs on the brain, needs no API key. */
+async function transcribeViaLocal(wav: Buffer): Promise<string> {
   const audio = wavToFloat32(wav);
-  debugLog("stt.ts:transcribeWav", "parsed wav", { wavBytes: wav.length, samples: audio.length });
   const transcriber = await getTranscriber();
   const out = await (transcriber as (data: Float32Array) => Promise<{ text?: string }>)(audio);
-  const text = String(out?.text ?? "").trim();
-  debugLog("stt.ts:transcribeWav", "transcribed", { textLen: text.length, hasText: !!text });
-  return text;
+  return String(out?.text ?? "").trim();
+}
+
+/** OpenAI Whisper API (config.sttModel, default whisper-1). Sends the 16 kHz mono WAV as-is. */
+async function transcribeViaOpenAI(wav: Buffer): Promise<string> {
+  const { default: OpenAI, toFile } = await import("openai");
+  const client = new OpenAI({ apiKey: config.openaiApiKey });
+  const file = await toFile(wav, "audio.wav", { type: "audio/wav" });
+  const res = await client.audio.transcriptions.create({ file, model: config.sttModel });
+  return String(res.text ?? "").trim();
+}
+
+/**
+ * Transcribe 16-bit mono WAV from the stage recorder. Uses the OpenAI Whisper API when a key is
+ * set, else the local model. If the OpenAI call throws (e.g. flaky venue wifi) we fall back to
+ * local so the divination mic never hard-fails mid-show (ARCHITECTURE §3).
+ */
+export async function transcribeWav(wav: Buffer): Promise<string> {
+  if (config.openaiApiKey) {
+    try {
+      return await transcribeViaOpenAI(wav);
+    } catch {
+      return transcribeViaLocal(wav);
+    }
+  }
+  return transcribeViaLocal(wav);
 }
