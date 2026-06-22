@@ -2,6 +2,13 @@ import { describe, it, expect, vi } from "vitest";
 import { attachConnection, type Conn } from "../src/daemon/daemon";
 import type { ServerMessage } from "../src/protocol";
 import type { VerbProvider, Subscription } from "../src/transport";
+import { serve } from "../src/daemon/serve";
+
+const noopProvider: VerbProvider = {
+  send: () => {},
+  query: async () => [],
+  subscribe: () => ({ unsubscribe: () => {} }),
+};
 
 function fakeConn() {
   const out: ServerMessage[] = [];
@@ -64,5 +71,17 @@ describe("attachConnection", () => {
     recv({ id: "1", kind: "subscribe", subId: "s1", address: "/live/song/start_listen/beat", args: [] });
     close();
     expect(p.calls).toContain("unsubscribe");
+  });
+});
+
+describe("serve playground", () => {
+  it("serves the playground HTML at /", async () => {
+    const handle = serve({ provider: noopProvider, port: 8799 });
+    const res = await fetch("http://127.0.0.1:8799/");
+    const body = await res.text();
+    await handle.close();
+    expect(res.status).toBe(200);
+    expect(body).toContain("ableton-osc-bridge");
+    expect(body).toContain("Subscribe"); // a control from the full page
   });
 });
