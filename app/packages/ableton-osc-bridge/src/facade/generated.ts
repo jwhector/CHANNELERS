@@ -52,6 +52,12 @@ export class Song {
     this.p.send("/live/song/tap_tempo", [...id]);
   }
 
+  /** Capture MIDI · OSC `/live/song/capture_midi` */
+  captureMidi(): void {
+    const id: OscArg[] = [];
+    this.p.send("/live/song/capture_midi", [...id]);
+  }
+
   /** Create an audio track (-1 = end) · OSC `/live/song/create_audio_track` */
   createAudioTrack(index: number): void {
     const id: OscArg[] = [];
@@ -64,10 +70,40 @@ export class Song {
     this.p.send("/live/song/create_midi_track", [...id, index]);
   }
 
+  /** Create a return track · OSC `/live/song/create_return_track` */
+  createReturnTrack(): void {
+    const id: OscArg[] = [];
+    this.p.send("/live/song/create_return_track", [...id]);
+  }
+
   /** Create a scene (-1 = end) · OSC `/live/song/create_scene` */
   createScene(index: number): void {
     const id: OscArg[] = [];
     this.p.send("/live/song/create_scene", [...id, index]);
+  }
+
+  /** Jump to a cue point, by name or numeric index · OSC `/live/song/cue_point/jump` */
+  cuePointJump(cuePoint: string): void {
+    const id: OscArg[] = [];
+    this.p.send("/live/song/cue_point/jump", [...id, cuePoint]);
+  }
+
+  /** Jump song position by the given time, in beats · OSC `/live/song/jump_by` */
+  jumpBy(time: number): void {
+    const id: OscArg[] = [];
+    this.p.send("/live/song/jump_by", [...id, time]);
+  }
+
+  /** Jump to the next cue marker · OSC `/live/song/jump_to_next_cue` */
+  jumpToNextCue(): void {
+    const id: OscArg[] = [];
+    this.p.send("/live/song/jump_to_next_cue", [...id]);
+  }
+
+  /** Jump to the previous cue marker · OSC `/live/song/jump_to_prev_cue` */
+  jumpToPrevCue(): void {
+    const id: OscArg[] = [];
+    this.p.send("/live/song/jump_to_prev_cue", [...id]);
   }
 
   /** Delete a scene · OSC `/live/song/delete_scene` */
@@ -76,10 +112,34 @@ export class Song {
     this.p.send("/live/song/delete_scene", [...id, sceneIndex]);
   }
 
+  /** Delete a return track · OSC `/live/song/delete_return_track` */
+  deleteReturnTrack(trackIndex: number): void {
+    const id: OscArg[] = [];
+    this.p.send("/live/song/delete_return_track", [...id, trackIndex]);
+  }
+
   /** Delete a track · OSC `/live/song/delete_track` */
   deleteTrack(trackIndex: number): void {
     const id: OscArg[] = [];
     this.p.send("/live/song/delete_track", [...id, trackIndex]);
+  }
+
+  /** Duplicate a scene · OSC `/live/song/duplicate_scene` */
+  duplicateScene(sceneIndex: number): void {
+    const id: OscArg[] = [];
+    this.p.send("/live/song/duplicate_scene", [...id, sceneIndex]);
+  }
+
+  /** Duplicate a track · OSC `/live/song/duplicate_track` */
+  duplicateTrack(trackIndex: number): void {
+    const id: OscArg[] = [];
+    this.p.send("/live/song/duplicate_track", [...id, trackIndex]);
+  }
+
+  /** Trigger record in session mode · OSC `/live/song/trigger_session_record` */
+  triggerSessionRecord(): void {
+    const id: OscArg[] = [];
+    this.p.send("/live/song/trigger_session_record", [...id]);
   }
 
   /** Undo the last operation · OSC `/live/song/undo` */
@@ -192,6 +252,171 @@ export class Song {
     const p = this.p; const id: OscArg[] = [];
     return {
       get: (timeoutMs?: number): Promise<string[]> => p.query("/live/song/get/track_names", id, timeoutMs).then((a) => strs(a, 0)),
+    };
+  }
+
+  /** Whether arrangement overdub is on · OSC `/live/song/{get,set}/arrangement_overdub` */
+  get arrangementOverdub() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/song/get/arrangement_overdub", id, timeoutMs).then((a) => bool(a, 0)),
+      set: (v: boolean): void => p.send("/live/song/set/arrangement_overdub", [...id, (v ? 1 : 0)]),
+    };
+  }
+
+  /** Whether "back to arranger" is lit · OSC `/live/song/{get,set}/back_to_arranger` */
+  get backToArranger() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/song/get/back_to_arranger", id, timeoutMs).then((a) => bool(a, 0)),
+      set: (v: boolean): void => p.send("/live/song/set/back_to_arranger", [...id, (v ? 1 : 0)]),
+    };
+  }
+
+  /** Whether redo is available · OSC `/live/song/{get,set}/can_redo` */
+  get canRedo() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/song/get/can_redo", id, timeoutMs).then((a) => bool(a, 0)),
+    };
+  }
+
+  /** Whether undo is available · OSC `/live/song/{get,set}/can_undo` */
+  get canUndo() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/song/get/can_undo", id, timeoutMs).then((a) => bool(a, 0)),
+    };
+  }
+
+  /** Clip trigger quantization level · OSC `/live/song/{get,set}/clip_trigger_quantization` */
+  get clipTriggerQuantization() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/clip_trigger_quantization", id, timeoutMs).then((a) => num(a, 0)),
+      set: (v: number): void => p.send("/live/song/set/clip_trigger_quantization", [...id, v]),
+    };
+  }
+
+  /** Current groove amount · OSC `/live/song/{get,set}/groove_amount` */
+  get grooveAmount() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/groove_amount", id, timeoutMs).then((a) => num(a, 0)),
+      set: (v: number): void => p.send("/live/song/set/groove_amount", [...id, v]),
+    };
+  }
+
+  /** Current loop length · OSC `/live/song/{get,set}/loop_length` */
+  get loopLength() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/loop_length", id, timeoutMs).then((a) => num(a, 0)),
+      set: (v: number): void => p.send("/live/song/set/loop_length", [...id, v]),
+    };
+  }
+
+  /** Current loop start point · OSC `/live/song/{get,set}/loop_start` */
+  get loopStart() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/loop_start", id, timeoutMs).then((a) => num(a, 0)),
+      set: (v: number): void => p.send("/live/song/set/loop_start", [...id, v]),
+    };
+  }
+
+  /** MIDI recording quantization · OSC `/live/song/{get,set}/midi_recording_quantization` */
+  get midiRecordingQuantization() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/midi_recording_quantization", id, timeoutMs).then((a) => num(a, 0)),
+      set: (v: number): void => p.send("/live/song/set/midi_recording_quantization", [...id, v]),
+    };
+  }
+
+  /** Nudge down · OSC `/live/song/{get,set}/nudge_down` */
+  get nudgeDown() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/nudge_down", id, timeoutMs).then((a) => num(a, 0)),
+      set: (v: number): void => p.send("/live/song/set/nudge_down", [...id, v]),
+    };
+  }
+
+  /** Nudge up · OSC `/live/song/{get,set}/nudge_up` */
+  get nudgeUp() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/nudge_up", id, timeoutMs).then((a) => num(a, 0)),
+      set: (v: number): void => p.send("/live/song/set/nudge_up", [...id, v]),
+    };
+  }
+
+  /** Punch in · OSC `/live/song/{get,set}/punch_in` */
+  get punchIn() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/song/get/punch_in", id, timeoutMs).then((a) => bool(a, 0)),
+      set: (v: boolean): void => p.send("/live/song/set/punch_in", [...id, (v ? 1 : 0)]),
+    };
+  }
+
+  /** Punch out · OSC `/live/song/{get,set}/punch_out` */
+  get punchOut() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/song/get/punch_out", id, timeoutMs).then((a) => bool(a, 0)),
+      set: (v: boolean): void => p.send("/live/song/set/punch_out", [...id, (v ? 1 : 0)]),
+    };
+  }
+
+  /** Current record mode · OSC `/live/song/{get,set}/record_mode` */
+  get recordMode() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/record_mode", id, timeoutMs).then((a) => num(a, 0)),
+      set: (v: number): void => p.send("/live/song/set/record_mode", [...id, v]),
+    };
+  }
+
+  /** Current root note · OSC `/live/song/{get,set}/root_note` */
+  get rootNote() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/root_note", id, timeoutMs).then((a) => num(a, 0)),
+    };
+  }
+
+  /** Current scale name · OSC `/live/song/{get,set}/scale_name` */
+  get scaleName() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<string> => p.query("/live/song/get/scale_name", id, timeoutMs).then((a) => str(a, 0)),
+    };
+  }
+
+  /** Whether session record is enabled · OSC `/live/song/{get,set}/session_record` */
+  get sessionRecord() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/song/get/session_record", id, timeoutMs).then((a) => bool(a, 0)),
+      set: (v: boolean): void => p.send("/live/song/set/session_record", [...id, (v ? 1 : 0)]),
+    };
+  }
+
+  /** Current session record status · OSC `/live/song/{get,set}/session_record_status` */
+  get sessionRecordStatus() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/session_record_status", id, timeoutMs).then((a) => num(a, 0)),
+    };
+  }
+
+  /** Song arrangement length, in beats · OSC `/live/song/{get,set}/song_length` */
+  get songLength() {
+    const p = this.p; const id: OscArg[] = [];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/song/get/song_length", id, timeoutMs).then((a) => num(a, 0)),
     };
   }
 }
@@ -312,6 +537,124 @@ export class Track {
     };
   }
 
+  /** Track color index · OSC `/live/track/{get,set}/color_index` */
+  get colorIndex() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/track/get/color_index", id, timeoutMs).then((a) => num(a, 1)),
+      set: (v: number): void => p.send("/live/track/set/color_index", [...id, v]),
+    };
+  }
+
+  /** Current monitoring state (1=on, 0=off) · OSC `/live/track/{get,set}/current_monitoring_state` */
+  get currentMonitoringState() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/track/get/current_monitoring_state", id, timeoutMs).then((a) => num(a, 1)),
+      set: (v: number): void => p.send("/live/track/set/current_monitoring_state", [...id, v]),
+    };
+  }
+
+  /** Folded state (for groups) · OSC `/live/track/{get,set}/fold_state` */
+  get foldState() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/track/get/fold_state", id, timeoutMs).then((a) => bool(a, 1)),
+      set: (v: boolean): void => p.send("/live/track/set/fold_state", [...id, (v ? 1 : 0)]),
+    };
+  }
+
+  /** Whether the track is foldable (a group) · OSC `/live/track/{get,set}/is_foldable` */
+  get isFoldable() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/track/get/is_foldable", id, timeoutMs).then((a) => bool(a, 1)),
+    };
+  }
+
+  /** Whether the track is in a group · OSC `/live/track/{get,set}/is_grouped` */
+  get isGrouped() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/track/get/is_grouped", id, timeoutMs).then((a) => bool(a, 1)),
+    };
+  }
+
+  /** Whether the track is visible · OSC `/live/track/{get,set}/is_visible` */
+  get isVisible() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/track/get/is_visible", id, timeoutMs).then((a) => bool(a, 1)),
+    };
+  }
+
+  /** Whether the track can be armed · OSC `/live/track/{get,set}/can_be_armed` */
+  get canBeArmed() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/track/get/can_be_armed", id, timeoutMs).then((a) => bool(a, 1)),
+    };
+  }
+
+  /** Whether the track has audio input · OSC `/live/track/{get,set}/has_audio_input` */
+  get hasAudioInput() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/track/get/has_audio_input", id, timeoutMs).then((a) => bool(a, 1)),
+    };
+  }
+
+  /** Whether the track has audio output · OSC `/live/track/{get,set}/has_audio_output` */
+  get hasAudioOutput() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/track/get/has_audio_output", id, timeoutMs).then((a) => bool(a, 1)),
+    };
+  }
+
+  /** Whether the track has MIDI input · OSC `/live/track/{get,set}/has_midi_input` */
+  get hasMidiInput() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/track/get/has_midi_input", id, timeoutMs).then((a) => bool(a, 1)),
+    };
+  }
+
+  /** Whether the track has MIDI output · OSC `/live/track/{get,set}/has_midi_output` */
+  get hasMidiOutput() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/track/get/has_midi_output", id, timeoutMs).then((a) => bool(a, 1)),
+    };
+  }
+
+  /** Current output level, left channel · OSC `/live/track/{get,set}/output_meter_left` */
+  get outputMeterLeft() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/track/get/output_meter_left", id, timeoutMs).then((a) => num(a, 1)),
+      subscribe: (cb: (v: number) => void): Subscription => p.subscribe("/live/track/start_listen/output_meter_left", id, (a) => cb(num(a, 1))),
+    };
+  }
+
+  /** Current output level, right channel · OSC `/live/track/{get,set}/output_meter_right` */
+  get outputMeterRight() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/track/get/output_meter_right", id, timeoutMs).then((a) => num(a, 1)),
+      subscribe: (cb: (v: number) => void): Subscription => p.subscribe("/live/track/start_listen/output_meter_right", id, (a) => cb(num(a, 1))),
+    };
+  }
+
+  /** Current output level, both channels · OSC `/live/track/{get,set}/output_meter_level` */
+  get outputMeterLevel() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/track/get/output_meter_level", id, timeoutMs).then((a) => num(a, 1)),
+      subscribe: (cb: (v: number) => void): Subscription => p.subscribe("/live/track/start_listen/output_meter_level", id, (a) => cb(num(a, 1))),
+    };
+  }
+
   /** Currently-playing slot index · OSC `/live/track/{get,set}/playing_slot_index` */
   get playingSlotIndex() {
     const p = this.p; const id: OscArg[] = [this.trackId];
@@ -337,6 +680,54 @@ export class Track {
       get: (timeoutMs?: number): Promise<number> => p.query("/live/track/get/num_devices", id, timeoutMs).then((a) => num(a, 1)),
     };
   }
+
+  /** All clip names on the track · OSC `/live/track/{get,set}/clips/name` */
+  get clipsName() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<string[]> => p.query("/live/track/get/clips/name", id, timeoutMs).then((a) => strs(a, 1)),
+    };
+  }
+
+  /** All clip lengths on the track · OSC `/live/track/{get,set}/clips/length` */
+  get clipsLength() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<number[]> => p.query("/live/track/get/clips/length", id, timeoutMs).then((a) => nums(a, 1)),
+    };
+  }
+
+  /** All clip colors on the track · OSC `/live/track/{get,set}/clips/color` */
+  get clipsColor() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<number[]> => p.query("/live/track/get/clips/color", id, timeoutMs).then((a) => nums(a, 1)),
+    };
+  }
+
+  /** All device names on the track · OSC `/live/track/{get,set}/devices/name` */
+  get devicesName() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<string[]> => p.query("/live/track/get/devices/name", id, timeoutMs).then((a) => strs(a, 1)),
+    };
+  }
+
+  /** All device types on the track · OSC `/live/track/{get,set}/devices/type` */
+  get devicesType() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<number[]> => p.query("/live/track/get/devices/type", id, timeoutMs).then((a) => nums(a, 1)),
+    };
+  }
+
+  /** All device class names on the track · OSC `/live/track/{get,set}/devices/class_name` */
+  get devicesClassName() {
+    const p = this.p; const id: OscArg[] = [this.trackId];
+    return {
+      get: (timeoutMs?: number): Promise<string[]> => p.query("/live/track/get/devices/class_name", id, timeoutMs).then((a) => strs(a, 1)),
+    };
+  }
 }
 
 export class Clip {
@@ -351,6 +742,12 @@ export class Clip {
   stop(): void {
     const id: OscArg[] = [this.trackId, this.clipId];
     this.p.send("/live/clip/stop", [...id]);
+  }
+
+  /** Duplicate the clip's loop · OSC `/live/clip/duplicate_loop` */
+  duplicateLoop(): void {
+    const id: OscArg[] = [this.trackId, this.clipId];
+    this.p.send("/live/clip/duplicate_loop", [...id]);
   }
 
   /** Clip name · OSC `/live/clip/{get,set}/name` */
@@ -371,11 +768,36 @@ export class Clip {
     };
   }
 
+  /** Clip color index (0–69) · OSC `/live/clip/{get,set}/color_index` */
+  get colorIndex() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/color_index", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/color_index", [...id, v]),
+    };
+  }
+
   /** Clip length, in beats · OSC `/live/clip/{get,set}/length` */
   get length() {
     const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
     return {
       get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/length", id, timeoutMs).then((a) => num(a, 2)),
+    };
+  }
+
+  /** Clip sample length · OSC `/live/clip/{get,set}/sample_length` */
+  get sampleLength() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/sample_length", id, timeoutMs).then((a) => num(a, 2)),
+    };
+  }
+
+  /** Clip start time · OSC `/live/clip/{get,set}/start_time` */
+  get startTime() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/start_time", id, timeoutMs).then((a) => num(a, 2)),
     };
   }
 
@@ -392,6 +814,38 @@ export class Clip {
     const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
     return {
       get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip/get/is_recording", id, timeoutMs).then((a) => bool(a, 2)),
+    };
+  }
+
+  /** Whether the clip is overdubbing · OSC `/live/clip/{get,set}/is_overdubbing` */
+  get isOverdubbing() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip/get/is_overdubbing", id, timeoutMs).then((a) => bool(a, 2)),
+    };
+  }
+
+  /** Whether the clip is audio · OSC `/live/clip/{get,set}/is_audio_clip` */
+  get isAudioClip() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip/get/is_audio_clip", id, timeoutMs).then((a) => bool(a, 2)),
+    };
+  }
+
+  /** Whether the clip is MIDI · OSC `/live/clip/{get,set}/is_midi_clip` */
+  get isMidiClip() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip/get/is_midi_clip", id, timeoutMs).then((a) => bool(a, 2)),
+    };
+  }
+
+  /** Whether the clip will record on start · OSC `/live/clip/{get,set}/will_record_on_start` */
+  get willRecordOnStart() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip/get/will_record_on_start", id, timeoutMs).then((a) => bool(a, 2)),
     };
   }
 
@@ -413,12 +867,137 @@ export class Clip {
     };
   }
 
+  /** Fine re-pitch (cents) · OSC `/live/clip/{get,set}/pitch_fine` */
+  get pitchFine() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/pitch_fine", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/pitch_fine", [...id, v]),
+    };
+  }
+
   /** Clip muted state · OSC `/live/clip/{get,set}/muted` */
   get muted() {
     const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
     return {
       get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip/get/muted", id, timeoutMs).then((a) => bool(a, 2)),
       set: (v: boolean): void => p.send("/live/clip/set/muted", [...id, (v ? 1 : 0)]),
+    };
+  }
+
+  /** Whether the clip is warped · OSC `/live/clip/{get,set}/warping` */
+  get warping() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip/get/warping", id, timeoutMs).then((a) => bool(a, 2)),
+      set: (v: boolean): void => p.send("/live/clip/set/warping", [...id, (v ? 1 : 0)]),
+    };
+  }
+
+  /** Clip loop start · OSC `/live/clip/{get,set}/loop_start` */
+  get loopStart() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/loop_start", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/loop_start", [...id, v]),
+    };
+  }
+
+  /** Clip loop end · OSC `/live/clip/{get,set}/loop_end` */
+  get loopEnd() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/loop_end", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/loop_end", [...id, v]),
+    };
+  }
+
+  /** Clip start marker (beats) · OSC `/live/clip/{get,set}/start_marker` */
+  get startMarker() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/start_marker", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/start_marker", [...id, v]),
+    };
+  }
+
+  /** Clip end marker (beats) · OSC `/live/clip/{get,set}/end_marker` */
+  get endMarker() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/end_marker", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/end_marker", [...id, v]),
+    };
+  }
+
+  /** Clip position (LoopStart) · OSC `/live/clip/{get,set}/position` */
+  get position() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/position", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/position", [...id, v]),
+    };
+  }
+
+  /** Clip velocity amount (0.0–1.0) · OSC `/live/clip/{get,set}/velocity_amount` */
+  get velocityAmount() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/velocity_amount", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/velocity_amount", [...id, v]),
+    };
+  }
+
+  /** Launch mode (0=Trigger, 1=Gate, 2=Toggle, 3=Repeat) · OSC `/live/clip/{get,set}/launch_mode` */
+  get launchMode() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/launch_mode", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/launch_mode", [...id, v]),
+    };
+  }
+
+  /** Launch quantization value · OSC `/live/clip/{get,set}/launch_quantization` */
+  get launchQuantization() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/launch_quantization", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/launch_quantization", [...id, v]),
+    };
+  }
+
+  /** Clip RAM mode · OSC `/live/clip/{get,set}/ram_mode` */
+  get ramMode() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip/get/ram_mode", id, timeoutMs).then((a) => bool(a, 2)),
+      set: (v: boolean): void => p.send("/live/clip/set/ram_mode", [...id, (v ? 1 : 0)]),
+    };
+  }
+
+  /** Warp mode (0=Beats, 1=Tones, 2=Texture, 3=Re-Pitch, 4=Complex, 6=Pro) · OSC `/live/clip/{get,set}/warp_mode` */
+  get warpMode() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/clip/get/warp_mode", id, timeoutMs).then((a) => num(a, 2)),
+      set: (v: number): void => p.send("/live/clip/set/warp_mode", [...id, v]),
+    };
+  }
+
+  /** Whether the clip has a groove · OSC `/live/clip/{get,set}/has_groove` */
+  get hasGroove() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip/get/has_groove", id, timeoutMs).then((a) => bool(a, 2)),
+    };
+  }
+
+  /** Clip legato state · OSC `/live/clip/{get,set}/legato` */
+  get legato() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.clipId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip/get/legato", id, timeoutMs).then((a) => bool(a, 2)),
+      set: (v: boolean): void => p.send("/live/clip/set/legato", [...id, (v ? 1 : 0)]),
     };
   }
 
@@ -452,11 +1031,26 @@ export class ClipSlot {
     this.p.send("/live/clip_slot/delete_clip", [...id]);
   }
 
+  /** Duplicate the clip to an empty target slot · OSC `/live/clip_slot/duplicate_clip_to` */
+  duplicateClipTo(targetTrackIndex: number, targetClipIndex: number): void {
+    const id: OscArg[] = [this.trackIndex, this.clipIndex];
+    this.p.send("/live/clip_slot/duplicate_clip_to", [...id, targetTrackIndex, targetClipIndex]);
+  }
+
   /** Whether the slot has a clip · OSC `/live/clip_slot/{get,set}/has_clip` */
   get hasClip() {
     const p = this.p; const id: OscArg[] = [this.trackIndex, this.clipIndex];
     return {
       get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip_slot/get/has_clip", id, timeoutMs).then((a) => bool(a, 2)),
+    };
+  }
+
+  /** Whether the slot has a stop button · OSC `/live/clip_slot/{get,set}/has_stop_button` */
+  get hasStopButton() {
+    const p = this.p; const id: OscArg[] = [this.trackIndex, this.clipIndex];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/clip_slot/get/has_stop_button", id, timeoutMs).then((a) => bool(a, 2)),
+      set: (v: boolean): void => p.send("/live/clip_slot/set/has_stop_button", [...id, (v ? 1 : 0)]),
     };
   }
 }
@@ -467,6 +1061,12 @@ export class Scene {
   fire(): void {
     const id: OscArg[] = [this.sceneId];
     this.p.send("/live/scene/fire", [...id]);
+  }
+
+  /** Trigger the scene and select the next scene · OSC `/live/scene/fire_as_selected` */
+  fireAsSelected(): void {
+    const id: OscArg[] = [this.sceneId];
+    this.p.send("/live/scene/fire_as_selected", [...id]);
   }
 
   /** Scene name · OSC `/live/scene/{get,set}/name` */
@@ -484,6 +1084,15 @@ export class Scene {
     return {
       get: (timeoutMs?: number): Promise<number> => p.query("/live/scene/get/color", id, timeoutMs).then((a) => num(a, 1)),
       set: (v: number): void => p.send("/live/scene/set/color", [...id, v]),
+    };
+  }
+
+  /** Scene color index · OSC `/live/scene/{get,set}/color_index` */
+  get colorIndex() {
+    const p = this.p; const id: OscArg[] = [this.sceneId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/scene/get/color_index", id, timeoutMs).then((a) => num(a, 1)),
+      set: (v: number): void => p.send("/live/scene/set/color_index", [...id, v]),
     };
   }
 
@@ -509,6 +1118,42 @@ export class Scene {
     return {
       get: (timeoutMs?: number): Promise<number> => p.query("/live/scene/get/tempo", id, timeoutMs).then((a) => num(a, 1)),
       set: (v: number): void => p.send("/live/scene/set/tempo", [...id, v]),
+    };
+  }
+
+  /** Whether scene tempo is enabled · OSC `/live/scene/{get,set}/tempo_enabled` */
+  get tempoEnabled() {
+    const p = this.p; const id: OscArg[] = [this.sceneId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/scene/get/tempo_enabled", id, timeoutMs).then((a) => bool(a, 1)),
+      set: (v: boolean): void => p.send("/live/scene/set/tempo_enabled", [...id, (v ? 1 : 0)]),
+    };
+  }
+
+  /** Scene time signature numerator · OSC `/live/scene/{get,set}/time_signature_numerator` */
+  get timeSignatureNumerator() {
+    const p = this.p; const id: OscArg[] = [this.sceneId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/scene/get/time_signature_numerator", id, timeoutMs).then((a) => num(a, 1)),
+      set: (v: number): void => p.send("/live/scene/set/time_signature_numerator", [...id, v]),
+    };
+  }
+
+  /** Scene time signature denominator · OSC `/live/scene/{get,set}/time_signature_denominator` */
+  get timeSignatureDenominator() {
+    const p = this.p; const id: OscArg[] = [this.sceneId];
+    return {
+      get: (timeoutMs?: number): Promise<number> => p.query("/live/scene/get/time_signature_denominator", id, timeoutMs).then((a) => num(a, 1)),
+      set: (v: number): void => p.send("/live/scene/set/time_signature_denominator", [...id, v]),
+    };
+  }
+
+  /** Whether scene time signature is enabled · OSC `/live/scene/{get,set}/time_signature_enabled` */
+  get timeSignatureEnabled() {
+    const p = this.p; const id: OscArg[] = [this.sceneId];
+    return {
+      get: (timeoutMs?: number): Promise<boolean> => p.query("/live/scene/get/time_signature_enabled", id, timeoutMs).then((a) => bool(a, 1)),
+      set: (v: boolean): void => p.send("/live/scene/set/time_signature_enabled", [...id, (v ? 1 : 0)]),
     };
   }
 }
@@ -565,6 +1210,30 @@ export class Device {
     const p = this.p; const id: OscArg[] = [this.trackId, this.deviceId];
     return {
       get: (timeoutMs?: number): Promise<number[]> => p.query("/live/device/get/parameters/value", id, timeoutMs).then((a) => nums(a, 2)),
+    };
+  }
+
+  /** All parameter minimum values · OSC `/live/device/{get,set}/parameters/min` */
+  get parametersMin() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.deviceId];
+    return {
+      get: (timeoutMs?: number): Promise<number[]> => p.query("/live/device/get/parameters/min", id, timeoutMs).then((a) => nums(a, 2)),
+    };
+  }
+
+  /** All parameter maximum values · OSC `/live/device/{get,set}/parameters/max` */
+  get parametersMax() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.deviceId];
+    return {
+      get: (timeoutMs?: number): Promise<number[]> => p.query("/live/device/get/parameters/max", id, timeoutMs).then((a) => nums(a, 2)),
+    };
+  }
+
+  /** Per-parameter is_quantized flags · OSC `/live/device/{get,set}/parameters/is_quantized` */
+  get parametersIsQuantized() {
+    const p = this.p; const id: OscArg[] = [this.trackId, this.deviceId];
+    return {
+      get: (timeoutMs?: number): Promise<number[]> => p.query("/live/device/get/parameters/is_quantized", id, timeoutMs).then((a) => nums(a, 2)),
     };
   }
 }
