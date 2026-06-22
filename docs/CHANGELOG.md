@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — Tier 2 Task 1: slim `Seeds` to music-only (delete dead dance/persona seeds)
+
+- **What:** Implemented Task 1 of the Tier 2 choreography plan (`docs/superpowers/plans/2026-06-21-tier2-choreography-layer.md`, §7 pipeline split). `Seeds` is now `{ music }` — the `DanceScore` schema/type and the `dance` + `persona` fields are deleted (both were dead: the live loop builds its persona via `buildPersona()`, and nothing read `seeds.dance`). `transform()`'s offline stub and live JSON prompt are now music-only. Also added a brain **vitest setup file** (`test/setup.ts`, wired via `vitest.config.ts` `setupFiles`) that forces `OPENAI_API_KEY=""` so the AI-dependent paths (transform, oracle, and the coming choreographer) take their deterministic offline fallbacks in tests — `app/.env` has a real key, which would otherwise make the suite hit the live API (non-deterministic, slow, costly). STT/TTS tests are unaffected (they already `vi.mock("../src/config")`).
+- **Why:** The choreography first-pass needs the archetype, which only arrives at the altar, so generation must split by input-readiness (spec §7). Removing the dead seeds clears the way and matches the spec.
+- **Files/areas:** `packages/shared/src/schemas.ts` (Seeds → music-only, DanceScore removed); `apps/brain/src/transform.ts` (stub + prompt music-only); `apps/brain/test/setup.ts` (new), `apps/brain/vitest.config.ts` (setupFiles), `apps/brain/test/transform.test.ts` (new).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test` 72 tests pass (1 new).
+- **Docs touched:** this entry.
+
 ## 2026-06-21 — Dev seed: fabricate an oracle-ready visitor (`seed:visitor`)
 
 - **What:** A dev-only script that creates a fully channellable visitor so `/channel` can be tested without walking someone through the intake + body-scan kiosks. `pnpm seed` (root alias for `pnpm --filter @channelers/brain seed:visitor`) drives the **existing** public endpoints in order — `register` → `intake` (a plausible filled survey) → `persona` (archetype) → `verify` — which stamps `personaAt` + `poseVerifiedAt` and leaves `sessionEndAt` unset, exactly the predicate the performer lobby uses (`Channel.tsx`: `!!v.personaAt && !!v.poseVerifiedAt && !v.sessionEndAt`). Flags: `--name`, `--archetype` (validated against `ARCHETYPES`), `--number`. Auto-picks the first free ticket number ≥ 9000 so dev dummies stay visually distinct from real ones. Requires the brain to be running; prints a friendly hint on `ECONNREFUSED`. **No new brain routes and no UI changes** — it's pure HTTP orchestration over the routes a real visitor already hits.

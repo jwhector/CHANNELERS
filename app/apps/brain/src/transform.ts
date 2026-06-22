@@ -17,17 +17,6 @@ function stubSeeds(profile: VisitorProfile): Seeds {
       lyricThemes: ["waiting rooms", lost, "being processed"],
       synthPalette: ["detuned saw pad", "DX bell", "tape hiss"],
     },
-    dance: {
-      qualities: ["bureaucratic", "tender", "stop-motion"],
-      spatial: "single file, facing an unseen window",
-      spiritAnimalShape: "heron mid-step",
-      cues: ["take a number", "hold the shape until processed"],
-    },
-    persona: {
-      archetype: "tree",
-      systemPrompt: "(stub — built from @channelers/oracles when an Oracle is selected)",
-      openingLine: "You smell like paper. Sit.",
-    },
   };
 }
 
@@ -59,9 +48,7 @@ export async function transform(profile: VisitorProfile): Promise<Seeds> {
           content:
             "You convert an absurdist DMV-style intake survey into JSON 'seeds' for a performance. " +
             "Return ONLY JSON of this shape: " +
-            "{ music:{ mood, tempoBpm, key, lyricThemes[], synthPalette[] }, " +
-            "dance:{ qualities[], spatial, spiritAnimalShape, cues[] }, " +
-            "persona:{ archetype, systemPrompt, openingLine } }.",
+            "{ music:{ mood, tempoBpm, key, lyricThemes[], synthPalette[] } }.",
         },
         { role: "user", content: JSON.stringify(profile.survey) },
       ],

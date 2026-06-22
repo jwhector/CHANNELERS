@@ -89,14 +89,6 @@ export const MusicSeed = z.object({
 });
 export type MusicSeed = z.infer<typeof MusicSeed>;
 
-export const DanceScore = z.object({
-  qualities: z.array(z.string()),
-  spatial: z.string(),
-  spiritAnimalShape: z.string(),
-  cues: z.array(z.string()),
-});
-export type DanceScore = z.infer<typeof DanceScore>;
-
 export const OraclePersona = z.object({
   archetype: z.string(),
   systemPrompt: z.string(),
@@ -106,7 +98,5 @@ export type OraclePersona = z.infer<typeof OraclePersona>;
 
 export const Seeds = z.object({
   music: MusicSeed,
-  dance: DanceScore,
-  persona: OraclePersona,
 });
 export type Seeds = z.infer<typeof Seeds>;
