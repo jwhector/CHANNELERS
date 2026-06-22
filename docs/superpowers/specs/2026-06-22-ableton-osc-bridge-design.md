@@ -91,6 +91,7 @@ networked.
 |---|---|---|
 | `ableton-osc-bridge` (main) | `createLive`, `AbletonLive`, `createAbletonLive`, facade types, verbs | same-machine TS use (**node**) |
 | `ableton-osc-bridge/client` | `AbletonBridgeClient`, `createLive`, facade types, verbs | **browser-safe** WS client + sugar |
+| `ableton-osc-bridge/host` | `createBridgeHost`, `BridgeHost`, `AgentSocket` | cloud controller that **accepts** the daemon's dial-home socket (**node**; free of `node-osc`) — Plan C |
 | `ableton-osc-bridge/protocol` | zod message schemas + types | anyone speaking the wire protocol in TS |
 | `bin: ableton-bridge` | CLI | `serve` (daemon) · `repl` · `test` (ping) |
 
@@ -245,6 +246,11 @@ Raw OSC never leaves the venue LAN; only the authenticated WS crosses the intern
 path** (and the **same facade calls**) serve local dev (everything on `localhost`) and the show (WS
 spans the WAN) — only the URL changes.
 
+**Status (Plan C — done):** dial-home is now fully supported on **both** ends. The venue daemon's
+`dialHome()` connects out (it was already built); the cloud controller's `createBridgeHost()`
+(`ableton-osc-bridge/host`) accepts that inbound socket and exposes a stable typed `Live`. The Brain
+arms this as a token-gated `/agent` WS endpoint (`apps/brain/src/ableton.ts` + `getLive()`).
+
 ## 7. Wire protocol (client ↔ daemon)
 
 JSON, zod-validated. This layer **does** have real request IDs (we own it), so it is clean — its job
@@ -372,9 +378,12 @@ rejected (anti-CSWSH); non-browser clients (no `Origin`) are allowed.
 
 ## 15. Follow-ups / open questions (not part of the core build)
 
-- **CHANNELERS integration** — a later, thin consumer: Brain imports `ableton-osc-bridge/client` +
-  `createLive`; the daemon runs at the venue in dial-home mode pointed at the Brain. Tracked
-  separately so the package stays decoupled.
+- **CHANNELERS integration** — **DONE (Plan C).** The "controller-accepts-inbound-socket" quadrant
+  ships as `createBridgeHost()` (`ableton-osc-bridge/host`), and the Brain arms a token-gated `/agent`
+  WS endpoint (`apps/brain/src/ableton.ts`, env `ABLETON_AGENT_TOKEN`, off by default) exposing
+  `getLive()`. The venue daemon runs in dial-home mode pointed at it — no daemon code change. The
+  remaining open item is the **event→Ableton mapping**: which show moments should drive Live (and the
+  cloud-deployment decision). The package stays decoupled — the Brain consumes `…/host`, not `@channelers/*`.
 - **Cloud Brain is an architectural shift** from the documented "local Show Brain." It affects more
   than this bridge (stage-screen connections, live-oracle latency budget). Add a note/question to
   `docs/ARCHITECTURE.md` §11.

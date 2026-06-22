@@ -65,6 +65,12 @@ process sits in the middle and exposes a clean, id-correlated, authenticated Web
 The dependency arrow always points **down**; nothing above the `VerbProvider` seam knows whether it
 is local or networked.
 
+**Entry points:** `ableton-osc-bridge` (main, node — core + facade + verbs), `…/client`
+(browser-safe WS client), `…/host` (node — `createBridgeHost`: the controller that **accepts** a
+daemon's dial-home socket and exposes a stable typed `Live`; free of `node-osc`), and `…/protocol`
+(the wire-protocol zod schemas). `…/client` and `…/host` are the two ends of the dial-home topology
+below.
+
 ### Topology (the cloud-controller case)
 
 ```
@@ -168,19 +174,43 @@ live.send("/live/song/start_playing");
 console.log(await live.query("/live/song/get/tempo"));
 ```
 
-### Remote / cloud controller (the CHANNELERS case)
+### Cloud controller (daemon dials home)
 
-Run the daemon **at the venue** in dial-home mode, pointed at the controller:
+When the controller lives in the cloud and Ableton is at the venue behind NAT, the **daemon dials
+home** to the controller — the controller is the WS **server** and the daemon connects *out* to it.
+Use the `/host` entry: `createBridgeHost()` accepts the daemon's inbound socket and exposes a stable,
+typed `Live`.
+
+```ts
+// the cloud controller (e.g. a Fastify app): accept the daemon at /agent, drive Ableton via host.live
+import { createBridgeHost } from "ableton-osc-bridge/host";
+import { WebSocketServer } from "ws";
+
+const host = createBridgeHost();
+const wss = new WebSocketServer({
+  server,                       // your existing node:http server
+  path: "/agent",
+  verifyClient: (info) => checkToken(info.req.url),   // token at the upgrade (constant-time compare)
+});
+wss.on("connection", (ws) => host.handleSocket(ws));   // latest connection wins
+
+host.live.song.startPlaying();           // usable before/after a daemon connects
+await host.live.song.tempo.get();         // rejects fast while disconnected
+host.connected();                         // is a daemon currently attached?
+```
+
+`createBridgeHost()` returns `{ live, provider, handleSocket, connected, onStatus }`. Subscriptions
+**replay** when a daemon (re)connects; while disconnected, queries reject fast rather than hang.
+The daemon side needs **no code change** — it already dials out:
 
 ```bash
 BRIDGE_DIAL_URL=wss://controller.example/agent BRIDGE_TOKEN=shhh \
   pnpm --filter ableton-osc-bridge serve
 ```
 
-The controller is the WS **server**; the daemon dials out to it (NAT-friendly, auto-reconnecting).
-In the cloud app, accept the connection and drive Ableton through it using the same wire protocol —
-or, in the typical client-as-WS-server-consumer arrangement, point an `AbletonBridgeClient` at the
-daemon's local serve port over the LAN. Either way the raw OSC stays on the venue LAN.
+The daemon dials out (NAT-friendly, auto-reconnecting); raw OSC stays on the venue LAN. (CHANNELERS
+wires exactly this into its Show Brain — see `apps/brain/src/ableton.ts`.) Alternatively, in a
+LAN-only arrangement, point an `AbletonBridgeClient` at the daemon's local serve port.
 
 ---
 

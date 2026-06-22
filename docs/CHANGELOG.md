@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-22 — ableton-osc-bridge Plan C: cloud-Brain dial-home (host + Brain /agent)
+
+- **What:** Completed the daemon-dials-home topology. Extracted a transport-agnostic `ChannelController` (client refactored onto it, API unchanged) and added `createBridgeHost()` (`ableton-osc-bridge/host`) — the controller that accepts the daemon's inbound socket and exposes a stable typed `Live` (replays subscriptions on reconnect; queries reject fast while disconnected; latest connection wins). Wired into the Brain as a token-gated `/agent` WS endpoint (`apps/brain/src/ableton.ts`, env `ABLETON_AGENT_TOKEN`, off by default) with `getLive()`. Daemon unchanged — it already dials home. Proven end-to-end by a loopback test using the real `dialHome()`.
+- **Why:** The Brain is planned to run in the cloud while Ableton is at the venue behind NAT; the daemon must dial out to the Brain (the WS server). (Spec §6; ARCHITECTURE §12.)
+- **Files/areas:** `app/packages/ableton-osc-bridge/src/{controller,host}.ts`, `client/index.ts`, `index.ts`, `package.json`, tests; `app/apps/brain/src/{ableton,config,app}.ts` + test.
+- **Verification:** bridge `test`+`typecheck` green; brain `test`+`typecheck` green.
+- **Open / next:** the event→Ableton *mapping* (which show moments drive Live) is the remaining creative step; cloud-deployment decision still open (ARCHITECTURE §12).
+- **Docs touched:** this entry; spec §4/§6/§15; package README; `app/CLAUDE.md`; `ARCHITECTURE.md` §12.
+
 ## 2026-06-22 — docs: fix stale "§11" team-questions pointer → §12
 
 - **What:** The team-questions section is `ARCHITECTURE.md` **§12 "Open questions for the team"**, but several pointers still said §11 (which is now "Side-tasks for Anna's student"). Fixed all six: `CLAUDE.md` (×2), `docs/CLAUDE.md` (×2), and the internal `ARCHITECTURE.md` cross-refs at §5.5 and §9-ext. Left the unrelated `(§11)` near §5.6's `/console` mention alone.
