@@ -13,6 +13,13 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-22 — docs: fix stale "§11" team-questions pointer → §12
+
+- **What:** The team-questions section is `ARCHITECTURE.md` **§12 "Open questions for the team"**, but several pointers still said §11 (which is now "Side-tasks for Anna's student"). Fixed all six: `CLAUDE.md` (×2), `docs/CLAUDE.md` (×2), and the internal `ARCHITECTURE.md` cross-refs at §5.5 and §9-ext. Left the unrelated `(§11)` near §5.6's `/console` mention alone.
+- **Why:** Stale pointers send future sessions (and the team) to the wrong section; the section drifted from §11 → §12 as the doc grew.
+- **Files/areas:** `CLAUDE.md`, `docs/CLAUDE.md`, `docs/ARCHITECTURE.md`.
+- **Docs touched:** this entry.
+
 ## 2026-06-22 — ARCHITECTURE §12: cloud-Brain shift + ableton-osc-bridge note
 
 - **What:** Added an "Open questions for the team" entry recording that the Brain is now planned to run in the **cloud** (a deviation from the documented "local Show Brain"), with the team question of whether that's committed, and a pointer to the new decoupled `ableton-osc-bridge` package (venue daemon dials home; raw OSC stays on the LAN; Brain↔bridge wiring deferred).

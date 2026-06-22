@@ -8,7 +8,7 @@ An experimental AI-driven performance piece: a "DMV-esque void" where visitors f
 **Deadline:** development workshop **June 22–28, 2026**. Build toward a working-for-the-workshop MVP, not a tour-hardened product.
 
 ## Source-of-truth docs (read these)
-- `ARCHITECTURE.md` — system design, data model, roadmap, and the **Open Questions for the team** (§11, kept here — no separate questions file; append as questions arise).
+- `ARCHITECTURE.md` — system design, data model, roadmap, and the **Open Questions for the team** (§12, kept here — no separate questions file; append as questions arise).
 - `intake.md` — the actual intake survey questions.
 - `annaoxygenwebsite.md`, `emails.md` — project background and the brief from the team.
 
@@ -27,6 +27,6 @@ A local **Show Brain** (Fastify + `ws` + OSC + OpenAI SDK) owns visitor data and
 
 ## Working agreements
 - **After every change, update `CHANGELOG.md` (newest entry on top) and any docs the change affects** (ARCHITECTURE.md, this file, app docs). The changelog is how context transfers between sessions — treat it as required, not optional.
-- New team questions go in **ARCHITECTURE.md §11**, not a new file.
+- New team questions go in **ARCHITECTURE.md §12**, not a new file.
 - Keep work scoped to the workshop MVP; prefer one full working path over breadth.
 - For anything touching the OpenAI API (models, params, caching, fine-tuning), check the current reference rather than relying on memory.

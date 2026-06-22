@@ -220,7 +220,7 @@ The enemy isn't "AI" — the show is *about* transactional AI — it's the **hel
 - **Sampling.** Raise temperature for idiosyncrasy — the Oracles should be strange, not safe.
 - **A concrete style spec per archetype.** Sentence length, vocabulary, what they fixate on, what they refuse to understand (the tree doesn't know what a "job" is).
 
-**Phase-2 exploration (not for this workshop):** fine-tune a small **open** model (Llama/Mistral/Qwen + LoRA via Unsloth) for a voice baked into the weights that needs no giant prompt and won't drift. The cheap way to a dataset is **distillation** — use well-prompted Claude now, harvest the best outputs (plus the curated corpus) as training data, fine-tune later. This matches the show's "bespoke-trained personae" framing and the director's prior fine-tuning work. Note: Anthropic offers no self-serve fine-tuning of flagship Claude (only Haiku via Bedrock, or enterprise custom-model engagements), so the bespoke path means open weights — which also buys offline operation and no per-query cost. Questions for the director in §11.
+**Phase-2 exploration (not for this workshop):** fine-tune a small **open** model (Llama/Mistral/Qwen + LoRA via Unsloth) for a voice baked into the weights that needs no giant prompt and won't drift. The cheap way to a dataset is **distillation** — use well-prompted Claude now, harvest the best outputs (plus the curated corpus) as training data, fine-tune later. This matches the show's "bespoke-trained personae" framing and the director's prior fine-tuning work. Note: Anthropic offers no self-serve fine-tuning of flagship Claude (only Haiku via Bedrock, or enterprise custom-model engagements), so the bespoke path means open weights — which also buys offline operation and no per-query cost. Questions for the director in §12.
 
 ### 5.6 Choreography — the second live loop (Tier 2)
 
@@ -306,7 +306,7 @@ The Brain publishes every `ShowEvent` on (a) a WebSocket topic for the web scree
 
 This contract is the integration boundary — once it's agreed, Anna and Jeff can build against it independently of my internals.
 
-> **Cheap first step (before their tools are confirmed):** the Brain can ship a minimal **event-echo demo** — it broadcasts sample `ShowEvent`s on OSC + WebSocket that Anna or Jeff can point any receiver at to see exactly what's available to react to. That de-risks the integration and gives them something concrete to plug into without us committing to a design before §11 is answered.
+> **Cheap first step (before their tools are confirmed):** the Brain can ship a minimal **event-echo demo** — it broadcasts sample `ShowEvent`s on OSC + WebSocket that Anna or Jeff can point any receiver at to see exactly what's available to react to. That de-risks the integration and gives them something concrete to plug into without us committing to a design before §12 is answered.
 
 ## 10. Roadmap to the workshop (~2 weeks)
 
