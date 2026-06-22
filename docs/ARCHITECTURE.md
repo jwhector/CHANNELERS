@@ -138,10 +138,10 @@ type ShowEvent =
 Custom kiosk app, themed as the DMV-void. Gates on a **number entry** (the visitor's ticket number, which creates-or-fetches a `VisitorProfile`). Renders the data-only intake questions (`intake.md`): name, free-text absurdist prompts, and the three "State of vulnerability / tension / hopefulness" phrase pickers. **No scan placeholders, no oracle picker** — those steps are separate stations. On submit, `POST …/intake` attaches the `SurveyResponse`, emits `visitor.submitted`, and fires the music-seed transform (fire-and-forget). The screen then directs the visitor to **proceed to the Physical Challenge** (the body-scan station). The body-scan is its own station (`/bodyscan`), not a form field.
 
 ### 5.2 Transform (intake → seeds)
-An OpenAI call per visitor turns the profile into the three seeds.
+An OpenAI call per visitor turns the profile into the **music seed** (Tier 2 §7 narrowed `Seeds` to `{ music }` — the old archetype-agnostic `dance` seed and the dead `persona` seed were deleted; choreography moved to persona-set, see §5.6).
 
 - Model: **gpt-4o** (`config.transformModel`, default `gpt-4o`; configurable via `TRANSFORM_MODEL`). Structured outputs (`response_format` json_schema) are available but not yet wired — the transform currently prompts for JSON and validates with zod, falling back to a deterministic stub on any miss or when no `OPENAI_API_KEY` is set.
-- The music seed → Anna; the dance score → Jane/the dancers; the persona → the live loop.
+- The music seed → Anna. It is archetype-agnostic, so it generates early at intake-submit (cheap to have ready by the time the visitor reaches the altar). The persona is built fresh at session-start via `buildPersona()`; choreography is generated at persona-set (§5.6).
 
 ### 5.3 Live divination (the earpiece loop)
 The visitor speaks → STT → the Oracle persona LLM → text/TTS to the performer, who channels it. Two performer modes, selectable per Oracle:
@@ -221,6 +221,17 @@ The enemy isn't "AI" — the show is *about* transactional AI — it's the **hel
 
 **Phase-2 exploration (not for this workshop):** fine-tune a small **open** model (Llama/Mistral/Qwen + LoRA via Unsloth) for a voice baked into the weights that needs no giant prompt and won't drift. The cheap way to a dataset is **distillation** — use well-prompted Claude now, harvest the best outputs (plus the curated corpus) as training data, fine-tune later. This matches the show's "bespoke-trained personae" framing and the director's prior fine-tuning work. Note: Anthropic offers no self-serve fine-tuning of flagship Claude (only Haiku via Bedrock, or enterprise custom-model engagements), so the bespoke path means open weights — which also buys offline operation and no per-query cost. Questions for the director in §11.
 
+### 5.6 Choreography — the second live loop (Tier 2)
+
+A choreographer agent runs **alongside** the oracle, turning the divination into natural-language movement cues for dancers (spec `docs/superpowers/specs/2026-06-19-multi-station-architecture-design.md` §7–§8; plan `docs/superpowers/plans/2026-06-21-tier2-choreography-layer.md`).
+
+- **First-pass (`f(intake, archetype)`)** — generated at **persona-set** (`POST /api/visitors/:id/persona`), the moment the archetype exists. `generateFirstPass()` (`apps/brain/src/choreo.ts`) produces an NL movement **`ChoreoScore`** (`{ score }`), stored on the record (`store.setChoreoFirstPass`), ready as the reading begins. Fire-and-forget, mirroring the intake→seeds transform.
+- **Per-turn fan-out** — `divination.say()` fans each visitor utterance out to a `runChoreo` consumer off the **same session** (shared context, same `sessionId`). It streams `choreo.delta` → `choreo.done` and is **fire-and-forget + try/catch, so a choreography failure never disturbs the oracle turn.**
+- **Configurable timing** — a live, in-memory `reactToOracle` flag (`config.choreo.reactToOracle`, env `CHOREO_REACT_TO_ORACLE`, default true; flip live via `GET`/`POST /api/choreo/config`). ON → the cue runs after `oracle.done`, reacting to the utterance **and** the oracle reply (spec §8). OFF → it runs in parallel from the utterance alone, independent of the oracle.
+- **Clarity prompt** — `packages/oracles/src/choreographer.ts` builds the prompts; `CHOREO_CLARITY_INSTRUCTION` is the §8 "clarity mirror" of the oracle's anti-slop deny-list (one concrete, present-tense, immediately-performable cue). The choreographer's voice is functional (an instructor to bodies), not a character.
+- **Model** — `config.choreoModel` (env `CHOREO_MODEL`, default **gpt-4o**), streaming, same pattern as the oracle. Offline (no key) → deterministic fallback cue, so the loop runs with no API key.
+- **Feed** — `choreo.delta`/`choreo.done` ride their own screens-only WS channel (§8), **deliberately off the `ShowEvent`/OSC contract**, like dispatcher logistics + tuning. The `/choreo` screen renders the live cue + the timing toggle. **Open / deferred:** in-ear vs loudspeaker routing (§12), and de-multiplexing concurrent sessions' cues (the MVP shares one cue line — fine while the altar is one-at-a-time).
+
 ## 6. The human QR code
 
 The bridge between the body and the system. All in-browser TypeScript:
@@ -260,6 +271,8 @@ session.started { sessionId, visitorId, visitorName, archetype, opening }
 session.transcript { sessionId, role, text }
 oracle.delta    { sessionId, text }                  streaming chunk
 oracle.done     { sessionId, text }                  full reply
+choreo.delta    { sessionId, text }                  streaming movement-cue chunk (Tier 2, §5.6)
+choreo.done     { sessionId, text }                  full movement cue for the turn (Tier 2, §5.6)
 session.ended   { sessionId }
 session.error   { sessionId?, visitorId?, message }  targeted to the caller's socket
 event           { event: ShowEvent }                 OSC mirror
@@ -272,6 +285,8 @@ The `roster` message is broadcast on every session change **and** sent to each s
 The `dispatch.state` message is broadcast on every dispatcher state change **and** sent on connect. It carries the full `DispatchState`: the **addressable slot array** (`slots: Slot[]`, each with `id`, `station`, `kioskId?`, `online`, and a pinned `occupant?` of phase `pending`/`called`/`in_progress`), the waiting `queue`, the `completed` list (`sessionEndAt` set), `surplus` screens (connected but unbound), the derived `stationsOnline` LEDs, and `warmedUp`. Arrival is an explicit **Confirm arrival** at the kiosk (`POST /api/dispatch/arrive`), not a typed check-in.
 
 **Dispatcher logistics are deliberately kept off the `ShowEvent`/OSC contract.** `dispatch.state` is an internal screen-to-screen channel — Anna's and Jeff's tools subscribe to `ShowEvent`s over OSC/WebSocket (§9-ext); they never see dispatcher internals. The `station.hello` client message serves only the dispatcher's kiosk slot-binding + socket-drop detector and is ignored by all other subsystems.
+
+The **`choreo.delta`/`choreo.done`** channel (Tier 2, §5.6) and the **`tuning.set`/`tuning.state`** channel are kept off the OSC contract for the same reason — they are live screen-to-screen streams, not discrete integration events. If a collaborator (loudspeaker/TouchDesigner) later needs the final cue over OSC, add a discrete `choreo.cue` `ShowEvent` additively rather than streaming deltas over OSC.
 
 ## 9-ext. External integration contract (OSC / WebSocket)
 
@@ -336,9 +351,9 @@ Maintained here — **no separate questions file**. Add to this section as new q
 **Multi-station revision (2026-06-19 spec)** — from `docs/superpowers/specs/2026-06-19-multi-station-architecture-design.md` §15
 - **Numbering hardware** — what assigns the analog ticket number, and can it stay purely analog? Decides whether globally-unique integers hold or a day/session namespace is needed.
 - ~~**Presence capture**~~ — ✅ **RESOLVED for MVP:** waiting-room registration stays operator-keyed (`/dispatch` arrivals panel calls `POST /api/register`). `/waiting` self-serve kiosk deferred.
-- **Choreography feed routing** — dancers' in-ears, a public loudspeaker, or both? (The channel is built either way; this is output routing.)
+- **Choreography feed routing** — dancers' in-ears, a public loudspeaker, or both? (The channel is built either way — `choreo.*` WS + the `/choreo` view, §5.6; this is output routing.) Related: the MVP `/choreo` view shares one cue line across concurrent sessions — de-multiplexing waits on this decision.
 - ~~**Dispatcher knob values**~~ — ✅ **RESOLVED for MVP:** rehearsal-fast defaults set in `config.dispatcher` (K=3, T_warmup=60s, T_max=240s, T_noshow=90s, T_stale=300s, grace=20s, tick=5s). All env-overridable — tune in rehearsal without a code change.
-- **Choreography agent model** — confirm gpt-4o vs. gpt-4o-mini (or another model) for the second live loop.
+- ~~**Choreography agent model**~~ — ✅ **RESOLVED for MVP:** **gpt-4o** (`config.choreoModel`, env `CHOREO_MODEL`), same as the oracle; switch to `gpt-4o-mini` via env for a lower-latency second loop. (Closes the spec's "Sonnet 4.6" drift — the project runs on OpenAI.)
 - ~~**No-show automation**~~ — ✅ **RESOLVED for MVP:** no-show is flagged by default (operator decides to re-pool). `noShowAutoRepool` knob (`DISPATCH_NOSHOW_AUTOREPOOL=true`) enables automatic re-pool for a faster-paced run.
 - ~~**Scannable/displayed check-in (remove wrong-number risk)**~~ — ✅ **RESOLVED:** replaced permissive type-a-number check-in with **confirm-at-station** — the dispatcher calls `#N` to a kiosk-bound slot, the kiosk displays the number, and a **Confirm arrival** press transitions `called → in_progress` (no free-text entry). Each kiosk owns one addressable, online-gated slot (`station.hello { kioskId, slotHint? }`). Type-a-number survives only as the hidden `/console` operator override.
 - **Deferred from the confirm-at-station redesign** (spec §10):

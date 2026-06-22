@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — Tier 2 complete: choreography layer (roll-up) + docs reconciliation
+
+- **What:** Tier 2 of the multi-station spec is built (Tasks 1–6 above; plan `docs/superpowers/plans/2026-06-21-tier2-choreography-layer.md`). A second live AI loop runs alongside the oracle: the **choreography first-pass** `f(intake, archetype)` generates at persona-set, and each visitor utterance **fans out** in `divination.say()` to a choreographer that streams NL movement cues on a screens-only `choreo.delta`/`choreo.done` channel, with a **live-toggleable** `reactToOracle` timing (react to the oracle reply, or run independently). `transform()` is now music-only (dead dance/persona seeds removed, spec §7). A read-only `/choreo` view renders the cues + the toggle. Model = gpt-4o (`CHOREO_MODEL`); offline fallbacks throughout. **Task 7 (this entry):** reconciled the source-of-truth docs — `ARCHITECTURE.md` §5.2 (transform music-only), new **§5.6 Choreography**, §8 (`choreo.*` WS messages + off-OSC note), §12 (choreography-model question **resolved** → gpt-4o, closing the spec's "Sonnet 4.6" drift; feed routing + cue de-mux still open); `app/CLAUDE.md` (`/choreo` route, choreographer in `packages/oracles`, `choreo.ts`, music-only transform, offline-test note).
+- **Why:** The piece wants intake-seeded movement that also reacts live to the channeling conversation (spec §6–§8); the docs must match the built reality before the workshop (CLAUDE.md working agreement).
+- **Files/areas:** `docs/ARCHITECTURE.md` (§5.2, §5.6 new, §8, §12), `app/CLAUDE.md`. (Code landed in Tasks 1–6.)
+- **Verification:** full suite — `pnpm -r typecheck` 0 errors; brain 86 tests, stage 18 tests; `pnpm --filter @channelers/stage build` OK.
+- **Deferred / open (team):** choreography feed routing (in-ears vs loudspeaker) and concurrent-session cue de-multiplexing (§12); an `applyToChoreo` Altered-State scope axis; a `choreo.cue` `ShowEvent` if a collaborator needs the final cue over OSC.
+- **Docs touched:** this entry; `ARCHITECTURE.md`; `app/CLAUDE.md`.
+
 ## 2026-06-21 — Tier 2 Task 6: `/choreo` stage view + live timing toggle
 
 - **What:** Task 6 of the Tier 2 plan — the read-only choreography surface. New `apps/stage/src/routes/Choreo.tsx`: `Choreo` (socket-wired route) subscribes to `choreo.delta`/`choreo.done`, accumulates the streaming cue into a big teleprompter line + a 30-entry rolling log, and hosts the operator's **react to oracle reply** checkbox (loads `GET /api/choreo/config` on mount, flips via `POST` on change). Split out a pure `ChoreoDisplay` presentational export for unit-testing without a socket. `api.ts` gains `choreo.config`/`choreo.setConfig`. Route + `SCREENS` entry added in `App.tsx`.
