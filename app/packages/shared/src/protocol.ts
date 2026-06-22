@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ShowEvent } from "./events";
 import { Station } from "./schemas";
+import { OracleTuning } from "./tuning";
 
 /**
  * Live divination protocol over the /ws socket.
@@ -26,6 +27,7 @@ export const WsClientMsg = z.discriminatedUnion("kind", [
     kioskId: z.string(),
     slotHint: z.string().optional(),
   }),
+  z.object({ kind: z.literal("tuning.set"), tuning: OracleTuning }),
 ]);
 export type WsClientMsg = z.infer<typeof WsClientMsg>;
 
@@ -121,4 +123,5 @@ export type WsServerMsg =
   | { kind: "session.ended"; sessionId: string }
   | { kind: "session.error"; sessionId?: string; visitorId?: string; message: string }
   | { kind: "roster"; sessions: SessionSummary[] }
-  | { kind: "dispatch.state"; state: DispatchState };
+  | { kind: "dispatch.state"; state: DispatchState }
+  | { kind: "tuning.state"; tuning: OracleTuning };

@@ -160,3 +160,24 @@ pre {
 .pending-call .arrow { opacity: 0.7; }
 .pulse { animation: dispatch-pulse 1s ease-in-out infinite; }
 @keyframes dispatch-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,221,85,0.7); } 50% { box-shadow: 0 0 0 6px rgba(255,221,85,0); } }
+
+/* ── Altered-State Console (operator-only generation controls on /channel) ── */
+.altered-state { margin: 16px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 12px; }
+.altered-state > summary { cursor: pointer; padding: 8px 12px; display: flex; align-items: center; gap: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); user-select: none; }
+.altered-state > summary::-webkit-details-marker { display: none; }
+.as-badge { margin-left: auto; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--accent); text-transform: none; letter-spacing: 0; }
+.as-badge.muted { color: var(--dim); margin-left: 6px; }
+.as-body { padding: 4px 12px 12px; display: grid; gap: 14px; }
+.as-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.as-preset { background: transparent; border: 1px solid var(--line); color: var(--ink); border-radius: 999px; padding: 4px 12px; cursor: pointer; font: inherit; font-size: 12px; }
+.as-preset.on { border-color: var(--accent); color: var(--accent); }
+.as-preset.reset { margin-left: auto; color: var(--dim); }
+.altered-state section { border-top: 1px solid var(--line); padding-top: 8px; }
+.altered-state h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); display: flex; align-items: center; gap: 12px; }
+.as-warn { color: var(--accent); text-transform: none; letter-spacing: 0; }
+.as-row { display: grid; grid-template-columns: 140px 1fr 52px; align-items: center; gap: 10px; padding: 3px 0; }
+.as-row input[type="range"] { width: 100%; accent-color: var(--accent); }
+.as-row select { padding: 4px 8px; }
+.as-val { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+.as-check { display: flex; align-items: center; gap: 6px; padding: 3px 0; color: var(--ink); cursor: pointer; }
+.altered-state h4 .as-check { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--dim); font-weight: 400; }

@@ -7,6 +7,7 @@ import { store } from "./store";
 import { Bus } from "./bus";
 import { transform } from "./transform";
 import { registerDivination } from "./divination";
+import { registerTuning } from "./tuning";
 import { createDispatcher } from "./dispatcher";
 import { transcribeWav } from "./stt";
 
@@ -20,6 +21,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   const bus = new Bus(app.server);
   registerDivination(bus);
+  registerTuning(bus);
   const dispatcher = createDispatcher(bus);
   app.addHook("onClose", async () => dispatcher.stop());
 

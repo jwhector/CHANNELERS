@@ -160,6 +160,8 @@ Engineering notes (grounded against the OpenAI API reference):
 - **Both default to gpt-4o** (configurable); for a lower-latency live loop, a smaller model like **gpt-4o-mini** can be set via `ORACLE_MODEL`.
 - gpt-4o has no separate thinking parameter — no special flag needed to keep the Oracle turn fast.
 
+**Altered-State tuning (operator dials).** Generation is no longer hardcoded. A single global `OracleTuning` (`packages/shared/src/tuning.ts`) is the live control surface, edited from the `/channel` console (`AlteredStateConsole`, operator-only) and held in the brain (`apps/brain/src/tuning.ts`, `getTuning()`). It rides its own `tuning.set`/`tuning.state` WS messages — **kept off the `ShowEvent`/OSC contract**, like dispatcher logistics. It carries: **sampling** (temperature/top_p/penalties/max_tokens), the PHARMAICY-module **effects** vocabulary + an `effectsDriveSampling` toggle that ports the module's `getApiSettings()` nudge, a **preset** label (light→surreal, values copied verbatim from `app/Ayahuasca_v1.3.js` — selecting one loads editable numbers), the opt-in **text pipeline** (`promptDrift` injects an `[ALTERED PERCEPTION]` system-prompt block; `outputMangle` runs the finished reply through ported regex stylists and therefore **buffers** instead of streaming), and **scope** (oracle / transform / both). `resolveSampling(tuning)` clamps to OpenAI-valid ranges. `DEFAULT_TUNING` reproduces the prior behavior exactly (temp 1, pipeline off). The text pipeline also runs on the offline fallback so it's testable with no key. Origin/rationale: §5.5 + spec `docs/superpowers/specs/2026-06-21-altered-state-console.md`.
+
 ### 5.x Visitor dispatcher (confirm-at-station + addressable kiosk slots)
 
 The dispatcher (`apps/brain/src/dispatcher.ts`, `createDispatcher(bus)`) is an in-memory engine that manages visitor flow across the three stations. It runs alongside divination — the Bus multiplexes hooks so both subsystems coexist. (Spec: `docs/superpowers/specs/2026-06-20-dispatch-confirm-and-addressable-slots-design.md`.)
@@ -247,6 +249,7 @@ session.start   { visitorId }                        performer claims a visitor
 session.say     { sessionId, text }                  visitor utterance
 session.end     { sessionId }                        end this session
 station.hello   { station, kioskId, slotHint? }      station kiosk identity + slot binding (dispatcher use only)
+tuning.set      { tuning: OracleTuning }             operator edits the global Altered-State tuning (§5.3)
 ```
 
 Brain → client messages:
@@ -261,6 +264,7 @@ session.ended   { sessionId }
 session.error   { sessionId?, visitorId?, message }  targeted to the caller's socket
 event           { event: ShowEvent }                 OSC mirror
 dispatch.state  { slots: Slot[], queue, completed, surplus, stationsOnline, warmedUp }   dispatcher snapshot (screens only)
+tuning.state    { tuning: OracleTuning }             global Altered-State tuning; broadcast on change + on connect (screens only)
 ```
 
 The `roster` message is broadcast on every session change **and** sent to each socket on connect — the lobby (and monitor) are always correct immediately on load or reconnect.

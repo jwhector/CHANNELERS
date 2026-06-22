@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { ARCHETYPES, type SessionSummary, type VisitorProfile, type WsServerMsg } from "@channelers/shared";
+import {
+  ARCHETYPES,
+  DEFAULT_TUNING,
+  type OracleTuning,
+  type SessionSummary,
+  type VisitorProfile,
+  type WsServerMsg,
+} from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { speak, createRecognizer, type Recognizer } from "../lib/speech";
 import { loadHandle, saveHandle, clearHandle } from "../lib/sessionHandle";
+import { AlteredStateConsole } from "../components/AlteredStateConsole";
 
 type Line = { role: "visitor" | "oracle"; text: string };
 
@@ -33,6 +41,10 @@ export function Channel() {
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
 
+  // Live Altered-State tuning — seeded from the brain's tuning.state broadcast, edited here.
+  const [tuning, setTuning] = useState<OracleTuning>(DEFAULT_TUNING);
+  const tuningTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   const whisperRef = useRef(whisper);
   whisperRef.current = whisper;
   const mySessionIdRef = useRef(mySessionId);
@@ -59,6 +71,10 @@ export function Channel() {
 
       case "roster":
         setRoster(m.sessions);
+        break;
+
+      case "tuning.state":
+        setTuning(m.tuning);
         break;
 
       case "session.started":
@@ -165,6 +181,13 @@ export function Channel() {
     });
   }
 
+  // Update locally now (snappy sliders), push to the brain debounced.
+  function changeTuning(next: OracleTuning) {
+    setTuning(next);
+    if (tuningTimer.current) clearTimeout(tuningTimer.current);
+    tuningTimer.current = setTimeout(() => send({ kind: "tuning.set", tuning: next }), 150);
+  }
+
   function submit() {
     const t = input.trim();
     if (!t || !mySessionId) return;
@@ -213,6 +236,7 @@ export function Channel() {
             channelling <strong>{sessionMeta.archetype}</strong> for {sessionMeta.visitorName || "—"}
           </p>
         )}
+        <AlteredStateConsole tuning={tuning} onChange={changeTuning} connected={connected} />
         {error && <p className="error">{error}</p>}
 
         <div className="teleprompter">
@@ -265,6 +289,8 @@ export function Channel() {
       </header>
 
       {error && <p className="error">{error}</p>}
+
+      <AlteredStateConsole tuning={tuning} onChange={changeTuning} connected={connected} />
 
       <h3>Available visitors</h3>
       {available.length === 0 && (
