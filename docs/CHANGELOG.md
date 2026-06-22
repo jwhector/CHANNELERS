@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-22 — ARCHITECTURE §12: cloud-Brain shift + ableton-osc-bridge note
+
+- **What:** Added an "Open questions for the team" entry recording that the Brain is now planned to run in the **cloud** (a deviation from the documented "local Show Brain"), with the team question of whether that's committed, and a pointer to the new decoupled `ableton-osc-bridge` package (venue daemon dials home; raw OSC stays on the LAN; Brain↔bridge wiring deferred).
+- **Why:** A cloud Brain ripples through stage-screen connections, the live-oracle latency budget, and offline-resilience — it needs to be visible to the team, not buried in the bridge spec. (CLAUDE.md: new questions go in ARCHITECTURE, not a new file. Note: the team-questions section is **§12**, not §11 — the CLAUDE.md "§11" pointer is stale.)
+- **Files/areas:** `docs/ARCHITECTURE.md` §12.
+- **Note:** A stray 1-line copy edit in `app/apps/stage/src/routes/Intake.tsx` ("subject no." → "no.") is present in the working tree but was **not** authored by this session's bridge work — left untouched (not committed, not reverted).
+- **Docs touched:** this entry; `ARCHITECTURE.md`.
+
 ## 2026-06-22 — Built ableton-osc-bridge typed facade (Plan B)
 
 - **What:** Added the comprehensive, fully typed facade on top of Plan A's `VerbProvider` seam: a curated `manifest.ts` of the AbletonOSC surface, a generator (`scripts/generate-facade.ts`) emitting `src/facade/generated.ts` with per-member JSDoc (doc + OSC address), `createLive(provider)`, a drift-guard test, and full coverage transcribed from the readme. `live.track(2).volume.set(…)`, `live.clip(0,0).fire()`, `live.song.beat.subscribe(…)` work identically over the local core and the network client; `live.raw.*` is the escape hatch.
