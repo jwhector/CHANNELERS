@@ -212,3 +212,30 @@ describe("arrive + assign-by-slot endpoints", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe("choreo first-pass + config", () => {
+  it("setting persona populates a choreography first-pass on the record", async () => {
+    const v = await register(6101);
+    await app.inject({ method: "POST", url: `/api/visitors/${v.id}/intake`,
+      payload: { survey: { name: "Jo", freeText: { lost: "my keys" }, phrases: [] } } });
+    await app.inject({ method: "POST", url: `/api/visitors/${v.id}/persona`, payload: { archetype: "tree" } });
+    // first-pass is generated fire-and-forget; poll the record briefly
+    let score = "";
+    for (let i = 0; i < 20 && !score; i++) {
+      const rec = ((await app.inject({ method: "GET", url: "/api/visitors" })).json() as { id: string; choreoFirstPass?: { score: string } }[])
+        .find((r) => r.id === v.id);
+      score = rec?.choreoFirstPass?.score ?? "";
+      if (!score) await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(score.length).toBeGreaterThan(0);
+  });
+
+  it("GET/POST /api/choreo/config round-trips the flag", async () => {
+    const set = await app.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: false } });
+    expect(set.json().reactToOracle).toBe(false);
+    const get = await app.inject({ method: "GET", url: "/api/choreo/config" });
+    expect(get.json().reactToOracle).toBe(false);
+    // restore default so later tests see the spec-default behavior
+    await app.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
+  });
+});

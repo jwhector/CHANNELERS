@@ -18,6 +18,13 @@ export const config = {
   // When the key is unset the client falls back to browser speechSynthesis.
   elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
   elevenLabsModel: process.env.ELEVENLABS_MODEL ?? "eleven_flash_v2_5",
+  // Choreography agent: the second live loop (apps/brain/src/choreo.ts). Mirrors the oracle model.
+  choreoModel: process.env.CHOREO_MODEL ?? "gpt-4o",
+  choreo: {
+    /** When true, the per-turn cue reacts to the visitor utterance AND the oracle reply (spec §8);
+     *  when false it runs in parallel from the utterance alone. Live-toggleable at /api/choreo/config. */
+    reactToOracle: process.env.CHOREO_REACT_TO_ORACLE !== "false",
+  },
   osc: {
     enabled: process.env.OSC_ENABLED === "true",
     host: process.env.OSC_HOST ?? "127.0.0.1",

@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — Tier 2 Task 4: brain choreo engine (first-pass at persona-set, store, live toggle)
+
+- **What:** Task 4 of the Tier 2 plan — the brain-side choreography engine. New `apps/brain/src/choreo.ts`: the live in-memory `reactToOracle` flag (`getChoreoConfig`/`setChoreoConfig`, default from config); `generateFirstPass(visitor)` → an NL `ChoreoScore` via OpenAI (`config.choreoModel`, default gpt-4o) or a deterministic `stubFirstPass` offline/on-error; plus the deterministic `fallbackCue` + `streamCue` live-cue streamer (wired into the divination loop in Task 5). `config.ts` gains `choreoModel` (`CHOREO_MODEL`) + `choreo.reactToOracle` (`CHOREO_REACT_TO_ORACLE`, default true). `store.ts` gains `choreoFirstPass?: ChoreoScore` on the record + `setChoreoFirstPass`. `app.ts`: `POST /api/visitors/:id/persona` now fires `generateFirstPass` (fire-and-forget, like intake→seeds), and new `GET`/`POST /api/choreo/config` expose the live timing toggle.
+- **Why:** The first-pass must be ready as the reading begins (spec §7); the live toggle lets the timing be flipped during rehearsal without a brain restart (which would wipe the in-memory store). Offline fallbacks keep the project's no-API-key property.
+- **Files/areas:** `apps/brain/src/choreo.ts` (new), `apps/brain/src/config.ts`, `apps/brain/src/store.ts`, `apps/brain/src/app.ts`; tests `apps/brain/test/choreo.test.ts` (new), `store.test.ts` (+2), `endpoints.test.ts` (+2).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test` 83 tests pass.
+- **Docs touched:** this entry.
+
 ## 2026-06-21 — Tier 2 Task 3: choreographer prompt builders (`packages/oracles`)
 
 - **What:** Task 3 of the Tier 2 plan — pure prompt builders for the choreographer agent (no API calls; mirrors `buildPrompt.ts`). New `packages/oracles/src/choreographer.ts` exports `CHOREO_CLARITY_INSTRUCTION` (the §8 "clarity mirror" of the oracle's `ANTI_SLOP_INSTRUCTION`: one concrete, present-tense, immediately-performable cue), `CHOREO_SCORE_INSTRUCTION`, `buildChoreoFirstPassPrompt(survey, archetype) → {system,user}`, `buildChoreoSystemPrompt(survey, archetype, firstPass)`, and `buildChoreoTurnPrompt({visitor, oracle?})` (includes the oracle reply only when the timing mode reacts to it). Exported from the package index.

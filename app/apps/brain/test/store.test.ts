@@ -69,3 +69,15 @@ describe("store milestone stamp + remove", () => {
     expect(store.remove("nope")).toBe(false);
   });
 });
+
+describe("store choreography first-pass", () => {
+  it("stores a choreography first-pass on the record", () => {
+    const v = store.register(NUM());
+    store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] });
+    const out = store.setChoreoFirstPass(v.id, { score: "Enter slowly." });
+    expect(out?.choreoFirstPass?.score).toBe("Enter slowly.");
+  });
+  it("returns undefined for an unknown id", () => {
+    expect(store.setChoreoFirstPass("nope", { score: "x" })).toBeUndefined();
+  });
+});

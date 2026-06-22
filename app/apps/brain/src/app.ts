@@ -11,6 +11,7 @@ import { registerTuning } from "./tuning";
 import { createDispatcher } from "./dispatcher";
 import { transcribeWav } from "./stt";
 import { synthesizeSpeech } from "./tts";
+import { generateFirstPass, getChoreoConfig, setChoreoConfig } from "./choreo";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -53,6 +54,15 @@ export async function buildApp(): Promise<FastifyInstance> {
       req.log.error(err);
       return reply.code(500).send({ error: "tts failed" });
     }
+  });
+
+  // ── choreography: live timing toggle (reactToOracle), §8 ──
+  app.get("/api/choreo/config", async () => getChoreoConfig());
+  const ChoreoConfigBody = z.object({ reactToOracle: z.boolean() });
+  app.post("/api/choreo/config", async (req, reply) => {
+    const parsed = ChoreoConfigBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return setChoreoConfig(parsed.data);
   });
 
   app.get("/api/visitors", async () => store.list());
@@ -112,6 +122,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     const v = store.setArchetype(id, parsed.data.archetype);
     if (!v) return reply.code(404).send({ error: "unknown visitor" });
     bus.publish({ type: "oracle.selected", profileId: v.id, archetype: parsed.data.archetype });
+    // Choreography first-pass = f(intake, archetype), generated now so it's ready as the reading
+    // begins (spec §7). Fire-and-forget, mirroring the intake→seeds transform.
+    void generateFirstPass(v).then((fp) => store.setChoreoFirstPass(v.id, fp));
     return v;
   });
 
