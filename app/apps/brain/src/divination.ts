@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { buildPersona } from "@channelers/oracles";
+import { buildPersona, buildChoreoSystemPrompt } from "@channelers/oracles";
 import {
   DEFAULT_TUNING,
   resolveSampling,
@@ -12,6 +12,7 @@ import {
 import { store } from "./store";
 import { config } from "./config";
 import { getTuning } from "./tuning";
+import { getChoreoConfig, streamCue, stubFirstPass, buildChoreoTurnPrompt, type ChoreoTurn } from "./choreo";
 import type { Bus } from "./bus";
 
 type Turn = { role: "user" | "assistant"; content: string };
@@ -24,6 +25,10 @@ interface Session {
   archetype: string;
   persona: OraclePersona;
   history: Turn[];
+  /** Stable per-session choreographer prefix (intake + archetype + first-pass). */
+  choreoSystemPrompt: string;
+  /** The choreographer's own running history (separate from the oracle's). */
+  choreoHistory: ChoreoTurn[];
   /** Connection currently channelling this session; rebinds on rejoin. Drives the grace reaper. */
   ownerConn: string;
 }
@@ -140,6 +145,11 @@ export function registerDivination(bus: Bus): void {
       return;
     }
 
+    // Choreographer context for the fan-out loop: the first-pass (generated at persona-set) seeds
+    // a stable system prefix; if it never landed (e.g. set before this feature), fall back to a stub.
+    const firstPass = visitor.choreoFirstPass?.score ?? stubFirstPass(visitor.survey, archetypeId).score;
+    const choreoSystemPrompt = buildChoreoSystemPrompt(visitor.survey, archetypeId, firstPass);
+
     const session: Session = {
       id: randomUUID(),
       visitorId,
@@ -147,6 +157,8 @@ export function registerDivination(bus: Bus): void {
       archetype: archetypeId,
       persona,
       history: [],
+      choreoSystemPrompt,
+      choreoHistory: [],
       ownerConn: connId,
     };
     sessions.set(session.id, session);
@@ -204,6 +216,27 @@ export function registerDivination(bus: Bus): void {
     });
   }
 
+  /**
+   * Fan-out consumer (spec §8): a movement cue per turn, on the separate choreo.* feed.
+   * Fire-and-forget — wrapped so a choreo failure NEVER disturbs the oracle turn.
+   */
+  async function runChoreo(session: Session, turn: { visitor: string; oracle?: string }): Promise<void> {
+    const sessionId = session.id;
+    try {
+      const cue = await streamCue(
+        { systemPrompt: session.choreoSystemPrompt, history: session.choreoHistory, ...turn },
+        (chunk) => {
+          if (sessions.has(sessionId)) bus.broadcast({ kind: "choreo.delta", sessionId, text: chunk });
+        },
+      );
+      session.choreoHistory.push({ role: "user", content: buildChoreoTurnPrompt(turn) });
+      session.choreoHistory.push({ role: "assistant", content: cue });
+      if (sessions.has(sessionId)) bus.broadcast({ kind: "choreo.done", sessionId, text: cue });
+    } catch (err) {
+      console.warn("[choreo] turn failed:", err);
+    }
+  }
+
   async function say(sessionId: string, rawText: string, reply: ReplyFn): Promise<void> {
     const session = sessions.get(sessionId);
     const text = rawText.trim();
@@ -216,6 +249,10 @@ export function registerDivination(bus: Bus): void {
     session.history.push({ role: "user", content: text });
     bus.broadcast({ kind: "session.transcript", sessionId, role: "visitor", text });
 
+    const reactToOracle = getChoreoConfig().reactToOracle;
+    // Independent mode: kick the cue off in parallel from the utterance alone.
+    if (!reactToOracle) void runChoreo(session, { visitor: text });
+
     try {
       const full = await streamReply(session, (chunk) => {
         if (sessions.has(sessionId)) bus.broadcast({ kind: "oracle.delta", sessionId, text: chunk });
@@ -223,6 +260,8 @@ export function registerDivination(bus: Bus): void {
       session.history.push({ role: "assistant", content: full });
       bus.broadcast({ kind: "oracle.done", sessionId, text: full });
       bus.broadcast(rosterMsg());
+      // Reactive mode: now that the oracle reply exists, react to utterance + reply.
+      if (reactToOracle) void runChoreo(session, { visitor: text, oracle: full });
     } catch (err) {
       bus.broadcast({ kind: "session.error", sessionId, message: String(err) });
     }

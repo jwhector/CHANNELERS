@@ -239,3 +239,61 @@ describe("choreo first-pass + config", () => {
     await app.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
   });
 });
+
+describe("choreo fan-out (both timings)", () => {
+  let cApp: FastifyInstance;
+  let cPort: number;
+  beforeAll(async () => {
+    cApp = await buildApp();
+    await cApp.listen({ host: "127.0.0.1", port: 0 });
+    cPort = (cApp.server.address() as { port: number }).port;
+  });
+  afterAll(async () => { await cApp.close(); });
+
+  async function oracleReady(n: number): Promise<string> {
+    const v = (await cApp.inject({ method: "POST", url: "/api/register", payload: { number: n } })).json() as { id: string };
+    await cApp.inject({ method: "POST", url: `/api/visitors/${v.id}/intake`,
+      payload: { survey: { name: "Jo", freeText: { lost: "keys" }, phrases: [] } } });
+    await cApp.inject({ method: "POST", url: `/api/visitors/${v.id}/persona`, payload: { archetype: "tree" } });
+    await cApp.inject({ method: "POST", url: `/api/visitors/${v.id}/verify` });
+    return v.id;
+  }
+
+  /** Start a session for visitorId, say one line, resolve with the set of message kinds seen. */
+  function sayAndCollect(visitorId: string): Promise<Set<string>> {
+    return new Promise((resolve, reject) => {
+      const sock = new WebSocket(`ws://127.0.0.1:${cPort}/ws`);
+      const seen = new Set<string>();
+      const timer = setTimeout(() => { sock.close(); resolve(seen); }, 4000);
+      let sid = "";
+      sock.on("open", () => sock.send(JSON.stringify({ kind: "session.start", visitorId })));
+      sock.on("message", (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.kind === "session.started" && m.visitorId === visitorId) {
+          sid = m.sessionId;
+          sock.send(JSON.stringify({ kind: "session.say", sessionId: sid, text: "where do I go" }));
+        }
+        if (m.sessionId && m.sessionId === sid) seen.add(m.kind);
+        if (seen.has("oracle.done") && seen.has("choreo.done")) {
+          clearTimeout(timer); sock.close(); resolve(seen);
+        }
+      });
+      sock.on("error", (e) => { clearTimeout(timer); reject(e); });
+    });
+  }
+
+  it("reactive mode emits both oracle.* and choreo.*", async () => {
+    await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
+    const seen = await sayAndCollect(await oracleReady(9401));
+    expect(seen.has("oracle.done")).toBe(true);
+    expect(seen.has("choreo.delta")).toBe(true);
+    expect(seen.has("choreo.done")).toBe(true);
+  });
+
+  it("independent mode still emits choreo.* (parallel to the oracle)", async () => {
+    await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: false } });
+    const seen = await sayAndCollect(await oracleReady(9402));
+    expect(seen.has("choreo.done")).toBe(true);
+    await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
+  });
+});

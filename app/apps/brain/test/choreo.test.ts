@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { generateFirstPass, getChoreoConfig, setChoreoConfig } from "../src/choreo";
+import { generateFirstPass, getChoreoConfig, setChoreoConfig, streamCue } from "../src/choreo";
 import { store } from "../src/store";
 
 const NUM = () => Math.floor(Math.random() * 1e9);
@@ -22,5 +22,17 @@ describe("choreo live config flag", () => {
     expect(getChoreoConfig().reactToOracle).toBe(true);
     expect(setChoreoConfig({ reactToOracle: false }).reactToOracle).toBe(false);
     expect(getChoreoConfig().reactToOracle).toBe(false);
+  });
+});
+
+describe("choreo live cue (offline stub)", () => {
+  it("streams a deterministic fallback cue and returns the full text", async () => {
+    let streamed = "";
+    const full = await streamCue(
+      { systemPrompt: "sys", history: [], visitor: "where do I go", oracle: "nowhere" },
+      (chunk) => { streamed += chunk; },
+    );
+    expect(full.length).toBeGreaterThan(0);
+    expect(streamed).toBe(full); // every chunk was emitted
   });
 });

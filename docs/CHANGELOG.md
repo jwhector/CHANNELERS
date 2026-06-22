@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — Tier 2 Task 5: live choreography fan-out in `say()` (configurable timing)
+
+- **What:** Task 5 of the Tier 2 plan — the second live AI loop (spec §8). Each `Session` now carries a `choreoSystemPrompt` (built at `session.start` from intake + archetype + the stored first-pass, with a stub fallback) and its own `choreoHistory`. `say()` fans out to a new `runChoreo` consumer that streams `choreo.delta` → `choreo.done` on the separate choreo feed, **fire-and-forget + try/catch so a choreography failure never disturbs the oracle turn**. Timing honors the live `reactToOracle` flag: ON → the cue runs after `oracle.done`, reacting to the utterance **and** the oracle reply; OFF → it runs in parallel from the utterance alone. The offline fallback streams a deterministic cue (no API key required).
+- **Why:** Delivers the per-turn movement cues the tier exists for, with the rehearsal-tunable timing the owner asked for, without coupling the choreo feed to the oracle's latency or reliability.
+- **Files/areas:** `apps/brain/src/divination.ts` (Session choreo context, `runChoreo`, `say()` branch); `apps/brain/src/choreo.ts` (`streamCue`, used here); tests `apps/brain/test/choreo.test.ts` (+1 streamCue), `endpoints.test.ts` (+2 ws fan-out, both timings).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test` 86 tests pass.
+- **Known MVP limits (logged):** the `/choreo` view does not de-multiplex concurrent sessions (cue interleaves with 2+ simultaneous readings — acceptable while the altar is one-at-a-time); choreo cues are ephemeral and not replayed on `session.rejoin`.
+- **Docs touched:** this entry.
+
 ## 2026-06-21 — Tier 2 Task 4: brain choreo engine (first-pass at persona-set, store, live toggle)
 
 - **What:** Task 4 of the Tier 2 plan — the brain-side choreography engine. New `apps/brain/src/choreo.ts`: the live in-memory `reactToOracle` flag (`getChoreoConfig`/`setChoreoConfig`, default from config); `generateFirstPass(visitor)` → an NL `ChoreoScore` via OpenAI (`config.choreoModel`, default gpt-4o) or a deterministic `stubFirstPass` offline/on-error; plus the deterministic `fallbackCue` + `streamCue` live-cue streamer (wired into the divination loop in Task 5). `config.ts` gains `choreoModel` (`CHOREO_MODEL`) + `choreo.reactToOracle` (`CHOREO_REACT_TO_ORACLE`, default true). `store.ts` gains `choreoFirstPass?: ChoreoScore` on the record + `setChoreoFirstPass`. `app.ts`: `POST /api/visitors/:id/persona` now fires `generateFirstPass` (fire-and-forget, like intake→seeds), and new `GET`/`POST /api/choreo/config` expose the live timing toggle.
