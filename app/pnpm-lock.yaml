@@ -32,6 +32,9 @@ importers:
       '@xenova/transformers':
         specifier: ^2.17.2
         version: 2.17.2
+      ableton-osc-bridge:
+        specifier: workspace:*
+        version: link:../../packages/ableton-osc-bridge
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1

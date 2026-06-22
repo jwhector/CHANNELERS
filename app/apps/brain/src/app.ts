@@ -12,6 +12,8 @@ import { createDispatcher } from "./dispatcher";
 import { transcribeWav } from "./stt";
 import { synthesizeSpeech } from "./tts";
 import { generateFirstPass, getChoreoConfig, setChoreoConfig } from "./choreo";
+import { config } from "./config";
+import { initAbleton } from "./ableton";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -22,6 +24,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   const bus = new Bus(app.server);
+  initAbleton(app.server, config.ableton.agentToken, config.ableton.agentPath);
   registerDivination(bus);
   registerTuning(bus);
   const dispatcher = createDispatcher(bus);

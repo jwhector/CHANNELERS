@@ -30,6 +30,11 @@ export const config = {
     host: process.env.OSC_HOST ?? "127.0.0.1",
     port: Number(process.env.OSC_PORT ?? 57121),
   },
+  ableton: {
+    /** Set this to arm the /agent endpoint the venue daemon dials home to. Unset → endpoint off. */
+    agentToken: process.env.ABLETON_AGENT_TOKEN || undefined,
+    agentPath: process.env.ABLETON_AGENT_PATH ?? "/agent",
+  },
   dispatcher: {
     /** Per-station slot capacity (spec §9). Altar slot is held through the whole reading. */
     slots: { intake: 2, bodyscan: 1, altar: 1 } as Record<"intake" | "bodyscan" | "altar", number>,
