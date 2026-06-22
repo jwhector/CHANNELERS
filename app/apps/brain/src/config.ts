@@ -11,6 +11,13 @@ export const config = {
   transformModel: process.env.TRANSFORM_MODEL ?? "gpt-4o",
   // Both default to gpt-4o; override per-role via env (ARCHITECTURE.md §5.3).
   oracleModel: process.env.ORACLE_MODEL ?? "gpt-4o",
+  // OpenAI Whisper STT model for the divination mic (apps/brain/src/stt.ts).
+  // Falls back to the local Xenova transcriber when OPENAI_API_KEY is unset.
+  sttModel: process.env.STT_MODEL ?? "whisper-1",
+  // ElevenLabs TTS for the oracle's voice into the performer's earpiece (apps/brain/src/tts.ts).
+  // When the key is unset the client falls back to browser speechSynthesis.
+  elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
+  elevenLabsModel: process.env.ELEVENLABS_MODEL ?? "eleven_flash_v2_5",
   osc: {
     enabled: process.env.OSC_ENABLED === "true",
     host: process.env.OSC_HOST ?? "127.0.0.1",
