@@ -2,6 +2,8 @@ import { useState } from "react";
 import { SURVEY, type SurveyResponse, type VibeAxis, type VisitorProfile } from "@channelers/shared";
 import { api } from "../lib/api";
 import { CalledGate } from "../components/CalledGate";
+import { CrtShell } from "../components/CrtShell";
+import { SegmentNumber } from "../components/SegmentNumber";
 import { useStationPresence } from "../lib/useStationPresence";
 import { useReleaseToGate } from "../lib/useReleaseToGate";
 
@@ -25,7 +27,15 @@ export function Intake() {
 
   useReleaseToGate(visitor, slot, done, resetKiosk);
 
-  if (!visitor) return <CalledGate station="intake" title="Intake" connected={connected} slot={slot} onArrived={setVisitor} />;
+  const status = connected ? "INTAKE · LIVE" : "INTAKE · NO SIGNAL";
+
+  if (!visitor) {
+    return (
+      <CrtShell statusLabel={status}>
+        <CalledGate station="intake" title="Intake" connected={connected} slot={slot} skin="crt" onArrived={setVisitor} />
+      </CrtShell>
+    );
+  }
 
   async function submit() {
     if (!visitor) return;
@@ -49,63 +59,67 @@ export function Intake() {
 
   if (done) {
     return (
-      <main className="void">
-        <header>
-          <h1>Processed.</h1>
-          <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
-        </header>
-        <p className="dim">
-          Number {visitor.number} — proceed to the Physical Challenge when called.
-        </p>
-      </main>
+      <CrtShell statusLabel={status}>
+        <div className="crt-processed">
+          <p className="crt-eyebrow">● processed</p>
+          <SegmentNumber value={visitor.number} />
+          <p className="crt-sub">proceed to the physical challenge when called</p>
+        </div>
+      </CrtShell>
     );
   }
 
   return (
-    <main className="void form">
-      <header>
-        <h1>Intake</h1>
-        <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
-      </header>
-      <p className="dim">Number {visitor.number}</p>
-      {SURVEY.map((f) => {
-        if (f.kind === "phrase") {
-          return (
-            <section key={f.axis} className="field">
-              <label>{f.label}</label>
-              <div className="choices">
-                {f.options.map((o) => (
-                  <button
-                    key={o}
-                    type="button"
-                    className={phrases[f.axis] === o ? "choice on" : "choice"}
-                    onClick={() => setPhrases((p) => ({ ...p, [f.axis]: o }))}
-                  >
-                    {o}
-                  </button>
-                ))}
+    <CrtShell statusLabel={status}>
+      <div className="win">
+        <div className="win-title">
+          <span>INTAKE.EXE — FORM 7-A</span>
+          <span className="win-controls" aria-hidden>_ □ ✕</span>
+        </div>
+        <div className="win-body">
+          <p className="win-subject">
+            subject no. <SegmentNumber value={visitor.number} className="seg-inline" />
+          </p>
+          {SURVEY.map((f) => {
+            if (f.kind === "phrase") {
+              return (
+                <div key={f.axis} className="win-field-row">
+                  <label>{f.label}</label>
+                  <div className="win-chips">
+                    {f.options.map((o) => (
+                      <button
+                        key={o}
+                        type="button"
+                        className={phrases[f.axis] === o ? "win-chip on" : "win-chip"}
+                        onClick={() => setPhrases((p) => ({ ...p, [f.axis]: o }))}
+                      >
+                        {o}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            const value = f.id === "name" ? name : freeText[f.id] ?? "";
+            const set = (v: string) =>
+              f.id === "name" ? setName(v) : setFreeText((s) => ({ ...s, [f.id]: v }));
+            return (
+              <div key={f.id} className="win-field-row">
+                <label>{f.label}</label>
+                {f.kind === "longtext" ? (
+                  <textarea className="win-field" value={value} placeholder={f.placeholder} onChange={(e) => set(e.target.value)} />
+                ) : (
+                  <input className="win-field" value={value} placeholder={f.placeholder} onChange={(e) => set(e.target.value)} />
+                )}
               </div>
-            </section>
-          );
-        }
-        const value = f.id === "name" ? name : freeText[f.id] ?? "";
-        const set = (v: string) =>
-          f.id === "name" ? setName(v) : setFreeText((s) => ({ ...s, [f.id]: v }));
-        return (
-          <section key={f.id} className="field">
-            <label>{f.label}</label>
-            {f.kind === "longtext" ? (
-              <textarea value={value} placeholder={f.placeholder} onChange={(e) => set(e.target.value)} />
-            ) : (
-              <input value={value} placeholder={f.placeholder} onChange={(e) => set(e.target.value)} />
-            )}
-          </section>
-        );
-      })}
-      {error && <p className="error">{error}</p>}
-      <button className="submit" onClick={() => void submit()} disabled={!name.trim()}>
-        Submit for processing
-      </button>
-    </main>
+            );
+          })}
+          {error && <p className="crt-err">SIGNAL LOST — {error}</p>}
+          <button className="win-btn" onClick={() => void submit()} disabled={!name.trim()}>
+            SUBMIT
+          </button>
+        </div>
+      </div>
+    </CrtShell>
   );
 }

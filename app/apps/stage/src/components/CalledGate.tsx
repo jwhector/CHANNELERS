@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Slot, Station, VisitorProfile } from "@channelers/shared";
 import { api } from "../lib/api";
+import { SegmentNumber } from "./SegmentNumber";
 
 /**
  * Confirm-at-station gate (spec §5). Presentational: presence tracking lives at the
@@ -12,12 +13,15 @@ export function CalledGate({
   connected,
   slot,
   onArrived,
+  skin = "default",
 }: {
   station: Station;
   title: string;
   connected: boolean;
   slot: Slot | undefined;
   onArrived: (visitor: VisitorProfile) => void;
+  /** "crt" renders shell-less CRT content meant to live inside Intake's <CrtShell>. */
+  skin?: "crt" | "default";
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +42,37 @@ export function CalledGate({
     try { await api.arrive(occ.visitorId); }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
+  }
+
+  if (skin === "crt") {
+    return (
+      <>
+        {!slot && (
+          <p className="crt-dim">
+            no slot bound — open with <code>?kiosk=&lt;id&gt;</code>
+          </p>
+        )}
+        {slot && !occ && (
+          <div className="crt-standby">
+            <SegmentNumber value={0} className="seg-dim" />
+            <p className="crt-eyebrow">▮ standby</p>
+            <p className="crt-sub">awaiting designation</p>
+            <span className="crt-mark" aria-hidden>↖ you?</span>
+          </div>
+        )}
+        {occ && occ.phase !== "in_progress" && occ.phase !== "pending" && (
+          <div className="crt-called">
+            <p className="crt-eyebrow">now serving</p>
+            <SegmentNumber value={occ.number} glitch />
+            <button className="crt-iam" disabled={busy} onClick={() => void confirmArrival()}>
+              {busy ? "…" : "I AM"}
+            </button>
+            <p className="crt-sub">confirm to proceed</p>
+          </div>
+        )}
+        {error && <p className="crt-err">SIGNAL LOST — {error}</p>}
+      </>
+    );
   }
 
   return (
