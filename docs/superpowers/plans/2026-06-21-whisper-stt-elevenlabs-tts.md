@@ -4,7 +4,9 @@
 
 **Approach:** STT stays server-side (it already is): the brain's `/api/stt` picks OpenAI Whisper when a key is present, else the existing local Xenova model. TTS becomes a new server-side `/api/tts` ElevenLabs proxy the performer device pulls MP3 from (key stays off the browser); `speak()` plays that MP3 and falls back to browser `speechSynthesis` on 204/error. Voices are per-archetype, mapped in the oracles package; the model defaults favor low latency.
 
-**Tech stack:** TypeScript pnpm monorepo · brain = Fastify + `openai` SDK (already present) + new `@elevenlabs/elevenlabs-js` · stage = Vite/React · tests = vitest (brain: node, first tests in this package; stage: jsdom).
+**Tech stack:** TypeScript pnpm monorepo · brain = Fastify + `openai` SDK (already present) + new `@elevenlabs/elevenlabs-js` · stage = Vite/React · tests = vitest (brain: node, in `apps/brain/test/`; stage: jsdom, co-located in `src/`).
+
+> Implementation note (reconciled post-build): brain tests live in `apps/brain/test/` per its `vitest.config.ts` (`include: ["test/**/*.test.ts"]`) and import from `../src/...`; the `src/*.test.ts` paths below were the original guess. The route test was named `test/tts-route.test.ts` to avoid colliding with the existing `test/endpoints.test.ts`.
 
 ---
 
@@ -77,9 +79,9 @@ These apply to every task:
 **Created**
 - `app/apps/brain/src/tts.ts` — ElevenLabs synthesis: `synthesizeSpeech(text, archetype) → Buffer | null`.
 - `app/packages/oracles/src/voices.ts` — `DEFAULT_VOICE_ID` + `voiceForArchetype(id)` resolver.
-- `app/apps/brain/src/tts.test.ts` — voice resolver + `synthesizeSpeech` (null no-key / Buffer on mock).
-- `app/apps/brain/src/app.test.ts` — `/api/tts` route (204 no-key / `audio/mpeg` synthesized).
-- `app/apps/brain/src/stt.test.ts` — STT dispatch (local no-key / OpenAI on key / OpenAI-error→local).
+- `app/apps/brain/test/tts.test.ts` — voice resolver + `synthesizeSpeech` (null no-key / Buffer on mock).
+- `app/apps/brain/test/tts-route.test.ts` — `/api/tts` route (204 no-key / `audio/mpeg` synthesized).
+- `app/apps/brain/test/stt.test.ts` — STT dispatch (local no-key / OpenAI on key / OpenAI-error→local).
 - `app/apps/stage/src/lib/speech.test.ts` — `speak()` fallback + playback branches.
 
 **Modified**

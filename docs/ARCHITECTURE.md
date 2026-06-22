@@ -235,9 +235,9 @@ The bridge between the body and the system. All in-browser TypeScript:
 
 ## 7. STT / TTS
 
-Both behind a thin interface so we can swap providers:
-- **STT:** start with the browser Web Speech API (free, what they already have); move to a streaming provider (e.g. Deepgram) if the room is too noisy. A close mic on the visitor matters more than the model.
-- **TTS:** ElevenLabs for characterful Oracle voices, or a neutral fast voice when it's only feeding the performer's earpiece (intelligibility > character in whisper mode).
+Both behind a thin interface so we can swap providers, each with an offline fallback (no key / API failure degrades gracefully — see §3):
+- **STT:** the stage records the visitor's mic (`MediaRecorder` → 16 kHz mono WAV) and POSTs to the brain's `/api/stt`. The brain uses the **OpenAI Whisper API** (`STT_MODEL`, default `whisper-1`) when `OPENAI_API_KEY` is set, falling back to a **local Xenova `whisper-tiny.en`** model when unkeyed or on an API error. A close mic on the visitor still matters more than the model; move to a streaming provider (e.g. Deepgram) if the room is too noisy.
+- **TTS:** the oracle's line is spoken via **ElevenLabs** (`ELEVENLABS_MODEL`, default `eleven_flash_v2_5` — low-latency, intelligibility > character in earpiece/whisper mode), proxied through the brain's `/api/tts` so the key stays server-side. **Voices are per-archetype**, mapped as `voiceId` on each persona in `packages/oracles` (stock premade voices for now — retune freely). When `ELEVENLABS_API_KEY` is unset the performer's browser falls back to `speechSynthesis`.
 
 ## 8. WebSocket divination protocol + External integration contract (OSC / WebSocket)
 
