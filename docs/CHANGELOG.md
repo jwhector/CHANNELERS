@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-21 — Tier 2 Task 6: `/choreo` stage view + live timing toggle
+
+- **What:** Task 6 of the Tier 2 plan — the read-only choreography surface. New `apps/stage/src/routes/Choreo.tsx`: `Choreo` (socket-wired route) subscribes to `choreo.delta`/`choreo.done`, accumulates the streaming cue into a big teleprompter line + a 30-entry rolling log, and hosts the operator's **react to oracle reply** checkbox (loads `GET /api/choreo/config` on mount, flips via `POST` on change). Split out a pure `ChoreoDisplay` presentational export for unit-testing without a socket. `api.ts` gains `choreo.config`/`choreo.setConfig`. Route + `SCREENS` entry added in `App.tsx`.
+- **Why:** Gives a way to watch/project the live cues and flip the rehearsal timing from the UI. Final in-ear vs loudspeaker routing stays deferred (open question); this is the verification/projection surface either way.
+- **Files/areas:** `apps/stage/src/routes/Choreo.tsx` (new), `apps/stage/src/routes/Choreo.test.tsx` (new, 2 tests), `apps/stage/src/lib/api.ts`, `apps/stage/src/App.tsx`.
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/stage test` 18 tests pass; `pnpm --filter @channelers/stage build` OK.
+- **Docs touched:** this entry.
+
 ## 2026-06-21 — Tier 2 Task 5: live choreography fan-out in `say()` (configurable timing)
 
 - **What:** Task 5 of the Tier 2 plan — the second live AI loop (spec §8). Each `Session` now carries a `choreoSystemPrompt` (built at `session.start` from intake + archetype + the stored first-pass, with a stub fallback) and its own `choreoHistory`. `say()` fans out to a new `runChoreo` consumer that streams `choreo.delta` → `choreo.done` on the separate choreo feed, **fire-and-forget + try/catch so a choreography failure never disturbs the oracle turn**. Timing honors the live `reactToOracle` flag: ON → the cue runs after `oracle.done`, reacting to the utterance **and** the oracle reply; OFF → it runs in parallel from the utterance alone. The offline fallback streams a deterministic cue (no API key required).

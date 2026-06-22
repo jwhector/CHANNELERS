@@ -40,4 +40,9 @@ export const api = {
     complete: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/complete", { visitorId }),
     remove: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/remove", { visitorId }),
   },
+  choreo: {
+    config: () => fetch("/api/choreo/config").then((r) => json<{ reactToOracle: boolean }>(r)),
+    setConfig: (reactToOracle: boolean) =>
+      post<{ reactToOracle: boolean }>("/api/choreo/config", { reactToOracle }),
+  },
 };
