@@ -1,8 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { buildPersona } from "@channelers/oracles";
-import { type OraclePersona, type WsClientMsg, type WsServerMsg } from "@channelers/shared";
+import {
+  DEFAULT_TUNING,
+  resolveSampling,
+  buildDriftDirective,
+  mangleOutput,
+  type OraclePersona,
+  type WsClientMsg,
+  type WsServerMsg,
+} from "@channelers/shared";
 import { store } from "./store";
 import { config } from "./config";
+import { getTuning } from "./tuning";
 import type { Bus } from "./bus";
 
 type Turn = { role: "user" | "assistant"; content: string };
@@ -221,7 +230,27 @@ export function registerDivination(bus: Bus): void {
 }
 
 async function streamReply(session: Session, onDelta: (chunk: string) => void): Promise<string> {
-  if (!config.openaiApiKey) return fallbackStream(session, onDelta);
+  // Live Altered-State tuning (global). When scope.applyToOracle is off, fall back to the
+  // baseline (today's) behavior; otherwise honor the operator's dials.
+  const tuning = getTuning();
+  const active = tuning.scope.applyToOracle;
+  const mangle = active && tuning.pipeline.outputMangle;
+  // Deterministic per-turn seed for the text pipeline (turn N → same mangle every replay).
+  const seed = session.history.filter((t) => t.role === "assistant").length;
+
+  if (!config.openaiApiKey) {
+    const line = fallbackLine(session);
+    // outputMangle works offline too, so the text pipeline is testable with no API key.
+    if (mangle) {
+      const out = mangleOutput(line, tuning, seed);
+      onDelta(out);
+      return out;
+    }
+    return streamWords(line, onDelta);
+  }
+
+  const sampling = resolveSampling(active ? tuning : DEFAULT_TUNING);
+  const systemPrompt = session.persona.systemPrompt + (active ? buildDriftDirective(tuning) : "");
 
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey: config.openaiApiKey });
@@ -229,11 +258,10 @@ async function streamReply(session: Session, onDelta: (chunk: string) => void): 
   // OpenAI puts the system prompt in the messages array (no separate `system` param).
   const stream = await client.chat.completions.create({
     model: config.oracleModel,
-    max_completion_tokens: 300,
-    temperature: 1,
+    ...sampling,
     stream: true,
     messages: [
-      { role: "system", content: session.persona.systemPrompt },
+      { role: "system", content: systemPrompt },
       ...session.history.map((t) => ({ role: t.role, content: t.content })),
     ],
   });
@@ -242,13 +270,20 @@ async function streamReply(session: Session, onDelta: (chunk: string) => void): 
     const delta = chunk.choices[0]?.delta?.content;
     if (delta) {
       full += delta;
-      onDelta(delta);
+      // When mangling, buffer the whole reply (we transform it before showing it).
+      if (!mangle) onDelta(delta);
     }
+  }
+  if (mangle) {
+    const out = mangleOutput(full, tuning, seed);
+    onDelta(out);
+    return out;
   }
   return full;
 }
 
-async function fallbackStream(session: Session, onDelta: (chunk: string) => void): Promise<string> {
+/** The deterministic offline oracle line (3-turn rotation), no streaming. */
+function fallbackLine(session: Session): string {
   const said = session.history[session.history.length - 1]?.content ?? "";
   const echo = said.split(/\s+/).slice(-3).join(" ");
   const turn = session.history.filter((t) => t.role === "assistant").length;
@@ -257,8 +292,11 @@ async function fallbackStream(session: Session, onDelta: (chunk: string) => void
     `Take a number. What you seek — "${echo}" — was already inside you.`,
     `The forms are processing. "${echo}" is not a question I can stamp today.`,
   ];
-  const line = lines[turn % lines.length] ?? session.persona.openingLine;
+  return lines[turn % lines.length] ?? session.persona.openingLine;
+}
 
+/** Stream a fixed line word-by-word with the original cadence. */
+async function streamWords(line: string, onDelta: (chunk: string) => void): Promise<string> {
   let acc = "";
   for (const word of line.split(" ")) {
     const chunk = acc ? ` ${word}` : word;

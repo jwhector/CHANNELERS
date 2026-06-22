@@ -160,6 +160,8 @@ Engineering notes (grounded against the OpenAI API reference):
 - **Both default to gpt-4o** (configurable); for a lower-latency live loop, a smaller model like **gpt-4o-mini** can be set via `ORACLE_MODEL`.
 - gpt-4o has no separate thinking parameter — no special flag needed to keep the Oracle turn fast.
 
+**Altered-State tuning (operator dials).** Generation is no longer hardcoded. A single global `OracleTuning` (`packages/shared/src/tuning.ts`) is the live control surface, edited from the `/channel` console (`AlteredStateConsole`, operator-only) and held in the brain (`apps/brain/src/tuning.ts`, `getTuning()`). It rides its own `tuning.set`/`tuning.state` WS messages — **kept off the `ShowEvent`/OSC contract**, like dispatcher logistics. It carries: **sampling** (temperature/top_p/penalties/max_tokens), the PHARMAICY-module **effects** vocabulary + an `effectsDriveSampling` toggle that ports the module's `getApiSettings()` nudge, a **preset** label (light→surreal, values copied verbatim from `app/Ayahuasca_v1.3.js` — selecting one loads editable numbers), the opt-in **text pipeline** (`promptDrift` injects an `[ALTERED PERCEPTION]` system-prompt block; `outputMangle` runs the finished reply through ported regex stylists and therefore **buffers** instead of streaming), and **scope** (oracle / transform / both). `resolveSampling(tuning)` clamps to OpenAI-valid ranges. `DEFAULT_TUNING` reproduces the prior behavior exactly (temp 1, pipeline off). The text pipeline also runs on the offline fallback so it's testable with no key. Origin/rationale: §5.5 + spec `docs/superpowers/specs/2026-06-21-altered-state-console.md`.
+
 ### 5.x Visitor dispatcher (confirm-at-station + addressable kiosk slots)
 
 The dispatcher (`apps/brain/src/dispatcher.ts`, `createDispatcher(bus)`) is an in-memory engine that manages visitor flow across the three stations. It runs alongside divination — the Bus multiplexes hooks so both subsystems coexist. (Spec: `docs/superpowers/specs/2026-06-20-dispatch-confirm-and-addressable-slots-design.md`.)
@@ -170,7 +172,7 @@ The dispatcher (`apps/brain/src/dispatcher.ts`, `createDispatcher(bus)`) is an i
 
 **State machine:** `waiting → pending → called → in_progress`, now **pinned to a specific slot** (occupancy is per-slot, not a per-station count). `pending`/`called`/`in_progress` live as the slot's `occupant`; `visitor.location` stays the per-visitor truth (`waiting | called | in_progress` + station), synced to the occupant for `called`/`in_progress`. Completion stamps the station's milestone and frees the slot.
 
-**Two confirms (spec §5):** arrival is an explicit press, not a typed number. (1) **Confirm call** — lobby operator on `/dispatch` (`pending → called`, pinned to the slot; skipped when `autoConfirm`). (2) **Confirm arrival** — station kiosk via `CalledGate` (`called → in_progress`, `POST /api/dispatch/arrive`), which then loads the visitor record and runs the existing station work.
+**Two confirms (spec §5):** arrival is an explicit press, not a typed number. (1) **Confirm call** — lobby operator on `/dispatch` (`pending → called`, pinned to the slot; skipped when `autoConfirm`). (2) **Confirm arrival** — station kiosk via `CalledGate` (`called → in_progress`, `POST /api/dispatch/arrive`), which then loads the visitor record and runs the existing station work. `CalledGate` takes `skin?: "crt" | "default"`: `/intake` opts into the **CRT skin** (amber segmented-LED number + the existential **I AM** confirm, rendered inside `CrtShell`); `/bodyscan` and `/altar` keep the default gate. The whole `/intake` flow (standby · called · survey · processed) is skinned as a DMV-purgatory CRT terminal — see the Intake CRT redesign in `CHANGELOG.md`.
 
 **Selection:** anti-starvation over random among eligible `waiting` visitors not already occupying a slot (eligibility: intake ← missing `intakeAt`; bodyscan ← missing `poseAt`; altar ← `intakeAt` + `poseAt` set, no `sessionEndAt`), `fill()`ing only **free online** slots, gated by:
 - **Warm-up:** pool size ≥ K OR T_warmup elapsed since first registration — avoids dispatching a single lonely visitor.
@@ -233,9 +235,9 @@ The bridge between the body and the system. All in-browser TypeScript:
 
 ## 7. STT / TTS
 
-Both behind a thin interface so we can swap providers:
-- **STT:** start with the browser Web Speech API (free, what they already have); move to a streaming provider (e.g. Deepgram) if the room is too noisy. A close mic on the visitor matters more than the model.
-- **TTS:** ElevenLabs for characterful Oracle voices, or a neutral fast voice when it's only feeding the performer's earpiece (intelligibility > character in whisper mode).
+Both behind a thin interface so we can swap providers, each with an offline fallback (no key / API failure degrades gracefully — see §3):
+- **STT:** the stage records the visitor's mic (`MediaRecorder` → 16 kHz mono WAV) and POSTs to the brain's `/api/stt`. The brain uses the **OpenAI Whisper API** (`STT_MODEL`, default `whisper-1`) when `OPENAI_API_KEY` is set, falling back to a **local Xenova `whisper-tiny.en`** model when unkeyed or on an API error. A close mic on the visitor still matters more than the model; move to a streaming provider (e.g. Deepgram) if the room is too noisy.
+- **TTS:** the oracle's line is spoken via **ElevenLabs** (`ELEVENLABS_MODEL`, default `eleven_flash_v2_5` — low-latency, intelligibility > character in earpiece/whisper mode), proxied through the brain's `/api/tts` so the key stays server-side. **Voices are per-archetype**, mapped as `voiceId` on each persona in `packages/oracles` (stock premade voices for now — retune freely). When `ELEVENLABS_API_KEY` is unset the performer's browser falls back to `speechSynthesis`.
 
 ## 8. WebSocket divination protocol + External integration contract (OSC / WebSocket)
 
@@ -247,6 +249,7 @@ session.start   { visitorId }                        performer claims a visitor
 session.say     { sessionId, text }                  visitor utterance
 session.end     { sessionId }                        end this session
 station.hello   { station, kioskId, slotHint? }      station kiosk identity + slot binding (dispatcher use only)
+tuning.set      { tuning: OracleTuning }             operator edits the global Altered-State tuning (§5.3)
 ```
 
 Brain → client messages:
@@ -261,6 +264,7 @@ session.ended   { sessionId }
 session.error   { sessionId?, visitorId?, message }  targeted to the caller's socket
 event           { event: ShowEvent }                 OSC mirror
 dispatch.state  { slots: Slot[], queue, completed, surplus, stationsOnline, warmedUp }   dispatcher snapshot (screens only)
+tuning.state    { tuning: OracleTuning }             global Altered-State tuning; broadcast on change + on connect (screens only)
 ```
 
 The `roster` message is broadcast on every session change **and** sent to each socket on connect — the lobby (and monitor) are always correct immediately on load or reconnect.

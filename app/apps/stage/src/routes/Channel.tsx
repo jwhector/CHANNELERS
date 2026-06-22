@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { ARCHETYPES, type SessionSummary, type VisitorProfile, type WsServerMsg } from "@channelers/shared";
+import {
+  ARCHETYPES,
+  DEFAULT_TUNING,
+  type OracleTuning,
+  type SessionSummary,
+  type VisitorProfile,
+  type WsServerMsg,
+} from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
-import { speak, createRecognizer, type Recognizer } from "../lib/speech";
+import { speak, stopSpeaking, createRecognizer, type Recognizer } from "../lib/speech";
 import { loadHandle, saveHandle, clearHandle } from "../lib/sessionHandle";
+import { AlteredStateConsole } from "../components/AlteredStateConsole";
 
 type Line = { role: "visitor" | "oracle"; text: string };
 
@@ -33,10 +41,16 @@ export function Channel() {
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
 
+  // Live Altered-State tuning — seeded from the brain's tuning.state broadcast, edited here.
+  const [tuning, setTuning] = useState<OracleTuning>(DEFAULT_TUNING);
+  const tuningTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   const whisperRef = useRef(whisper);
   whisperRef.current = whisper;
   const mySessionIdRef = useRef(mySessionId);
   mySessionIdRef.current = mySessionId;
+  // Archetype of the live session, read inside WS handlers (closures can't see fresh sessionMeta).
+  const archetypeRef = useRef<string | null>(null);
   // sessionId of an in-flight rejoin attempt, so we can recognise its success/failure replies.
   const rejoiningRef = useRef<string | null>(null);
 
@@ -61,6 +75,10 @@ export function Channel() {
         setRoster(m.sessions);
         break;
 
+      case "tuning.state":
+        setTuning(m.tuning);
+        break;
+
       case "session.started":
         // Is this the session we just claimed?
         if (m.visitorId === claiming) {
@@ -73,7 +91,8 @@ export function Channel() {
           setLive("");
           setTeleprompter(m.opening);
           setError(null);
-          if (whisperRef.current) speak(m.opening);
+          archetypeRef.current = m.archetype;
+          if (whisperRef.current) void speak(m.opening, { archetype: m.archetype });
         }
         break;
 
@@ -89,6 +108,7 @@ export function Channel() {
         setLive("");
         setTeleprompter(m.teleprompter);
         setError(null);
+        archetypeRef.current = m.archetype;
         // Intentionally no speak() here — don't blast TTS into the earpiece on a silent reconnect.
         break;
 
@@ -107,12 +127,14 @@ export function Channel() {
         setHistory((h) => [...h, { role: "oracle", text: m.text }]);
         setTeleprompter(m.text);
         setLive("");
-        if (whisperRef.current) speak(m.text);
+        if (whisperRef.current) void speak(m.text, { archetype: archetypeRef.current ?? undefined });
         break;
 
       case "session.ended":
         if (m.sessionId !== mySessionIdRef.current) break;
         clearHandle();
+        stopSpeaking();
+        archetypeRef.current = null;
         setMySessionId(null);
         mySessionIdRef.current = null;
         setSessionMeta(null);
@@ -165,6 +187,13 @@ export function Channel() {
     });
   }
 
+  // Update locally now (snappy sliders), push to the brain debounced.
+  function changeTuning(next: OracleTuning) {
+    setTuning(next);
+    if (tuningTimer.current) clearTimeout(tuningTimer.current);
+    tuningTimer.current = setTimeout(() => send({ kind: "tuning.set", tuning: next }), 150);
+  }
+
   function submit() {
     const t = input.trim();
     if (!t || !mySessionId) return;
@@ -213,6 +242,7 @@ export function Channel() {
             channelling <strong>{sessionMeta.archetype}</strong> for {sessionMeta.visitorName || "—"}
           </p>
         )}
+        <AlteredStateConsole tuning={tuning} onChange={changeTuning} connected={connected} />
         {error && <p className="error">{error}</p>}
 
         <div className="teleprompter">
@@ -265,6 +295,8 @@ export function Channel() {
       </header>
 
       {error && <p className="error">{error}</p>}
+
+      <AlteredStateConsole tuning={tuning} onChange={changeTuning} connected={connected} />
 
       <h3>Available visitors</h3>
       {available.length === 0 && (

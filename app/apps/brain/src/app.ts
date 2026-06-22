@@ -7,8 +7,10 @@ import { store } from "./store";
 import { Bus } from "./bus";
 import { transform } from "./transform";
 import { registerDivination } from "./divination";
+import { registerTuning } from "./tuning";
 import { createDispatcher } from "./dispatcher";
 import { transcribeWav } from "./stt";
+import { synthesizeSpeech } from "./tts";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -20,6 +22,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   const bus = new Bus(app.server);
   registerDivination(bus);
+  registerTuning(bus);
   const dispatcher = createDispatcher(bus);
   app.addHook("onClose", async () => dispatcher.stop());
 
@@ -35,6 +38,20 @@ export async function buildApp(): Promise<FastifyInstance> {
     } catch (err) {
       req.log.error(err);
       return reply.code(500).send({ error: "transcription failed" });
+    }
+  });
+
+  const TtsBody = z.object({ text: z.string().min(1), archetype: z.string() });
+  app.post("/api/tts", async (req, reply) => {
+    const parsed = TtsBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    try {
+      const mp3 = await synthesizeSpeech(parsed.data.text, parsed.data.archetype);
+      if (!mp3) return reply.code(204).send();
+      return reply.type("audio/mpeg").send(mp3);
+    } catch (err) {
+      req.log.error(err);
+      return reply.code(500).send({ error: "tts failed" });
     }
   });
 

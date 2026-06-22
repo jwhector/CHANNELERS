@@ -1,5 +1,6 @@
-import { Seeds, type VisitorProfile } from "@channelers/shared";
+import { Seeds, resolveSampling, type VisitorProfile } from "@channelers/shared";
 import { config } from "./config";
+import { getTuning } from "./tuning";
 
 /**
  * Deterministic fallback so the whole pipeline runs with no API key (and as a safety
@@ -41,9 +42,17 @@ export async function transform(profile: VisitorProfile): Promise<Seeds> {
   try {
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey: config.openaiApiKey });
+    // Aim the Altered-State dials at the seeds transform too, if the operator scoped it here.
+    // High temp can break the JSON — the catch below already degrades to stubSeeds, so it's safe.
+    const tuning = getTuning();
+    const s = resolveSampling(tuning);
+    const sampling = tuning.scope.applyToTransform
+      ? { temperature: s.temperature, top_p: s.top_p, presence_penalty: s.presence_penalty, frequency_penalty: s.frequency_penalty }
+      : {};
     const completion = await client.chat.completions.create({
       model: config.transformModel,
       max_completion_tokens: 1024,
+      ...sampling,
       messages: [
         {
           role: "system",
