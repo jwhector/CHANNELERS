@@ -5,7 +5,7 @@ import type {
   WsServerMsg, WsClientMsg,
 } from "@channelers/shared";
 
-const STATION_ORDER: Station[] = ["intake", "bodyscan", "altar"];
+const STATION_ORDER: Station[] = ["intake", "bodyscan", "altar", "paper"];
 
 export interface DispatcherBus {
   broadcast(msg: WsServerMsg): void;
@@ -62,6 +62,10 @@ export function createDispatcher(
   const nowIso = () => new Date().toISOString();
   const ageMs = (iso: string) => Date.now() - Date.parse(iso);
 
+  // A timed group station (e.g. `paper`): kiosk-less, always-online slots, completed by a dwell
+  // timer from Confirm-call instead of a task milestone (spec 2026-06-22).
+  const isTimed = (s: Station): boolean => !!knobs.timed?.[s];
+
   function addFlag(id: string, ff: DispatchFlag): void {
     const arr = flags.get(id) ?? [];
     if (!arr.some((x) => x.type === ff.type && x.reason === ff.reason)) arr.push(ff);
@@ -72,7 +76,7 @@ export function createDispatcher(
   }
 
   const slotsOf = (station: Station) => [...slots.values()].filter((s) => s.station === station);
-  const isOnline = (s: SlotState) => !!s.connId;
+  const isOnline = (s: SlotState) => isTimed(s.station) || !!s.connId;
   const occupiedVisitorIds = () =>
     new Set([...slots.values()].flatMap((s) => (s.occupant ? [s.occupant.visitorId] : [])));
   const slotOfVisitor = (visitorId: string) =>
@@ -85,6 +89,7 @@ export function createDispatcher(
     if (!v.intakeAt) out.push("intake");
     if (!v.poseAt) out.push("bodyscan");
     if (v.intakeAt && v.poseAt && !v.sessionEndAt) out.push("altar");
+    if (!v.paperAt) out.push("paper"); // non-gating, ungated timed station (spec 2026-06-22)
     return out;
   }
 
