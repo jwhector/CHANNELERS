@@ -1,7 +1,12 @@
 let current: HTMLAudioElement | null = null;
+// Bumped on every stopSpeaking()/speak(); an in-flight speak() captures the value and
+// bails the moment a newer call supersedes it, so two cues arriving within one fetch
+// window can't both reach play() and talk over each other.
+let generation = 0;
 
 /** Stop any in-flight oracle audio — MP3 playback and/or browser speech. */
 export function stopSpeaking(): void {
+  generation++;
   if (current) {
     current.pause();
     current = null;
@@ -31,14 +36,19 @@ export async function speak(
 ): Promise<SpeakResult> {
   if (!text.trim()) return { via: "element" };
   stopSpeaking();
+  const mine = generation; // claimed after the bump above; a newer call moves generation past it
+  const superseded = () => mine !== generation;
   try {
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text, archetype: opts.archetype ?? "" }),
     });
+    if (superseded()) return { via: "element" };
     if (res.ok && res.status !== 204) {
-      const url = URL.createObjectURL(await res.blob());
+      const blob = await res.blob();
+      if (superseded()) return { via: "element" };
+      const url = URL.createObjectURL(blob);
       const audio = new Audio(url) as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
       current = audio;
       const done = () => URL.revokeObjectURL(url);
@@ -50,6 +60,11 @@ export async function speak(
         } catch {
           /* device gone / not permitted — play on default */
         }
+        if (superseded()) {
+          audio.pause();
+          done();
+          return { via: "element" };
+        }
       }
       await audio.play();
       return { via: "element" };
@@ -57,6 +72,7 @@ export async function speak(
   } catch {
     /* network/playback failed — fall through to browser TTS */
   }
+  if (superseded()) return { via: "speechSynthesis" };
   speakViaBrowser(text);
   return { via: "speechSynthesis" };
 }

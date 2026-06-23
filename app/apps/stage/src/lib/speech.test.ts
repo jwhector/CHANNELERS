@@ -69,6 +69,46 @@ test("reports via:speechSynthesis when the brain returns 204 (no keys)", async (
   expect(r).toEqual({ via: "speechSynthesis" });
 });
 
+test("overlapping cues don't double-play — a later speak() preempts an in-flight one", async () => {
+  // Tag each Audio by the cue text so we can see exactly what was played out loud.
+  const played: string[] = [];
+  class FakeAudio {
+    onended: unknown = null;
+    onerror: unknown = null;
+    constructor(public src: string) {}
+    play = vi.fn(async () => {
+      played.push(this.src);
+    });
+    pause = vi.fn();
+  }
+  vi.stubGlobal("Audio", FakeAudio);
+  // The blob carries the cue text; createObjectURL surfaces it as the Audio src.
+  vi.stubGlobal("URL", {
+    createObjectURL: (b: { _text: string }) => b._text,
+    revokeObjectURL: vi.fn(),
+  });
+  // Deferred fetches: both speak() calls reach `await fetch` before either resolves —
+  // exactly the window where the old stopSpeaking()-before-await guard does nothing.
+  const resolvers: Array<() => void> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((_url: string, init: RequestInit) => {
+      const { text } = JSON.parse(init.body as string) as { text: string };
+      return new Promise((resolve) => {
+        resolvers.push(() => resolve({ ok: true, status: 200, blob: async () => ({ _text: text }) }));
+      });
+    }),
+  );
+
+  const first = speak("first cue");
+  const second = speak("second cue");
+  resolvers[0]!(); // first cue's MP3 arrives…
+  resolvers[1]!(); // …then the second cue's, while the first is still settling
+  await Promise.all([first, second]);
+
+  expect(played).toEqual(["second cue"]); // only the latest cue is voiced — no overlap
+});
+
 class FakeRecorder {
   state = "inactive";
   mimeType = "audio/webm";
