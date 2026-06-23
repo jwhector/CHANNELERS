@@ -14,6 +14,7 @@ export const ShowEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("divination.started"), profileId: z.string() }),
   z.object({ type: z.literal("divination.ended"), profileId: z.string() }),
   z.object({ type: z.literal("souvenir.minted"), profileId: z.string(), url: z.string() }),
+  z.object({ type: z.literal("paper.fed"), text: z.string(), fedAt: z.string() }),
 ]);
 export type ShowEvent = z.infer<typeof ShowEvent>;
 export type ShowEventType = ShowEvent["type"];
@@ -28,6 +29,7 @@ export const OSC_ADDRESSES: Record<ShowEventType, string> = {
   "divination.started": "/channelers/divination/started",
   "divination.ended": "/channelers/divination/ended",
   "souvenir.minted": "/channelers/souvenir/minted",
+  "paper.fed": "/channelers/paper/fed",
 };
 
 /** Flatten a ShowEvent into an OSC (address, args) tuple. */
@@ -47,5 +49,7 @@ export function toOsc(event: ShowEvent): { address: string; args: Array<string |
       return { address, args: [event.profileId, event.archetype] };
     case "souvenir.minted":
       return { address, args: [event.profileId, event.url] };
+    case "paper.fed":
+      return { address, args: [event.text, event.fedAt] };
   }
 }
