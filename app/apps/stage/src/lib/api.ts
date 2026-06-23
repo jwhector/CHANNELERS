@@ -27,6 +27,8 @@ export const api = {
   setPersona: (id: string, archetype: string) =>
     post<VisitorProfile>(`/api/visitors/${id}/persona`, { archetype }),
   verifyPose: (id: string) => post<VisitorProfile>(`/api/visitors/${id}/verify`),
+  /** Paper station: send a captured page (data: URL) → OCR → emits paper.fed. Identity-agnostic. */
+  feedPaper: (image: string) => post<{ text: string; fedAt: string }>("/api/paper/feed", { image }),
   /** Confirm-at-station arrival (spec §5): called → in_progress for the slot's occupant. */
   arrive: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/arrive", { visitorId }),
   checkin: (number: number, station: Station) =>
