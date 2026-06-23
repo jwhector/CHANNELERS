@@ -297,4 +297,9 @@ describe("paper: timed group station", () => {
     expect(pd.markComplete(v.id)).toBe(true);
     expect(store.get(v.id)?.paperAt).toBeTruthy();
   });
+
+  it("exposes the paper dwell in the snapshot for the operator countdown", () => {
+    expect(pd.snapshot().timedDwellMs?.paper).toBe(300_000);
+    expect(pd.snapshot().timedDwellMs?.intake).toBeUndefined();
+  });
 });

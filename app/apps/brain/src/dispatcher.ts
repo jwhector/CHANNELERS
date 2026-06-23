@@ -363,12 +363,15 @@ export function createDispatcher(
       altar: slotsOf("altar").some(isOnline),
       paper: slotsOf("paper").some(isOnline),
     };
+    const timedDwellMs: Partial<Record<Station, number>> = {};
+    for (const s of STATION_ORDER) if (isTimed(s)) timedDwellMs[s] = dwellMs(s);
     return {
       slots: slotList,
       queue: queueEntries(),
       completed: completedEntries(),
       surplus: [...surplus.values()],
       stationsOnline,
+      timedDwellMs,
       warmedUp: warmedUp(),
     };
   }

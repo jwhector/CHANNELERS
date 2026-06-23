@@ -92,6 +92,8 @@ export type DispatchState = {
   surplus: { station: Station; kioskId: string }[];
   /** Derived: a station is "up" if ≥1 of its slots is online. */
   stationsOnline: Record<Station, boolean>;
+  /** Dwell (ms) per timed group station, so the operator board can show a remaining-time countdown. */
+  timedDwellMs?: Partial<Record<Station, number>>;
   /** False during the warm-up window (spec §9 of the Tier 3 spec). */
   warmedUp: boolean;
 };

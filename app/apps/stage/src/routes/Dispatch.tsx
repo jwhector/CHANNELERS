@@ -103,7 +103,15 @@ export function Dispatch() {
                       {s.occupant && s.occupant.phase !== "pending" ? (
                         <>
                           <div className="slot-number">#{s.occupant.number}</div>
-                          <div className="dim">{s.occupant.phase} · {elapsed(s.occupant.since)}</div>
+                          <div className="dim">
+                            {s.occupant.phase} · {elapsed(s.occupant.since)}
+                            {(() => {
+                              const dwell = state.timedDwellMs?.[s.station];
+                              if (dwell === undefined) return null;
+                              const rem = Math.max(0, Math.ceil((dwell - (Date.now() - Date.parse(s.occupant!.since))) / 1000));
+                              return <> · <span className="slot-remaining">{rem}s left</span></>;
+                            })()}
+                          </div>
                           <div className="slot-actions">
                             <button className="end" onClick={() => void api.dispatch.repool(s.occupant!.visitorId)}>re-pool</button>
                           </div>
