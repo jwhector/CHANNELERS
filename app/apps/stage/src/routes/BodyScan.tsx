@@ -8,6 +8,8 @@ import { CalledGate } from "../components/CalledGate";
 import { Bar, drawSkeleton } from "../components/poseUI";
 import { useStationPresence } from "../lib/useStationPresence";
 import { useReleaseToGate } from "../lib/useReleaseToGate";
+import { useDevices } from "../lib/devices";
+import { DevicePicker } from "../components/DevicePicker";
 
 type Phase = "ready" | "record" | "saving" | "enrolled";
 
@@ -33,6 +35,7 @@ function Enroll({ visitor, connected, onEnrolled }: { visitor: VisitorProfile; c
   const [holdProgress, setHoldProgress] = useState(0);
   const [framed, setFramed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cam = useDevices("videoinput", "cam.bodyscan", "cam");
 
   const phaseRef = useRef<Phase>("ready");
   const prevVecRef = useRef<PoseVector | null>(null);
@@ -87,7 +90,7 @@ function Enroll({ visitor, connected, onEnrolled }: { visitor: VisitorProfile; c
     if (prog >= 1) { holdStartRef.current = null; void persist(vec); }
   }, [stillness, recordSec]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { videoRef, status, error: camError, start } = usePoseLandmarker(onFrame);
+  const { videoRef, status, error: camError, start } = usePoseLandmarker(onFrame, cam.deviceId);
 
   const prompt = {
     ready: "Press start, then invent a shape only you will remember.",
@@ -129,6 +132,15 @@ function Enroll({ visitor, connected, onEnrolled }: { visitor: VisitorProfile; c
             {phase === "enrolled" ? "Re-record shape" : "Record shape"}
           </button>
         ) : null}
+        <DevicePicker
+          kind="videoinput"
+          label="camera"
+          devices={cam.devices}
+          value={cam.deviceId}
+          onChange={cam.setDeviceId}
+          needsPermission={cam.needsPermission}
+          onEnableLabels={cam.enableLabels}
+        />
       </div>
       {(error || camError) && <p className="error">{error ?? `camera/model error: ${camError}`}</p>}
 

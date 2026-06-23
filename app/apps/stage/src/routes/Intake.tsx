@@ -78,7 +78,7 @@ export function Intake() {
         </div>
         <div className="win-body">
           <p className="win-subject">
-            subject no. <SegmentNumber value={visitor.number} className="seg-inline" />
+            no. <SegmentNumber value={visitor.number} className="seg-inline" />
           </p>
           {SURVEY.map((f) => {
             if (f.kind === "phrase") {

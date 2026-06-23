@@ -17,12 +17,19 @@ function speakViaBrowser(text: string): void {
   window.speechSynthesis.speak(u);
 }
 
+type SpeakResult = { via: "element" | "speechSynthesis" };
+
 /**
- * Speak the oracle's line into the performer's earpiece. Pulls an ElevenLabs MP3 from the brain
- * (/api/tts, per-archetype voice); on 204 (no key) or any error, falls back to browser TTS.
+ * Speak the oracle's line into the performer's earpiece. Pulls an MP3 from the brain
+ * (/api/tts; ElevenLabs or OpenAI voice); on 204 (no keys) or any error, falls back to
+ * browser TTS. Pass `sinkId` to route the MP3 to a chosen output device (setSinkId);
+ * the speechSynthesis fallback cannot be routed, hence the `via` in the result.
  */
-export async function speak(text: string, opts: { archetype?: string } = {}): Promise<void> {
-  if (!text.trim()) return;
+export async function speak(
+  text: string,
+  opts: { archetype?: string; sinkId?: string } = {},
+): Promise<SpeakResult> {
+  if (!text.trim()) return { via: "element" };
   stopSpeaking();
   try {
     const res = await fetch("/api/tts", {
@@ -32,18 +39,26 @@ export async function speak(text: string, opts: { archetype?: string } = {}): Pr
     });
     if (res.ok && res.status !== 204) {
       const url = URL.createObjectURL(await res.blob());
-      const audio = new Audio(url);
+      const audio = new Audio(url) as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
       current = audio;
       const done = () => URL.revokeObjectURL(url);
       audio.onended = done;
       audio.onerror = done;
+      if (opts.sinkId && typeof audio.setSinkId === "function") {
+        try {
+          await audio.setSinkId(opts.sinkId);
+        } catch {
+          /* device gone / not permitted — play on default */
+        }
+      }
       await audio.play();
-      return;
+      return { via: "element" };
     }
   } catch {
     /* network/playback failed — fall through to browser TTS */
   }
   speakViaBrowser(text);
+  return { via: "speechSynthesis" };
 }
 
 export interface Recognizer {

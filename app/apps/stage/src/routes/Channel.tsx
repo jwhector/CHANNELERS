@@ -12,6 +12,8 @@ import { useBrainSocket } from "../lib/useBrainSocket";
 import { speak, stopSpeaking, createRecognizer, type Recognizer } from "../lib/speech";
 import { loadHandle, saveHandle, clearHandle } from "../lib/sessionHandle";
 import { AlteredStateConsole } from "../components/AlteredStateConsole";
+import { useDevices } from "../lib/devices";
+import { DevicePicker } from "../components/DevicePicker";
 
 type Line = { role: "visitor" | "oracle"; text: string };
 
@@ -44,6 +46,11 @@ export function Channel() {
   // Live Altered-State tuning — seeded from the brain's tuning.state broadcast, edited here.
   const [tuning, setTuning] = useState<OracleTuning>(DEFAULT_TUNING);
   const tuningTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Earpiece output device (Scarlett feed). Per-tab so each performer window routes its own TTS.
+  const out = useDevices("audiooutput", "out.channel", "out");
+  const outRef = useRef(out.deviceId);
+  outRef.current = out.deviceId;
 
   const whisperRef = useRef(whisper);
   whisperRef.current = whisper;
@@ -92,7 +99,7 @@ export function Channel() {
           setTeleprompter(m.opening);
           setError(null);
           archetypeRef.current = m.archetype;
-          if (whisperRef.current) void speak(m.opening, { archetype: m.archetype });
+          if (whisperRef.current) void speak(m.opening, { archetype: m.archetype, sinkId: outRef.current });
         }
         break;
 
@@ -127,7 +134,8 @@ export function Channel() {
         setHistory((h) => [...h, { role: "oracle", text: m.text }]);
         setTeleprompter(m.text);
         setLive("");
-        if (whisperRef.current) void speak(m.text, { archetype: archetypeRef.current ?? undefined });
+        if (whisperRef.current)
+          void speak(m.text, { archetype: archetypeRef.current ?? undefined, sinkId: outRef.current });
         break;
 
       case "session.ended":
@@ -234,6 +242,15 @@ export function Channel() {
           <label className="toggle">
             <input type="checkbox" checked={whisper} onChange={(e) => setWhisper(e.target.checked)} /> whisper (TTS)
           </label>
+          <DevicePicker
+            kind="audiooutput"
+            label="earpiece"
+            devices={out.devices}
+            value={out.deviceId}
+            onChange={out.setDeviceId}
+            needsPermission={out.needsPermission}
+            onEnableLabels={out.enableLabels}
+          />
           <button className="end" onClick={endSession}>End</button>
         </header>
 
@@ -292,6 +309,15 @@ export function Channel() {
             {roster.length} active
           </span>
         )}
+        <DevicePicker
+          kind="audiooutput"
+          label="earpiece"
+          devices={out.devices}
+          value={out.deviceId}
+          onChange={out.setDeviceId}
+          needsPermission={out.needsPermission}
+          onEnableLabels={out.enableLabels}
+        />
       </header>
 
       {error && <p className="error">{error}</p>}

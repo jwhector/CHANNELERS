@@ -20,7 +20,16 @@ const MODEL_URL =
 
 export type PoseStatus = "idle" | "loading" | "running" | "error";
 
-export function usePoseLandmarker(onFrame: (lms: Landmark[] | null, tMs: number) => void) {
+/** Video constraints for the pose webcam; pins an exact camera when a deviceId is chosen. */
+export function buildVideoConstraints(deviceId?: string): MediaTrackConstraints {
+  const base: MediaTrackConstraints = { width: 1280, height: 720 };
+  return deviceId ? { ...base, deviceId: { exact: deviceId } } : base;
+}
+
+export function usePoseLandmarker(
+  onFrame: (lms: Landmark[] | null, tMs: number) => void,
+  deviceId?: string,
+) {
   const [status, setStatus] = useState<PoseStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -46,6 +55,22 @@ export function usePoseLandmarker(onFrame: (lms: Landmark[] | null, tMs: number)
     rafRef.current = requestAnimationFrame(loop);
   }, []);
 
+  // The currently-acquired camera, so the live-swap effect knows when deviceId actually changed.
+  const activeDeviceRef = useRef<string | undefined>(undefined);
+
+  const acquire = useCallback(async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: buildVideoConstraints(deviceId),
+      audio: false,
+    });
+    activeDeviceRef.current = deviceId;
+    const video = videoRef.current;
+    if (!video) throw new Error("video element not mounted");
+    (video.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop());
+    video.srcObject = stream;
+    await video.play();
+  }, [deviceId]);
+
   const start = useCallback(async () => {
     if (status === "loading" || status === "running") return;
     setStatus("loading");
@@ -59,21 +84,24 @@ export function usePoseLandmarker(onFrame: (lms: Landmark[] | null, tMs: number)
           numPoses: 1,
         });
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720 },
-        audio: false,
-      });
-      const video = videoRef.current;
-      if (!video) throw new Error("video element not mounted");
-      video.srcObject = stream;
-      await video.play();
+      await acquire();
       setStatus("running");
       rafRef.current = requestAnimationFrame(loop);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStatus("error");
     }
-  }, [status, loop]);
+  }, [status, loop, acquire]);
+
+  // Switch cameras live when the chosen deviceId changes mid-session.
+  useEffect(() => {
+    if (status === "running" && activeDeviceRef.current !== deviceId) {
+      void acquire().catch((err) => {
+        setError(err instanceof Error ? err.message : String(err));
+        setStatus("error");
+      });
+    }
+  }, [deviceId, status, acquire]);
 
   // Tear down on unmount: stop the loop, release the camera, free the model.
   useEffect(() => {

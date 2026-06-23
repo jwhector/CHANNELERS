@@ -43,3 +43,28 @@ test("falls back to browser TTS when the fetch rejects", async () => {
   await speak("hello", { archetype: "tree" });
   expect(speakSpy).toHaveBeenCalledTimes(1);
 });
+
+test("routes the MP3 to the chosen sink and reports via:element", async () => {
+  const setSinkId = vi.fn().mockResolvedValue(undefined);
+  const playSpy = vi.fn().mockResolvedValue(undefined);
+  class FakeAudio {
+    onended: unknown = null;
+    onerror: unknown = null;
+    constructor(public src: string) {}
+    play = playSpy;
+    pause = vi.fn();
+    setSinkId = setSinkId;
+  }
+  vi.stubGlobal("Audio", FakeAudio);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob() }));
+  const r = await speak("hello", { archetype: "tree", sinkId: "iem-2" });
+  expect(setSinkId).toHaveBeenCalledWith("iem-2");
+  expect(playSpy).toHaveBeenCalledTimes(1);
+  expect(r).toEqual({ via: "element" });
+});
+
+test("reports via:speechSynthesis when the brain returns 204 (no keys)", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 204 }));
+  const r = await speak("hello", { sinkId: "iem-2" });
+  expect(r).toEqual({ via: "speechSynthesis" });
+});
