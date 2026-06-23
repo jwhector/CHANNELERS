@@ -1,0 +1,122 @@
+import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import {
+  OBJECTS,
+  ROOT,
+  type ObjectSpec,
+  type PropSpec,
+  type MethodSpec,
+  type ValueType,
+} from "../src/manifest";
+
+const tsType = (t: ValueType): string => (t === "int" ? "number" : t);
+const unwrapFn = (t: ValueType): string =>
+  t === "boolean" ? "bool" : t === "string" ? "str" : t === "string[]" ? "strs" : t === "number[]" ? "nums" : "num";
+const coerce = (t: ValueType, v: string): string => (t === "boolean" ? `(${v} ? 1 : 0)` : v);
+
+function idFieldsExpr(obj: ObjectSpec): string {
+  return `[${obj.idParams.map((ip) => `this.${ip.name}`).join(", ")}]`;
+}
+
+function emitProp(obj: ObjectSpec, key: string, spec: PropSpec): string {
+  const base = `/live/${obj.osc}`;
+  const offset = obj.idParams.length;
+  const t = tsType(spec.type);
+  const fn = unwrapFn(spec.type);
+  const unwrap = `${fn}(a, ${offset})`;
+  const parts: string[] = [];
+  if (spec.get) parts.push(`get: (timeoutMs?: number): Promise<${t}> => p.query("${base}/get/${spec.osc}", id, timeoutMs).then((a) => ${unwrap}),`);
+  if (spec.set) parts.push(`set: (v: ${t}): void => p.send("${base}/set/${spec.osc}", [...id, ${coerce(spec.type, "v")}]),`);
+  if (spec.listen) parts.push(`subscribe: (cb: (v: ${t}) => void): Subscription => p.subscribe("${base}/start_listen/${spec.osc}", id, (a) => cb(${unwrap})),`);
+  const doc = spec.doc ? `${spec.doc} · ` : "";
+  return `  /** ${doc}OSC \`${base}/{get,set}/${spec.osc}\` */
+  get ${key}() {
+    const p = this.p; const id: OscArg[] = ${idFieldsExpr(obj)};
+    return {
+      ${parts.join("\n      ")}
+    };
+  }`;
+}
+
+function emitMethod(obj: ObjectSpec, key: string, spec: MethodSpec): string {
+  const addr = `/live/${obj.osc}/${spec.osc}`;
+  const params = spec.params ?? [];
+  const decl = params.map((p) => `${p.name}: ${tsType(p.type)}`).join(", ");
+  const extra = params.length ? ", " + params.map((p) => p.name).join(", ") : "";
+  const doc = spec.doc ? `${spec.doc} · ` : "";
+  return `  /** ${doc}OSC \`${addr}\` */
+  ${key}(${decl}): void {
+    const id: OscArg[] = ${idFieldsExpr(obj)};
+    this.p.send("${addr}", [...id${extra}]);
+  }`;
+}
+
+function emitChildAccessor(obj: ObjectSpec, child: NonNullable<ObjectSpec["children"]>[number]): string {
+  const childClass = OBJECTS[child.object].className;
+  const parentIds = obj.idParams.map((ip) => `this.${ip.name}`).join(", ");
+  const lead = parentIds ? parentIds + ", " : "";
+  return `  /** ${child.object} ${child.idParam.name} */
+  ${child.accessor}(${child.idParam.name}: ${child.idParam.tsType}): ${childClass} {
+    return new ${childClass}(this.p, ${lead}${child.idParam.name});
+  }`;
+}
+
+function emitClass(obj: ObjectSpec): string {
+  const ctorIds = obj.idParams.map((ip) => `private ${ip.name}: ${ip.tsType}`).join(", ");
+  const ctor = obj.idParams.length ? `constructor(private p: VerbProvider, ${ctorIds}) {}` : `constructor(private p: VerbProvider) {}`;
+  const members: string[] = [];
+  for (const [k, m] of Object.entries(obj.methods ?? {})) members.push(emitMethod(obj, k, m));
+  for (const c of obj.children ?? []) members.push(emitChildAccessor(obj, c));
+  for (const [k, p] of Object.entries(obj.props)) members.push(emitProp(obj, k, p));
+  return `export class ${obj.className} {
+  ${ctor}
+${members.join("\n\n")}
+}`;
+}
+
+function emitLive(): string {
+  const lines: string[] = [];
+  // Singleton fields are declared then assigned in the constructor body so `this.p`
+  // is initialized first (target ES2022 → useDefineForClassFields runs field
+  // initializers before constructor-parameter properties are assigned).
+  for (const s of ROOT.singletons) lines.push(`  readonly ${s.accessor}: ${OBJECTS[s.object].className};`);
+  const ctorBody = ROOT.singletons.map((s) => `    this.${s.accessor} = new ${OBJECTS[s.object].className}(p);`).join("\n");
+  lines.push(`  constructor(private p: VerbProvider) {\n${ctorBody}\n  }`);
+  for (const f of ROOT.factories) {
+    const decl = f.idParams.map((ip) => `${ip.name}: ${ip.tsType}`).join(", ");
+    const args = f.idParams.map((ip) => ip.name).join(", ");
+    lines.push(`  ${f.accessor}(${decl}): ${OBJECTS[f.object].className} { return new ${OBJECTS[f.object].className}(this.p, ${args}); }`);
+  }
+  lines.push(`  get master(): Track { return new Track(this.p, "master"); }`);
+  lines.push(`  returnTrack(prefix: string): Track { return new Track(this.p, prefix); }`);
+  lines.push(`  readonly raw = {
+    send: (address: string, args?: OscArg[]): void => this.p.send(address, args),
+    query: (address: string, args?: OscArg[], timeoutMs?: number): Promise<OscArg[]> => this.p.query(address, args, timeoutMs),
+    subscribe: (address: string, args: OscArg[], cb: (args: OscArg[]) => void): Subscription => this.p.subscribe(address, args, cb),
+  };`);
+  return `export class Live {\n${lines.join("\n")}\n}`;
+}
+
+export function generateFacadeSource(): string {
+  const header = `// AUTO-GENERATED by scripts/generate-facade.ts — do not edit by hand.
+// Regenerate with: pnpm --filter ableton-osc-bridge generate
+import type { OscArg, Subscription, VerbProvider } from "../transport";
+
+const num = (a: OscArg[], i: number): number => Number(a[i]);
+const str = (a: OscArg[], i: number): string => String(a[i]);
+const bool = (a: OscArg[], i: number): boolean => Number(a[i]) === 1;
+const nums = (a: OscArg[], i: number): number[] => a.slice(i).map(Number);
+const strs = (a: OscArg[], i: number): string[] => a.slice(i).map(String);
+`;
+  const classes = Object.values(OBJECTS).map(emitClass);
+  return [header, ...classes, emitLive()].join("\n\n") + "\n";
+}
+
+// --- file-writing entry (not imported by the package/tests) ---
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const out = join(here, "..", "src", "facade", "generated.ts");
+  writeFileSync(out, generateFacadeSource());
+  console.log(`wrote ${out}`);
+}

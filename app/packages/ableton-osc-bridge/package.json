@@ -1,0 +1,36 @@
+{
+  "name": "ableton-osc-bridge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client/index.ts",
+    "./host": "./src/host.ts",
+    "./protocol": "./src/protocol.ts"
+  },
+  "bin": {
+    "ableton-bridge": "./src/cli.ts"
+  },
+  "scripts": {
+    "serve": "tsx src/cli.ts serve",
+    "repl": "tsx src/cli.ts repl",
+    "ping": "tsx src/cli.ts test",
+    "generate": "tsx scripts/generate-facade.ts",
+    "dev": "tsx watch src/cli.ts serve",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "node-osc": "^9.1.4",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.1",
+    "vitest": "^2.1.8"
+  }
+}

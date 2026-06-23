@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ableton-osc-bridge playground</title>
+  <style>
+    body { font: 14px/1.4 ui-monospace, monospace; margin: 0; background: #111; color: #ddd; }
+    header { padding: 8px 12px; background: #1c1c1c; display: flex; gap: 12px; align-items: center; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #844; display: inline-block; }
+    .dot.up { background: #4a4; }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px; }
+    section { background: #181818; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px; }
+    h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #888; margin: 0 0 8px; }
+    input, button { font: inherit; background: #222; color: #ddd; border: 1px solid #333; border-radius: 4px; padding: 4px 6px; }
+    button { cursor: pointer; }
+    #log { grid-column: 1 / 3; height: 240px; overflow: auto; white-space: pre-wrap; }
+    .out { color: #6cf; } .in { color: #9d9; } .err { color: #f88; }
+    .readout { font-size: 20px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="dot" id="conn"></span> <span id="connlabel">connecting…</span>
+    <span class="dot" id="ableton"></span> <span>Ableton</span>
+  </header>
+  <main>
+    <section>
+      <h2>Send / Query</h2>
+      <div><input id="addr" size="40" placeholder="/live/song/get/tempo" /></div>
+      <div style="margin-top:6px"><input id="args" size="40" placeholder="args, comma-separated" /></div>
+      <div style="margin-top:6px">
+        <button id="send">Send</button>
+        <button id="query">Query</button>
+        <button id="ping">/live/test</button>
+      </div>
+    </section>
+    <section>
+      <h2>Subscribe</h2>
+      <div><input id="sub" size="40" value="/live/song/start_listen/beat" /></div>
+      <div style="margin-top:6px"><button id="subscribe">Subscribe</button></div>
+      <div style="margin-top:10px">beat: <span class="readout" id="beat">–</span></div>
+      <div>last event: <span id="lastevent">–</span></div>
+    </section>
+    <section id="log"></section>
+  </main>
+  <script>
+    const log = (cls, msg) => {
+      const el = document.getElementById("log");
+      const line = document.createElement("div");
+      line.className = cls; line.textContent = msg;
+      el.appendChild(line); el.scrollTop = el.scrollHeight;
+    };
+    const params = new URLSearchParams(location.search);
+    const token = params.get("token");
+    const wsUrl = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws" + (token ? "?token=" + encodeURIComponent(token) : "");
+    let ws, nextId = 0;
+    const newId = () => "p" + (++nextId);
+    const parseArgs = (s) => s.split(",").map((x) => x.trim()).filter(Boolean).map((x) => (isNaN(Number(x)) ? x : Number(x)));
+
+    function connect() {
+      ws = new WebSocket(wsUrl);
+      ws.onopen = () => { document.getElementById("conn").classList.add("up"); document.getElementById("connlabel").textContent = "connected"; };
+      ws.onclose = () => { document.getElementById("conn").classList.remove("up"); document.getElementById("connlabel").textContent = "disconnected — retrying"; setTimeout(connect, 1000); };
+      ws.onmessage = (ev) => {
+        const m = JSON.parse(ev.data);
+        if (m.kind === "reply") log("in", "reply " + JSON.stringify(m.args));
+        else if (m.kind === "error") log("err", "error " + m.message);
+        else if (m.kind === "status") document.getElementById("ableton").classList.toggle("up", m.ableton === "up");
+        else if (m.kind === "event") {
+          document.getElementById("lastevent").textContent = m.address + " " + JSON.stringify(m.args);
+          if (m.address.endsWith("/get/beat")) document.getElementById("beat").textContent = m.args[m.args.length - 1];
+          log("in", "event " + m.address + " " + JSON.stringify(m.args));
+        }
+      };
+    }
+    connect();
+
+    const send = (msg) => { ws.send(JSON.stringify(msg)); log("out", msg.kind + " " + (msg.address || "")); };
+    document.getElementById("send").onclick = () => send({ id: newId(), kind: "send", address: document.getElementById("addr").value, args: parseArgs(document.getElementById("args").value) });
+    document.getElementById("query").onclick = () => send({ id: newId(), kind: "query", address: document.getElementById("addr").value, args: parseArgs(document.getElementById("args").value) });
+    document.getElementById("ping").onclick = () => send({ id: newId(), kind: "send", address: "/live/test", args: [] });
+    document.getElementById("subscribe").onclick = () => send({ id: newId(), kind: "subscribe", subId: "sub-" + newId(), address: document.getElementById("sub").value, args: [] });
+  </script>
+</body>
+</html>

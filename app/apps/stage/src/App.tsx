@@ -4,11 +4,12 @@ import { BodyScan } from "./routes/BodyScan";
 import { Altar } from "./routes/Altar";
 import { Console } from "./routes/Console";
 import { Channel } from "./routes/Channel";
+import { Choreo } from "./routes/Choreo";
 import { Board } from "./routes/Board";
 import { Dispatch } from "./routes/Dispatch";
 import { Souvenir } from "./routes/Souvenir";
 
-const SCREENS = ["intake", "bodyscan", "altar", "channel", "console", "board", "dispatch", "souvenir"] as const;
+const SCREENS = ["intake", "bodyscan", "altar", "channel", "choreo", "console", "board", "dispatch", "souvenir"] as const;
 
 export function App() {
   return (
@@ -19,6 +20,7 @@ export function App() {
         <Route path="/bodyscan" element={<BodyScan />} />
         <Route path="/altar" element={<Altar />} />
         <Route path="/channel" element={<Channel />} />
+        <Route path="/choreo" element={<Choreo />} />
         <Route path="/console" element={<Console />} />
         <Route path="/board" element={<Board />} />
         <Route path="/dispatch" element={<Dispatch />} />

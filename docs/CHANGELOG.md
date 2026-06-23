@@ -13,6 +13,152 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-22 — Cloud single-origin deployment: Brain serves the stage build + WS keepalive + Fly config
+
+- **What:** Made the Brain deployable as **one HTTPS origin** that serves the stage's Vite build alongside `/api` + `/ws`, so every screen (5–6 kiosks, `/console`, `/channel`, `/board`, `/dispatch`, `/souvenir`) reaches it over the venue's internet — no LAN peer-to-peer. Added `@fastify/static` with an **SPA fallback** (`setNotFoundHandler` → `index.html` for client-routed GETs; `/api` stays JSON 404, `/ws` untouched), env-gated by `SERVE_STAGE` (off in dev — Vite proxies — on in the container), with a `buildApp({serveStage, stageDist})` opts seam for tests. Added a WebSocket **keepalive** in the Bus (`pingTick()` isAlive/pong + terminate-dead, interval `WS_HEARTBEAT_MS` default 30s, `unref`'d, `dispose()` wired to Fastify `onClose`) so venue/campus proxies don't reap idle sockets and half-open connections get detected. Shipped the container + platform config: `Dockerfile` (app/ context — install, build the stage, run the Brain via tsx), `.dockerignore`, `fly.toml` (one always-on machine: `min_machines_running=1`, no auto-stop, because the store is in memory; `force_https` → wss), and a `DEPLOY.md` runbook.
+- **Why:** Jared committed to **cloud single-origin** (everything remotely accessible). The show runs at a university where LAN shenanigans are limited and outbound 443 is the reliable path; the dial-home Ableton bridge already lets venue gear reach a cloud Brain. Single-origin is the natural fit because the stage talks to the Brain over hard-relative `/api` + `/ws` (no configurable base URL).
+- **Files/areas:** `apps/brain/src/{app,bus,config}.ts`, `apps/brain/package.json` (+`@fastify/static`), tests `apps/brain/test/{static,keepalive}.test.ts` (+`test/fixtures/stage-dist/`); `app/{Dockerfile,.dockerignore,fly.toml,DEPLOY.md,.env.example}`.
+- **Verification:** `pnpm -r typecheck` clean; brain **95** / stage **18** / bridge **59** tests pass (TDD: static + keepalive written test-first, watched fail). Local production smoke (`SERVE_STAGE=true … pnpm start`) serves `/intake` (SPA shell), `/assets/*` (real built JS), `/api/health` (JSON), and 404s `/api/*` as JSON. **Not run here:** the Docker image build itself.
+- **Open / next:** pick the Fly region nearest the venue; a venue-side **OSC relay for Anna/Jeff** (generic OSC out, mirroring the Ableton dial-home — cloud can't UDP into the LAN); **state is volatile across redeploys** (acceptable for the workshop — don't redeploy mid-show).
+- **Docs touched:** this entry; `ARCHITECTURE.md` §12; `app/CLAUDE.md`; `app/.env.example`; new `app/DEPLOY.md`.
+
+## 2026-06-22 — ableton-osc-bridge Plan C: cloud-Brain dial-home (host + Brain /agent)
+
+- **What:** Completed the daemon-dials-home topology. Extracted a transport-agnostic `ChannelController` (client refactored onto it, API unchanged) and added `createBridgeHost()` (`ableton-osc-bridge/host`) — the controller that accepts the daemon's inbound socket and exposes a stable typed `Live` (replays subscriptions on reconnect; queries reject fast while disconnected; latest connection wins). Wired into the Brain as a token-gated `/agent` WS endpoint (`apps/brain/src/ableton.ts`, env `ABLETON_AGENT_TOKEN`, off by default) with `getLive()`. Daemon unchanged — it already dials home. Proven end-to-end by a loopback test using the real `dialHome()`.
+- **Why:** The Brain is planned to run in the cloud while Ableton is at the venue behind NAT; the daemon must dial out to the Brain (the WS server). (Spec §6; ARCHITECTURE §12.)
+- **Files/areas:** `app/packages/ableton-osc-bridge/src/{controller,host}.ts`, `client/index.ts`, `index.ts`, `package.json`, tests; `app/apps/brain/src/{ableton,config,app}.ts` + test.
+- **Verification:** bridge `test`+`typecheck` green; brain `test`+`typecheck` green.
+- **Open / next:** the event→Ableton *mapping* (which show moments drive Live) is the remaining creative step; cloud-deployment decision still open (ARCHITECTURE §12).
+- **Docs touched:** this entry; spec §4/§6/§15; package README; `app/CLAUDE.md`; `ARCHITECTURE.md` §12.
+
+## 2026-06-22 — docs: fix stale "§11" team-questions pointer → §12
+
+- **What:** The team-questions section is `ARCHITECTURE.md` **§12 "Open questions for the team"**, but several pointers still said §11 (which is now "Side-tasks for Anna's student"). Fixed all six: `CLAUDE.md` (×2), `docs/CLAUDE.md` (×2), and the internal `ARCHITECTURE.md` cross-refs at §5.5 and §9-ext. Left the unrelated `(§11)` near §5.6's `/console` mention alone.
+- **Why:** Stale pointers send future sessions (and the team) to the wrong section; the section drifted from §11 → §12 as the doc grew.
+- **Files/areas:** `CLAUDE.md`, `docs/CLAUDE.md`, `docs/ARCHITECTURE.md`.
+- **Docs touched:** this entry.
+
+## 2026-06-22 — ARCHITECTURE §12: cloud-Brain shift + ableton-osc-bridge note
+
+- **What:** Added an "Open questions for the team" entry recording that the Brain is now planned to run in the **cloud** (a deviation from the documented "local Show Brain"), with the team question of whether that's committed, and a pointer to the new decoupled `ableton-osc-bridge` package (venue daemon dials home; raw OSC stays on the LAN; Brain↔bridge wiring deferred).
+- **Why:** A cloud Brain ripples through stage-screen connections, the live-oracle latency budget, and offline-resilience — it needs to be visible to the team, not buried in the bridge spec. (CLAUDE.md: new questions go in ARCHITECTURE, not a new file. Note: the team-questions section is **§12**, not §11 — the CLAUDE.md "§11" pointer is stale.)
+- **Files/areas:** `docs/ARCHITECTURE.md` §12.
+- **Note:** A stray 1-line copy edit in `app/apps/stage/src/routes/Intake.tsx` ("subject no." → "no.") is present in the working tree but was **not** authored by this session's bridge work — left untouched (not committed, not reverted).
+- **Docs touched:** this entry; `ARCHITECTURE.md`.
+
+## 2026-06-22 — Built ableton-osc-bridge typed facade (Plan B)
+
+- **What:** Added the comprehensive, fully typed facade on top of Plan A's `VerbProvider` seam: a curated `manifest.ts` of the AbletonOSC surface, a generator (`scripts/generate-facade.ts`) emitting `src/facade/generated.ts` with per-member JSDoc (doc + OSC address), `createLive(provider)`, a drift-guard test, and full coverage transcribed from the readme. `live.track(2).volume.set(…)`, `live.clip(0,0).fire()`, `live.song.beat.subscribe(…)` work identically over the local core and the network client; `live.raw.*` is the escape hatch.
+- **Why:** Maximal DX so getting Ableton to behave takes minimal application-specific wiring (Jared's call; spec §2/§5).
+- **Files/areas:** `app/packages/ableton-osc-bridge/src/manifest.ts`, `scripts/generate-facade.ts`, `src/facade/**`. Branch `ableton-osc-bridge`.
+- **Verification:** `pnpm --filter ableton-osc-bridge test` + `typecheck` green (incl. facade behavior matrix + drift guard).
+- **Docs touched:** this entry; package `README.md`.
+
+## 2026-06-22 — ableton-osc-bridge: security hardening (secure-by-default daemon)
+
+- **What:** Hardened the daemon after an automated commit security review flagged 4 issues. The daemon's WS/HTTP server and the OSC reply Server now **bind to loopback by default**; binding a non-loopback interface **requires a token** (`serve()` throws otherwise). WS upgrades are gated by `verifyClient`: an **Origin allowlist** rejects cross-site browser connections (anti-CSWSH) while allowing loopback origins and no-Origin non-browser clients, and the **token is compared in constant time** (`crypto.timingSafeEqual`). New env: `BRIDGE_HTTP_HOST`, `ABLETON_OSC_RECV_HOST`. Added 3 daemon security tests (non-loopback-without-token throws; cross-site Origin rejected / no-Origin allowed; token enforced).
+- **Why:** The bridge can fully control Ableton, and AbletonOSC itself is unauthenticated — the defaults must keep the control surface local and refuse silent network exposure. (Spec security model was right; the defaults didn't enforce it.)
+- **Files/areas:** `app/packages/ableton-osc-bridge/src/daemon/serve.ts`, `src/core/osc.ts`, `src/core/live.ts`, `src/cli.ts`, `test/daemon.test.ts`; docs: spec §12/§15, package README.
+- **Verification:** `pnpm --filter ableton-osc-bridge test` (32 passed) + `typecheck` green.
+- **Open / follow-up:** browsers can't set WS headers, so the token still rides in the URL query (encrypted under `wss://` but loggable) — future: accept it via `Sec-WebSocket-Protocol` for non-browser clients (spec §15).
+- **Docs touched:** this entry; spec; README.
+
+## 2026-06-22 — Built ableton-osc-bridge foundation (generic bridge, Plan A)
+
+- **What:** Implemented Plan A of the reusable bridge at `app/packages/ableton-osc-bridge`: the `VerbProvider` seam, the pure `Correlator`, the `AbletonLive` core (node-osc, startup-resubscribe), the daemon (`attachConnection` + `serve` with token auth + a self-contained browser playground), the browser-safe `AbletonBridgeClient` (reconnect/resubscribe), the CLI (`serve`/`repl`/`test`), `dial-home`, and an end-to-end integration test (mock Ableton ↔ daemon ↔ client). Generic `send`/`query`/`subscribe` over the whole AbletonOSC surface; cloud topology works (dial-home).
+- **Why:** Jared wants a reusable, well-documented Ableton↔web-app bridge decoupled from CHANNELERS (spec `docs/superpowers/specs/2026-06-22-ableton-osc-bridge-design.md`). Plan B adds the comprehensive typed facade on the same seam.
+- **Files/areas:** `app/packages/ableton-osc-bridge/**`. Branch `ableton-osc-bridge`.
+- **Verification:** `pnpm --filter ableton-osc-bridge test` + `typecheck` green.
+- **Docs touched:** this entry; package `README.md`.
+
+## 2026-06-22 — Design spec: `ableton-osc-bridge` (reusable Ableton ↔ web-app OSC bridge)
+
+- **What:** Brainstormed and wrote a design spec for a **standalone, reusable** package that bridges AbletonOSC (UDP `11000`/`11001`) to any web app. One package, three entry points: a node **core** (`AbletonLive`: send/query/subscribe + reply correlation over `node-osc`), a browser-safe **client** (`AbletonBridgeClient`, WS), and a **daemon** (runs next to Ableton; local serve + outbound **dial-home** to a remote controller; serves a browser playground). The headline is a **comprehensive, fully typed facade** (`createLive(provider)` → `live.track(2).volume.set(…)`, `live.clip(0,0).fire()`, `live.song.beat.subscribe(…)`) **codegen'd from a curated manifest** of the whole AbletonOSC surface, with emitted JSDoc (docs + OSC address) for first-class autocomplete. The facade rides a `VerbProvider` seam, so the **same calls work over the local core and the network client** unchanged; the generic verbs remain as a `live.raw.*` escape hatch. Topology targets a **cloud Brain + venue Ableton** split: daemon dials home over one authed `wss`, raw OSC never leaves the venue LAN. Dev tools: a REPL + a self-contained browser playground. Develops at `app/packages/ableton-osc-bridge/` with zero `@channelers/*` imports so it lifts out cleanly.
+- **Why:** Jared wants an Ableton OSC connection he can develop here and reuse across other projects — decoupled from CHANNELERS, well-documented, and with maximal DX so getting Ableton to behave takes minimal application-specific wiring.
+- **Files/areas:** `docs/superpowers/specs/2026-06-22-ableton-osc-bridge-design.md` (new). No code yet. Branch `ableton-osc-bridge`.
+- **Open / follow-ups:** the CHANNELERS Brain integration is **out of scope** for the package (thin later consumer); the **cloud Brain** is itself a shift from the documented "local Show Brain" and needs an `ARCHITECTURE.md` §11 note; npm publish build is a post-workshop additive step; final package name TBD before publish.
+- **Docs touched:** this entry; the new design spec.
+
+## 2026-06-22 — Tier 2 docs reconciliation follow-up (gaps from Task 7)
+
+- **What:** Caught and fixed stale spots the Task 7 pass missed. `ARCHITECTURE.md`: §1 ASCII diagram (`intake → dance score`/`oracle persona` → `persona-set → choreo pass`/`per-turn → oracle + cues`; label `transform` → `AI generation`) + the "three flows" list rewritten as generation-split + two-live-loops; §4 data model (removed `DanceScore`, added `ChoreoScore`, `Seeds = { music }`). §5.4 dancers line now points at the `choreo.*` channel + `/choreo`. `docs/CLAUDE.md`: LLM-models line now covers the music-only transform + the choreographer (`CHOREO_MODEL`).
+- **Why:** The Tier 2 roll-up claimed docs were reconciled, but a self-audit found the §1 diagram, §4 model, §5.4, and `docs/CLAUDE.md` still described the old three-seed pipeline.
+- **Files/areas:** `docs/ARCHITECTURE.md` (§1, §4, §5.4), `docs/CLAUDE.md`.
+- **Docs touched:** this entry.
+
+## 2026-06-21 — Tier 2 complete: choreography layer (roll-up) + docs reconciliation
+
+- **What:** Tier 2 of the multi-station spec is built (Tasks 1–6 above; plan `docs/superpowers/plans/2026-06-21-tier2-choreography-layer.md`). A second live AI loop runs alongside the oracle: the **choreography first-pass** `f(intake, archetype)` generates at persona-set, and each visitor utterance **fans out** in `divination.say()` to a choreographer that streams NL movement cues on a screens-only `choreo.delta`/`choreo.done` channel, with a **live-toggleable** `reactToOracle` timing (react to the oracle reply, or run independently). `transform()` is now music-only (dead dance/persona seeds removed, spec §7). A read-only `/choreo` view renders the cues + the toggle. Model = gpt-4o (`CHOREO_MODEL`); offline fallbacks throughout. **Task 7 (this entry):** reconciled the source-of-truth docs — `ARCHITECTURE.md` §5.2 (transform music-only), new **§5.6 Choreography**, §8 (`choreo.*` WS messages + off-OSC note), §12 (choreography-model question **resolved** → gpt-4o, closing the spec's "Sonnet 4.6" drift; feed routing + cue de-mux still open); `app/CLAUDE.md` (`/choreo` route, choreographer in `packages/oracles`, `choreo.ts`, music-only transform, offline-test note).
+- **Why:** The piece wants intake-seeded movement that also reacts live to the channeling conversation (spec §6–§8); the docs must match the built reality before the workshop (CLAUDE.md working agreement).
+- **Files/areas:** `docs/ARCHITECTURE.md` (§5.2, §5.6 new, §8, §12), `app/CLAUDE.md`. (Code landed in Tasks 1–6.)
+- **Verification:** full suite — `pnpm -r typecheck` 0 errors; brain 86 tests, stage 18 tests; `pnpm --filter @channelers/stage build` OK.
+- **Deferred / open (team):** choreography feed routing (in-ears vs loudspeaker) and concurrent-session cue de-multiplexing (§12); an `applyToChoreo` Altered-State scope axis; a `choreo.cue` `ShowEvent` if a collaborator needs the final cue over OSC.
+- **Docs touched:** this entry; `ARCHITECTURE.md`; `app/CLAUDE.md`.
+
+## 2026-06-21 — Tier 2 Task 6: `/choreo` stage view + live timing toggle
+
+- **What:** Task 6 of the Tier 2 plan — the read-only choreography surface. New `apps/stage/src/routes/Choreo.tsx`: `Choreo` (socket-wired route) subscribes to `choreo.delta`/`choreo.done`, accumulates the streaming cue into a big teleprompter line + a 30-entry rolling log, and hosts the operator's **react to oracle reply** checkbox (loads `GET /api/choreo/config` on mount, flips via `POST` on change). Split out a pure `ChoreoDisplay` presentational export for unit-testing without a socket. `api.ts` gains `choreo.config`/`choreo.setConfig`. Route + `SCREENS` entry added in `App.tsx`.
+- **Why:** Gives a way to watch/project the live cues and flip the rehearsal timing from the UI. Final in-ear vs loudspeaker routing stays deferred (open question); this is the verification/projection surface either way.
+- **Files/areas:** `apps/stage/src/routes/Choreo.tsx` (new), `apps/stage/src/routes/Choreo.test.tsx` (new, 2 tests), `apps/stage/src/lib/api.ts`, `apps/stage/src/App.tsx`.
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/stage test` 18 tests pass; `pnpm --filter @channelers/stage build` OK.
+- **Docs touched:** this entry.
+
+## 2026-06-21 — Tier 2 Task 5: live choreography fan-out in `say()` (configurable timing)
+
+- **What:** Task 5 of the Tier 2 plan — the second live AI loop (spec §8). Each `Session` now carries a `choreoSystemPrompt` (built at `session.start` from intake + archetype + the stored first-pass, with a stub fallback) and its own `choreoHistory`. `say()` fans out to a new `runChoreo` consumer that streams `choreo.delta` → `choreo.done` on the separate choreo feed, **fire-and-forget + try/catch so a choreography failure never disturbs the oracle turn**. Timing honors the live `reactToOracle` flag: ON → the cue runs after `oracle.done`, reacting to the utterance **and** the oracle reply; OFF → it runs in parallel from the utterance alone. The offline fallback streams a deterministic cue (no API key required).
+- **Why:** Delivers the per-turn movement cues the tier exists for, with the rehearsal-tunable timing the owner asked for, without coupling the choreo feed to the oracle's latency or reliability.
+- **Files/areas:** `apps/brain/src/divination.ts` (Session choreo context, `runChoreo`, `say()` branch); `apps/brain/src/choreo.ts` (`streamCue`, used here); tests `apps/brain/test/choreo.test.ts` (+1 streamCue), `endpoints.test.ts` (+2 ws fan-out, both timings).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test` 86 tests pass.
+- **Known MVP limits (logged):** the `/choreo` view does not de-multiplex concurrent sessions (cue interleaves with 2+ simultaneous readings — acceptable while the altar is one-at-a-time); choreo cues are ephemeral and not replayed on `session.rejoin`.
+- **Docs touched:** this entry.
+
+## 2026-06-21 — Tier 2 Task 4: brain choreo engine (first-pass at persona-set, store, live toggle)
+
+- **What:** Task 4 of the Tier 2 plan — the brain-side choreography engine. New `apps/brain/src/choreo.ts`: the live in-memory `reactToOracle` flag (`getChoreoConfig`/`setChoreoConfig`, default from config); `generateFirstPass(visitor)` → an NL `ChoreoScore` via OpenAI (`config.choreoModel`, default gpt-4o) or a deterministic `stubFirstPass` offline/on-error; plus the deterministic `fallbackCue` + `streamCue` live-cue streamer (wired into the divination loop in Task 5). `config.ts` gains `choreoModel` (`CHOREO_MODEL`) + `choreo.reactToOracle` (`CHOREO_REACT_TO_ORACLE`, default true). `store.ts` gains `choreoFirstPass?: ChoreoScore` on the record + `setChoreoFirstPass`. `app.ts`: `POST /api/visitors/:id/persona` now fires `generateFirstPass` (fire-and-forget, like intake→seeds), and new `GET`/`POST /api/choreo/config` expose the live timing toggle.
+- **Why:** The first-pass must be ready as the reading begins (spec §7); the live toggle lets the timing be flipped during rehearsal without a brain restart (which would wipe the in-memory store). Offline fallbacks keep the project's no-API-key property.
+- **Files/areas:** `apps/brain/src/choreo.ts` (new), `apps/brain/src/config.ts`, `apps/brain/src/store.ts`, `apps/brain/src/app.ts`; tests `apps/brain/test/choreo.test.ts` (new), `store.test.ts` (+2), `endpoints.test.ts` (+2).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test` 83 tests pass.
+- **Docs touched:** this entry.
+
+## 2026-06-21 — Tier 2 Task 3: choreographer prompt builders (`packages/oracles`)
+
+- **What:** Task 3 of the Tier 2 plan — pure prompt builders for the choreographer agent (no API calls; mirrors `buildPrompt.ts`). New `packages/oracles/src/choreographer.ts` exports `CHOREO_CLARITY_INSTRUCTION` (the §8 "clarity mirror" of the oracle's `ANTI_SLOP_INSTRUCTION`: one concrete, present-tense, immediately-performable cue), `CHOREO_SCORE_INSTRUCTION`, `buildChoreoFirstPassPrompt(survey, archetype) → {system,user}`, `buildChoreoSystemPrompt(survey, archetype, firstPass)`, and `buildChoreoTurnPrompt({visitor, oracle?})` (includes the oracle reply only when the timing mode reacts to it). Exported from the package index.
+- **Why:** Keeps the choreographer's content as DATA/prompt-building (like the oracle personas), separate from the brain's API calls (Task 4–5).
+- **Files/areas:** `packages/oracles/src/choreographer.ts` (new), `packages/oracles/src/index.ts`, `apps/brain/test/choreographer.test.ts` (new, 3 tests).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test choreographer` 3 tests pass.
+- **Docs touched:** this entry.
+
+## 2026-06-21 — Tier 2 Task 2: `ChoreoScore` type + `choreo.delta`/`choreo.done` WS messages
+
+- **What:** Task 2 of the Tier 2 plan — the shared data vocabulary for the choreography layer (purely additive). Added `ChoreoScore = { score: string }` (the NL movement first-pass) to `packages/shared/src/schemas.ts`, and `choreo.delta`/`choreo.done` ({ sessionId, text }) to the `WsServerMsg` union in `protocol.ts` — screens-only, off the `ShowEvent`/OSC contract (same precedent as `dispatch.state`/`tuning.*`).
+- **Why:** Foundation consumed by the brain choreo engine (Task 4–5) and the `/choreo` view (Task 6).
+- **Files/areas:** `packages/shared/src/schemas.ts`, `packages/shared/src/protocol.ts`, `apps/brain/test/schema.test.ts` (+2 tests).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test schema` 11 tests pass.
+- **Docs touched:** this entry.
+
+## 2026-06-21 — Tier 2 Task 1: slim `Seeds` to music-only (delete dead dance/persona seeds)
+
+- **What:** Implemented Task 1 of the Tier 2 choreography plan (`docs/superpowers/plans/2026-06-21-tier2-choreography-layer.md`, §7 pipeline split). `Seeds` is now `{ music }` — the `DanceScore` schema/type and the `dance` + `persona` fields are deleted (both were dead: the live loop builds its persona via `buildPersona()`, and nothing read `seeds.dance`). `transform()`'s offline stub and live JSON prompt are now music-only. Also added a brain **vitest setup file** (`test/setup.ts`, wired via `vitest.config.ts` `setupFiles`) that forces `OPENAI_API_KEY=""` so the AI-dependent paths (transform, oracle, and the coming choreographer) take their deterministic offline fallbacks in tests — `app/.env` has a real key, which would otherwise make the suite hit the live API (non-deterministic, slow, costly). STT/TTS tests are unaffected (they already `vi.mock("../src/config")`).
+- **Why:** The choreography first-pass needs the archetype, which only arrives at the altar, so generation must split by input-readiness (spec §7). Removing the dead seeds clears the way and matches the spec.
+- **Files/areas:** `packages/shared/src/schemas.ts` (Seeds → music-only, DanceScore removed); `apps/brain/src/transform.ts` (stub + prompt music-only); `apps/brain/test/setup.ts` (new), `apps/brain/vitest.config.ts` (setupFiles), `apps/brain/test/transform.test.ts` (new).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test` 72 tests pass (1 new).
+- **Docs touched:** this entry.
+
+## 2026-06-21 — Dev seed: fabricate an oracle-ready visitor (`seed:visitor`)
+
+- **What:** A dev-only script that creates a fully channellable visitor so `/channel` can be tested without walking someone through the intake + body-scan kiosks. `pnpm seed` (root alias for `pnpm --filter @channelers/brain seed:visitor`) drives the **existing** public endpoints in order — `register` → `intake` (a plausible filled survey) → `persona` (archetype) → `verify` — which stamps `personaAt` + `poseVerifiedAt` and leaves `sessionEndAt` unset, exactly the predicate the performer lobby uses (`Channel.tsx`: `!!v.personaAt && !!v.poseVerifiedAt && !v.sessionEndAt`). Flags: `--name`, `--archetype` (validated against `ARCHETYPES`), `--number`. Auto-picks the first free ticket number ≥ 9000 so dev dummies stay visually distinct from real ones. Requires the brain to be running; prints a friendly hint on `ECONNREFUSED`. **No new brain routes and no UI changes** — it's pure HTTP orchestration over the routes a real visitor already hits.
+- **Why:** Jared needed to iterate on the `/channel` performer page without the kiosk flow. A seed script (vs. a new always-on dev endpoint or a UI button) keeps the production surface untouched and is repeatable from the terminal.
+- **Files/areas:** brain — new `apps/brain/src/seed.ts`; `apps/brain/package.json` (`seed:visitor` script); root `app/package.json` (`seed` alias).
+- **Verification:** `pnpm --filter @channelers/brain typecheck` 0 errors. Ran end-to-end against a live brain: default + `--name/--archetype` runs both produced visitors that satisfy the oracle-ready predicate via `GET /api/visitors`; bad `--archetype` fails cleanly with the valid list. (In-memory store, so seeded dummies clear on brain restart.)
+- **Docs touched:** this entry.
+
+## 2026-06-21 — Altered-State Console operator reference doc
+
+- **What:** New operator-facing reference `docs/altered-state-console.md` explaining every control in the `/channel` ALTERED STATE panel — presets, sampling (temperature/top_p/presence+frequency penalty/max_tokens), effects + the `effectsDriveSampling` nudge math, the text pipeline (promptDrift/outputMangle/tone/semanticDrift/hallucinationBudget/microDrift), and scope — with the real behavior (clamps, buffering, negative-penalty caveat), practical recipes, and gotchas.
+- **Why:** Jared asked for a plain explanation of what each parameter does, kept in the docs dir so operators can run the panel without reading the source.
+- **Files/areas:** `docs/altered-state-console.md` (new); `ARCHITECTURE.md` §5.3 pointer.
+- **Docs touched:** this entry; the new reference; `ARCHITECTURE.md`.
+
 ## 2026-06-21 — Cloud STT/TTS for the divination loop (Whisper + ElevenLabs)
 
 - **What:** The live divination voice loop moved off the local/browser speech paths onto cloud APIs, both key-gated with the offline fallbacks preserved (plan `docs/superpowers/plans/2026-06-21-whisper-stt-elevenlabs-tts.md`). **STT:** the brain's `/api/stt` now uses the **OpenAI Whisper API** (`STT_MODEL`, default `whisper-1`) when `OPENAI_API_KEY` is set, falling back to the existing local Xenova `whisper-tiny.en` when unkeyed **or on an API error** (so the mic never hard-fails mid-show). The stage's WAV recording pipeline is unchanged. **TTS:** new brain `/api/tts` ElevenLabs proxy (`synthesizeSpeech` → MP3; `ELEVENLABS_MODEL`, default `eleven_flash_v2_5`; key stays server-side) with **per-archetype voices** (`voiceId` on each persona + `voiceForArchetype` resolver in `packages/oracles`); the performer's `speak()` pulls the MP3 and plays it, falling back to browser `speechSynthesis` on 204 (no key) or error, and stops audio on session end. The `whisper (TTS)` toggle and one-shot-on-`oracle.done` timing are unchanged. Also removed the dead browser Web Speech recognizer and leftover `.cursor` debug-log instrumentation from the two rewritten speech files.

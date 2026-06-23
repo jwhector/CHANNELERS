@@ -1,0 +1,10 @@
+# Built fresh inside the image — never copy host artifacts (stale / platform-specific).
+**/node_modules
+**/dist
+
+# Secrets stay out of the image; the container reads real env vars (Fly secrets).
+.env
+.env.*
+
+.git
+*.log

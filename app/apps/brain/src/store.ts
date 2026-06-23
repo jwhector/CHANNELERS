@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type {
-  SurveyResponse, VisitorProfile, ScanResult, Seeds, PoseVector, VisitorLocation,
+  SurveyResponse, VisitorProfile, ScanResult, Seeds, ChoreoScore, PoseVector, VisitorLocation,
 } from "@channelers/shared";
 
 /** In-memory store — fine for the workshop. Swap for SQLite/Postgres if persistence is needed. */
-export type VisitorRecord = VisitorProfile & { seeds?: Seeds };
+export type VisitorRecord = VisitorProfile & { seeds?: Seeds; choreoFirstPass?: ChoreoScore };
 
 const visitors = new Map<string, VisitorRecord>();
 const byNumber = new Map<number, string>(); // number → id index
@@ -90,6 +90,11 @@ export const store = {
   setSeeds(id: string, seeds: Seeds): VisitorRecord | undefined {
     const v = visitors.get(id);
     if (v) v.seeds = seeds;
+    return v;
+  },
+  setChoreoFirstPass(id: string, score: ChoreoScore): VisitorRecord | undefined {
+    const v = visitors.get(id);
+    if (v) v.choreoFirstPass = score;
     return v;
   },
   addScan(id: string, scan: ScanResult): VisitorRecord | undefined {

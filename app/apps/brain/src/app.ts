@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import staticPlugin from "@fastify/static";
 import { SurveyResponse, ScanResult, PoseVector, Station, type ShowEvent } from "@channelers/shared";
 import { z } from "zod";
 import { store } from "./store";
@@ -11,8 +12,17 @@ import { registerTuning } from "./tuning";
 import { createDispatcher } from "./dispatcher";
 import { transcribeWav } from "./stt";
 import { synthesizeSpeech } from "./tts";
+import { generateFirstPass, getChoreoConfig, setChoreoConfig } from "./choreo";
+import { config } from "./config";
+import { initAbleton } from "./ableton";
 
-export async function buildApp(): Promise<FastifyInstance> {
+/** `serveStage`/`stageDist` default to `config`; tests inject a fixture dir. */
+export async function buildApp(
+  opts: { serveStage?: boolean; stageDist?: string } = {},
+): Promise<FastifyInstance> {
+  const serveStage = opts.serveStage ?? config.serveStage;
+  const stageDist = opts.stageDist ?? config.stageDist;
+
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true });
   await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
@@ -21,10 +31,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   const bus = new Bus(app.server);
+  initAbleton(app.server, config.ableton.agentToken, config.ableton.agentPath);
   registerDivination(bus);
   registerTuning(bus);
   const dispatcher = createDispatcher(bus);
-  app.addHook("onClose", async () => dispatcher.stop());
+  app.addHook("onClose", async () => {
+    dispatcher.stop();
+    bus.dispose();
+  });
 
   app.get("/api/health", async () => ({ ok: true, at: new Date().toISOString() }));
 
@@ -53,6 +67,15 @@ export async function buildApp(): Promise<FastifyInstance> {
       req.log.error(err);
       return reply.code(500).send({ error: "tts failed" });
     }
+  });
+
+  // ── choreography: live timing toggle (reactToOracle), §8 ──
+  app.get("/api/choreo/config", async () => getChoreoConfig());
+  const ChoreoConfigBody = z.object({ reactToOracle: z.boolean() });
+  app.post("/api/choreo/config", async (req, reply) => {
+    const parsed = ChoreoConfigBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return setChoreoConfig(parsed.data);
   });
 
   app.get("/api/visitors", async () => store.list());
@@ -112,6 +135,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     const v = store.setArchetype(id, parsed.data.archetype);
     if (!v) return reply.code(404).send({ error: "unknown visitor" });
     bus.publish({ type: "oracle.selected", profileId: v.id, archetype: parsed.data.archetype });
+    // Choreography first-pass = f(intake, archetype), generated now so it's ready as the reading
+    // begins (spec §7). Fire-and-forget, mirroring the intake→seeds transform.
+    void generateFirstPass(v).then((fp) => store.setChoreoFirstPass(v.id, fp));
     return v;
   });
 
@@ -206,6 +232,21 @@ export async function buildApp(): Promise<FastifyInstance> {
     for (const e of samples) bus.publish(e);
     return { published: samples.length };
   });
+
+  // ── single-origin: serve the stage's Vite build + SPA fallback ──
+  // One HTTPS origin then answers the screens (relative /api + /ws) with no CORS/proxy.
+  // `wildcard: false` serves real files and lets misses fall through to the notFound
+  // handler, which returns index.html for client-routed paths (/intake, /channel, …)
+  // while leaving /api and /ws as genuine JSON 404s.
+  if (serveStage) {
+    await app.register(staticPlugin, { root: stageDist, wildcard: false });
+    app.setNotFoundHandler((req, reply) => {
+      if (req.method !== "GET" || req.url.startsWith("/api") || req.url.startsWith("/ws")) {
+        return reply.code(404).send({ error: "not found" });
+      }
+      return reply.sendFile("index.html");
+    });
+  }
 
   return app;
 }

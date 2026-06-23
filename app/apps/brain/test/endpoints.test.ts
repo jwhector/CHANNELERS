@@ -212,3 +212,88 @@ describe("arrive + assign-by-slot endpoints", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe("choreo first-pass + config", () => {
+  it("setting persona populates a choreography first-pass on the record", async () => {
+    const v = await register(6101);
+    await app.inject({ method: "POST", url: `/api/visitors/${v.id}/intake`,
+      payload: { survey: { name: "Jo", freeText: { lost: "my keys" }, phrases: [] } } });
+    await app.inject({ method: "POST", url: `/api/visitors/${v.id}/persona`, payload: { archetype: "tree" } });
+    // first-pass is generated fire-and-forget; poll the record briefly
+    let score = "";
+    for (let i = 0; i < 20 && !score; i++) {
+      const rec = ((await app.inject({ method: "GET", url: "/api/visitors" })).json() as { id: string; choreoFirstPass?: { score: string } }[])
+        .find((r) => r.id === v.id);
+      score = rec?.choreoFirstPass?.score ?? "";
+      if (!score) await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(score.length).toBeGreaterThan(0);
+  });
+
+  it("GET/POST /api/choreo/config round-trips the flag", async () => {
+    const set = await app.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: false } });
+    expect(set.json().reactToOracle).toBe(false);
+    const get = await app.inject({ method: "GET", url: "/api/choreo/config" });
+    expect(get.json().reactToOracle).toBe(false);
+    // restore default so later tests see the spec-default behavior
+    await app.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
+  });
+});
+
+describe("choreo fan-out (both timings)", () => {
+  let cApp: FastifyInstance;
+  let cPort: number;
+  beforeAll(async () => {
+    cApp = await buildApp();
+    await cApp.listen({ host: "127.0.0.1", port: 0 });
+    cPort = (cApp.server.address() as { port: number }).port;
+  });
+  afterAll(async () => { await cApp.close(); });
+
+  async function oracleReady(n: number): Promise<string> {
+    const v = (await cApp.inject({ method: "POST", url: "/api/register", payload: { number: n } })).json() as { id: string };
+    await cApp.inject({ method: "POST", url: `/api/visitors/${v.id}/intake`,
+      payload: { survey: { name: "Jo", freeText: { lost: "keys" }, phrases: [] } } });
+    await cApp.inject({ method: "POST", url: `/api/visitors/${v.id}/persona`, payload: { archetype: "tree" } });
+    await cApp.inject({ method: "POST", url: `/api/visitors/${v.id}/verify` });
+    return v.id;
+  }
+
+  /** Start a session for visitorId, say one line, resolve with the set of message kinds seen. */
+  function sayAndCollect(visitorId: string): Promise<Set<string>> {
+    return new Promise((resolve, reject) => {
+      const sock = new WebSocket(`ws://127.0.0.1:${cPort}/ws`);
+      const seen = new Set<string>();
+      const timer = setTimeout(() => { sock.close(); resolve(seen); }, 4000);
+      let sid = "";
+      sock.on("open", () => sock.send(JSON.stringify({ kind: "session.start", visitorId })));
+      sock.on("message", (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.kind === "session.started" && m.visitorId === visitorId) {
+          sid = m.sessionId;
+          sock.send(JSON.stringify({ kind: "session.say", sessionId: sid, text: "where do I go" }));
+        }
+        if (m.sessionId && m.sessionId === sid) seen.add(m.kind);
+        if (seen.has("oracle.done") && seen.has("choreo.done")) {
+          clearTimeout(timer); sock.close(); resolve(seen);
+        }
+      });
+      sock.on("error", (e) => { clearTimeout(timer); reject(e); });
+    });
+  }
+
+  it("reactive mode emits both oracle.* and choreo.*", async () => {
+    await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
+    const seen = await sayAndCollect(await oracleReady(9401));
+    expect(seen.has("oracle.done")).toBe(true);
+    expect(seen.has("choreo.delta")).toBe(true);
+    expect(seen.has("choreo.done")).toBe(true);
+  });
+
+  it("independent mode still emits choreo.* (parallel to the oracle)", async () => {
+    await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: false } });
+    const seen = await sayAndCollect(await oracleReady(9402));
+    expect(seen.has("choreo.done")).toBe(true);
+    await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
+  });
+});
