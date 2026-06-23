@@ -38,8 +38,8 @@ A second station **kind** alongside the existing kiosk point stations. Three pro
 
 ## 4. Data-model & dispatcher changes
 
-- **`Station` enum** gains `paper` (`apps/shared/src/schemas.ts:45`). The order array the dispatcher iterates (`STATION_ORDER`) includes it.
-- **New milestone `paperAt`** (optional ISO string) on `VisitorProfile` (`apps/shared/src/schemas.ts:57-79`), alongside `intakeAt`/`poseAt`/…
+- **`Station` enum** gains `paper` (`packages/shared/src/schemas.ts:45`). The order array the dispatcher iterates (`STATION_ORDER`) includes it.
+- **New milestone `paperAt`** (optional ISO string) on `VisitorProfile` (`packages/shared/src/schemas.ts:57-79`), alongside `intakeAt`/`poseAt`/…
 - **Eligibility** gains one line in `eligibleStations()` (`apps/brain/src/dispatcher.ts:81-89`): `if (!v.paperAt) out.push("paper")`. The station is **non-gating** — no other predicate depends on `paperAt`, and `paper` has no prerequisite milestone (ungated for MVP; see §10 and §15 for the typewriter-sequencing question).
 - **Config:**
   - `config.dispatcher.slots` (`apps/brain/src/config.ts:52`) gains `paper: 4`. For a **timed** station the number means **group capacity**, not addressable kiosk-slot count.
@@ -49,7 +49,7 @@ A second station **kind** alongside the existing kiosk point stations. Three pro
     ```
     The dispatcher branches on `station in config.dispatcher.timed`: timed stations skip kiosk-slot derivation and use the group/timer path below.
 - **Occupancy representation.** A timed station does **not** derive addressable `${station}-${i}` kiosk slots (`dispatcher.ts:48-56`). It tracks a **group**: up to `capacity` occupants whose `location = { state, station: "paper", since }`. On operator surfaces it renders as a **group panel** — `Paper (3/4)` listing each occupant's `#N` + remaining time — rather than kiosk boxes.
-  - *Implementation note (settle in the plan):* reusing the `Slot[]` array with `capacity` virtual `paper-i` slots (no `kioskId`, always "online") is an acceptable shortcut that lets the board/`DispatchState` (`apps/brain/src/protocol.ts:84-97`) and the existing per-slot rendering be reused with minimal new shape. The group panel is the truer conceptual model; the spec mandates the *behavior*, not the storage shape.
+  - *Implementation note (settle in the plan):* reusing the `Slot[]` array with `capacity` virtual `paper-i` slots (no `kioskId`, always "online") is an acceptable shortcut that lets the board/`DispatchState` (`packages/shared/src/protocol.ts:84-97`) and the existing per-slot rendering be reused with minimal new shape. The group panel is the truer conceptual model; the spec mandates the *behavior*, not the storage shape.
 
 ## 5. Presence & completion model (timer-from-call)
 
@@ -72,7 +72,7 @@ The lifecycle for a `paper` occupant, mapped onto the existing state machine:
 - **Trigger — a physical button.** A `/feed` stage route holds a **webcam** aimed at the slot. The visitor drops the page and presses **one physical button** — a USB arcade button / footswitch that registers as a keypress, *not* a data-entry kiosk. The press grabs a frame. (Tactile, theatrical — "commit the act" — zero staff, within the existing in-browser-CV stack.)
 - **Capture → OCR.** The captured frame POSTs to a new Brain endpoint (e.g. `POST /api/paper/feed`, image body). The Brain runs a **`gpt-4o` vision** OCR call (the Brain already owns all AI calls; `gpt-4o` is the configured multimodal model — `apps/brain/src/config.ts:21-36`). **Confirm the vision call shape against the current OpenAI reference at build time** (per `docs/CLAUDE.md`).
 - **Offline / degraded fallback** (project convention): if the OCR call fails, animate raw/placeholder text (or the page silhouette) — never block the spectacle.
-- **Event.** The Brain emits a **new `ShowEvent` variant** `paper.fed = { text: string, fedAt: string }` — **no `visitorId`** (identity-agnostic). It is added to the `ShowEvent` discriminated union (`apps/shared/src/events.ts:8-18`) with a 1:1 OSC mapping `/channelers/paper/fed` (`events.ts:21-31`). This is an **outward-facing spectacle event** and so *correctly rides the bus + OSC*, unlike dispatch logistics which stay off it.
+- **Event.** The Brain emits a **new `ShowEvent` variant** `paper.fed = { text: string, fedAt: string }` — **no `visitorId`** (identity-agnostic). It is added to the `ShowEvent` discriminated union (`packages/shared/src/events.ts:8-18`) with a 1:1 OSC mapping `/channelers/paper/fed` (`events.ts:21-31`). This is an **outward-facing spectacle event** and so *correctly rides the bus + OSC*, unlike dispatch logistics which stay off it.
 - **Animation.** A Brain-driven `/feed` display (the same route, or split via `?role=capture` / `?role=display`) renders the visitor's text dissolving "into the matrix" off `paper.fed`. We control the effect fully — **no dependency on Jeff for the MVP**. Jeff's visual rig *can* subscribe to the same `paper.fed` OSC event later (additive).
 
 **Later-ingestion seam (architected, not built):** adding an optional `visitorId?` to `paper.fed` (and optionally persisting `{ text, fedAt }` on the visitor record) is a non-breaking additive change — the project extends events this way freely. Nothing downstream consumes `paper.fed` text today; a future flip can thread it into the music seed / oracle / a collective wall without re-plumbing.
@@ -107,8 +107,8 @@ The page the visitor carries to `paper` comes from a **typewriter station** earl
 ## 11. What changes vs. stays
 
 **New (brain):**
-- `apps/shared/src/schemas.ts`: `Station` enum `+ "paper"`; `VisitorProfile` `+ paperAt`.
-- `apps/shared/src/events.ts`: `ShowEvent` `+ paper.fed` variant + its OSC address.
+- `packages/shared/src/schemas.ts`: `Station` enum `+ "paper"`; `VisitorProfile` `+ paperAt`.
+- `packages/shared/src/events.ts`: `ShowEvent` `+ paper.fed` variant + its OSC address.
 - `apps/brain/src/config.ts`: `slots.paper`; new `dispatcher.timed` descriptor.
 - `apps/brain/src/dispatcher.ts`: timed-station branch — skip kiosk-slot derivation; group occupancy; auto-arrive on confirm-call; **timer-completion branch in `reconcile()`**; eligibility line.
 - `apps/brain/src/app.ts` (or equiv): `POST /api/paper/feed` (image → `gpt-4o` OCR → emit `paper.fed`); offline fallback.
@@ -142,8 +142,8 @@ The page the visitor carries to `paper` comes from a **typewriter station** earl
 
 Re-grounded against the actual code (the brainstorm handoff warned that `CHANGELOG`/`ARCHITECTURE v0.1` were stale). Confirmed:
 
-- **All routes exist** (`/intake`, `/bodyscan`, `/altar`, `/channel`, `/dispatch`, `/board`, `/console`, `/souvenir`), plus a `/choreo` route (`Choreo.tsx`) not named in the handoff. `Station = z.enum(["intake","bodyscan","altar"])` at `apps/shared/src/schemas.ts:45`.
-- **Type locations differ from the handoff's note:** `Slot`/`SlotOccupant`/`DispatchState` live in `apps/brain/src/protocol.ts:64-97` (not `packages/shared`); `Station`/`VisitorProfile`/`VisitorLocation` in `apps/shared/src/schemas.ts:45-79`; `ShowEvent` in `apps/shared/src/events.ts:8-18`. The repo uses `apps/shared`, not `packages/shared`.
+- **All routes exist** (`/intake`, `/bodyscan`, `/altar`, `/channel`, `/dispatch`, `/board`, `/console`, `/souvenir`), plus a `/choreo` route (`Choreo.tsx`) not named in the handoff. `Station = z.enum(["intake","bodyscan","altar"])` at `packages/shared/src/schemas.ts:45`.
+- **Shared types live in `packages/shared/src/`, exactly as the handoff said** — `Slot`/`SlotOccupant`/`DispatchState` in `packages/shared/src/protocol.ts:64-97`; `Station`/`VisitorProfile`/`VisitorLocation` in `packages/shared/src/schemas.ts:45-79`; `ShowEvent`/`OSC_ADDRESSES`/`toOsc` in `packages/shared/src/events.ts`. The brain (`apps/brain/src/`) imports them from `@channelers/shared`. (An earlier Explore pass misreported `protocol.ts` as living under `apps/brain`; corrected here.)
 - **Occupant phase** is `"pending" | "called" | "in_progress"` (`protocol.ts:64-70`) — some prose calls it `state`; the field is `phase`.
 - **Completion is a milestone stamp, freed by `reconcile()`** (`dispatcher.ts:282-307`, via `completionMilestoneSet(v, station)`). Existing timers only *reap*: `graceMs` 20s socket-drop (`config.ts:65`), `noShowMs` 90s called-not-arrived (`config.ts:61`), `staleMs` 300s in_progress (`config.ts:63`). **No timer-completion and no group/multi-person notion exist anywhere** — both are genuinely new (verified by search).
 - **`ShowEvent` has 8 variants, all 1:1 OSC-mapped to Anna/Jeff** (`events.ts:8-31`); dispatch logistics ride **internal-only** WS channels (`dispatch.state`, `roster`, `tuning.state`). So `paper.fed` as a new `ShowEvent` correctly rides OSC, consistent with the handoff's bus/OSC distinction.
