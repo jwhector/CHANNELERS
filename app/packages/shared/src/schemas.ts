@@ -41,8 +41,8 @@ export const PoseVector = z.object({
 });
 export type PoseVector = z.infer<typeof PoseVector>;
 
-/** The three dispatchable stations (spec §4). */
-export const Station = z.enum(["intake", "bodyscan", "altar"]);
+/** The dispatchable stations (spec §4). `paper` is a timed group station (spec 2026-06-22). */
+export const Station = z.enum(["intake", "bodyscan", "altar", "paper"]);
 export type Station = z.infer<typeof Station>;
 
 /** Transient dispatch location — a visitor is in exactly one place at a time (spec §3.2).
@@ -73,6 +73,8 @@ export const VisitorProfile = z.object({
   poseAt: z.string().optional(),
   personaAt: z.string().optional(),
   poseVerifiedAt: z.string().optional(),
+  /** Timed group station: stamped on dwell-timer expiry at the paper station (spec 2026-06-22). */
+  paperAt: z.string().optional(),
   sessionStartAt: z.string().optional(),
   sessionEndAt: z.string().optional(),
 });

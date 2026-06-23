@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-export type DeviceKind = "audiooutput" | "videoinput";
+export type DeviceKind = "audiooutput" | "audioinput" | "videoinput";
 
 /** True when the browser can route an <audio> element to a chosen output device. */
 export function canRouteAudio(): boolean {

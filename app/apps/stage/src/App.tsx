@@ -8,8 +8,9 @@ import { Choreo } from "./routes/Choreo";
 import { Board } from "./routes/Board";
 import { Dispatch } from "./routes/Dispatch";
 import { Souvenir } from "./routes/Souvenir";
+import { Feed } from "./routes/Feed";
 
-const SCREENS = ["intake", "bodyscan", "altar", "channel", "choreo", "console", "board", "dispatch", "souvenir"] as const;
+const SCREENS = ["intake", "bodyscan", "altar", "channel", "choreo", "console", "board", "dispatch", "souvenir", "feed"] as const;
 
 export function App() {
   return (
@@ -25,6 +26,7 @@ export function App() {
         <Route path="/board" element={<Board />} />
         <Route path="/dispatch" element={<Dispatch />} />
         <Route path="/souvenir" element={<Souvenir />} />
+        <Route path="/feed" element={<Feed />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>

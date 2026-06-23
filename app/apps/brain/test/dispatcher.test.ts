@@ -49,7 +49,7 @@ describe("slot derivation from config counts", () => {
       ["altar-0", "bodyscan-0", "bodyscan-1", "intake-0", "intake-1", "intake-2"],
     );
     expect(s.slots.every((x) => x.online === false && !x.kioskId)).toBe(true);
-    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false });
+    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false, paper: false });
   });
 });
 
@@ -213,5 +213,93 @@ describe("operator backstops", () => {
     expect(d.remove(v.id)).toBe(true);
     expect(store.get(v.id)).toBeUndefined();
     expect(d.snapshot().slots.every((s) => s.occupant?.visitorId !== v.id)).toBe(true);
+  });
+});
+
+describe("paper: timed group station", () => {
+  const P_KNOBS = {
+    slots: { intake: 0, bodyscan: 0, altar: 0, paper: 2 },
+    timed: { paper: { dwellMs: 300_000 } },
+    // noShowAutoRepool ON proves the timed branch fully bypasses no-show: without it a paper
+    // occupant would be reaped at noShowMs(90s), well before the 300s dwell.
+    K: 1, warmupMs: 0, tickMs: 5_000, noShowAutoRepool: true,
+  };
+  let pf: ReturnType<typeof fakeBus>;
+  let pd: ReturnType<typeof createDispatcher>;
+  beforeEach(() => {
+    pf = fakeBus();
+    pd = createDispatcher(pf.bus, { knobs: P_KNOBS as any, autoStart: false });
+  });
+  afterEach(() => pd.stop());
+
+  it("derives paper slots that are always online without any kiosk", () => {
+    const s = pd.snapshot();
+    const paper = s.slots.filter((x) => x.station === "paper");
+    expect(paper.map((x) => x.id).sort()).toEqual(["paper-0", "paper-1"]);
+    expect(paper.every((x) => x.online === true && !x.kioskId)).toBe(true);
+    expect(s.stationsOnline.paper).toBe(true);
+  });
+
+  it("a fresh waiting visitor is eligible for paper", () => {
+    store.register(771001);
+    const q = pd.snapshot().queue.find((e) => e.number === 771001);
+    expect(q?.eligible).toContain("paper");
+  });
+
+  it("dispatches a waiting visitor into a paper slot (no kiosk), confirm starts the dwell", () => {
+    const v = store.register(771002);
+    pd.kick(); // warmup K=1 met → fill
+    const pending = pd.snapshot().slots.find((x) => x.station === "paper" && x.occupant);
+    expect(pending?.occupant?.phase).toBe("pending");
+    expect(pd.confirm(v.id)).toBe(true);
+    const called = pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id);
+    expect(called?.occupant?.phase).toBe("called");
+    expect(store.get(v.id)?.location).toMatchObject({ state: "called", station: "paper" });
+  });
+
+  it("completes a paper occupant after dwellMs: stamps paperAt, frees the slot, repools", () => {
+    const v = store.register(772001);
+    pd.kick();
+    pd.confirm(v.id); // called → dwell starts from now
+    vi.advanceTimersByTime(300_000 + 1_000);
+    pd.kick(); // reconcile
+    expect(store.get(v.id)?.paperAt).toBeTruthy();
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    expect(pd.snapshot().slots.some((x) => x.occupant?.visitorId === v.id)).toBe(false);
+  });
+
+  it("does not complete before dwellMs", () => {
+    const v = store.register(772002);
+    pd.kick();
+    pd.confirm(v.id);
+    vi.advanceTimersByTime(120_000); // < dwell
+    pd.kick();
+    expect(store.get(v.id)?.paperAt).toBeUndefined();
+    expect(pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("called");
+  });
+
+  it("never applies the no-show timer to a timed station", () => {
+    const v = store.register(772003);
+    pd.kick();
+    pd.confirm(v.id);
+    vi.advanceTimersByTime(100_000); // > noShowMs(90s) but < dwell(300s)
+    pd.kick();
+    const occ = pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant;
+    expect(occ?.phase).toBe("called"); // still there, not reaped, not flagged
+    const q = pd.snapshot().queue.find((e) => e.number === 772003);
+    expect(q).toBeUndefined(); // not back in the waiting pool
+  });
+
+  it("markComplete stamps paperAt for a paper occupant", () => {
+    const v = store.register(772004);
+    pd.kick();
+    pd.confirm(v.id);
+    expect(pd.markComplete(v.id)).toBe(true);
+    expect(store.get(v.id)?.paperAt).toBeTruthy();
+  });
+
+  it("exposes the paper dwell in the snapshot for the operator countdown", () => {
+    expect(pd.snapshot().timedDwellMs?.paper).toBe(300_000);
+    expect(pd.snapshot().timedDwellMs?.intake).toBeUndefined();
   });
 });

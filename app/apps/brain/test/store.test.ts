@@ -70,6 +70,16 @@ describe("store milestone stamp + remove", () => {
   });
 });
 
+describe("paper station milestone", () => {
+  it("stamps paperAt via stampMilestone", () => {
+    store.clear();
+    const v = store.register(770001);
+    expect(v.paperAt).toBeUndefined();
+    store.stampMilestone(v.id, "paperAt");
+    expect(store.get(v.id)?.paperAt).toBeTruthy();
+  });
+});
+
 describe("store choreography first-pass", () => {
   it("stores a choreography first-pass on the record", () => {
     const v = store.register(NUM());

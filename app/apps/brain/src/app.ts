@@ -13,6 +13,7 @@ import { createDispatcher } from "./dispatcher";
 import { transcribeWav } from "./stt";
 import { synthesizeSpeech } from "./tts";
 import { generateFirstPass, getChoreoConfig, setChoreoConfig } from "./choreo";
+import { ocrPage } from "./paper";
 import { config } from "./config";
 import { initAbleton } from "./ableton";
 
@@ -76,6 +77,26 @@ export async function buildApp(
     const parsed = ChoreoConfigBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     return setChoreoConfig(parsed.data);
+  });
+
+  // ── paper station: capture → OCR → animate (identity-agnostic spectacle, spec 2026-06-22) ──
+  // Body is a data: URL (the stage grabs a webcam frame on a physical button). gpt-4o vision OCRs
+  // it; on no-key/failure we emit placeholder text so the "into the matrix" animation never blocks.
+  const PAPER_FALLBACK_TEXT = "⋯ the page is illegible ⋯";
+  const PaperFeedBody = z.object({ image: z.string().min(1) });
+  app.post("/api/paper/feed", async (req, reply) => {
+    const parsed = PaperFeedBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    let text: string | null = null;
+    try {
+      text = await ocrPage(parsed.data.image);
+    } catch (err) {
+      req.log.error(err); // degrade — never block the spectacle
+    }
+    const finalText = text && text.length > 0 ? text : PAPER_FALLBACK_TEXT;
+    const fedAt = new Date().toISOString();
+    bus.publish({ type: "paper.fed", text: finalText, fedAt });
+    return { text: finalText, fedAt };
   });
 
   app.get("/api/visitors", async () => store.list());

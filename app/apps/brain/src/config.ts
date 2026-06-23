@@ -50,8 +50,14 @@ export const config = {
     agentPath: process.env.ABLETON_AGENT_PATH ?? "/agent",
   },
   dispatcher: {
-    /** Per-station slot capacity (spec §9). Altar slot is held through the whole reading. */
-    slots: { intake: 2, bodyscan: 1, altar: 1 } as Record<"intake" | "bodyscan" | "altar", number>,
+    /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper` is a timed group's capacity. */
+    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 4 } as Record<
+      "intake" | "bodyscan" | "altar" | "paper", number
+    >,
+    /** Timed group stations: present ⇒ kiosk-less, always-online, completed by a dwell timer (spec 2026-06-22). */
+    timed: { paper: { dwellMs: Number(process.env.PAPER_DWELL_MS ?? 300_000) } } as Partial<
+      Record<"intake" | "bodyscan" | "altar" | "paper", { dwellMs: number }>
+    >,
     /** Warm-up pool size — don't dispatch until this many are waiting OR T_warmup elapses. */
     K: Number(process.env.DISPATCH_K ?? 3),
     warmupMs: Number(process.env.DISPATCH_T_WARMUP_MS ?? 60_000),

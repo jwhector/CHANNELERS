@@ -5,7 +5,7 @@ import type {
   WsServerMsg, WsClientMsg,
 } from "@channelers/shared";
 
-const STATION_ORDER: Station[] = ["intake", "bodyscan", "altar"];
+const STATION_ORDER: Station[] = ["intake", "bodyscan", "altar", "paper"];
 
 export interface DispatcherBus {
   broadcast(msg: WsServerMsg): void;
@@ -62,6 +62,11 @@ export function createDispatcher(
   const nowIso = () => new Date().toISOString();
   const ageMs = (iso: string) => Date.now() - Date.parse(iso);
 
+  // A timed group station (e.g. `paper`): kiosk-less, always-online slots, completed by a dwell
+  // timer from Confirm-call instead of a task milestone (spec 2026-06-22).
+  const isTimed = (s: Station): boolean => !!knobs.timed?.[s];
+  const dwellMs = (s: Station): number => knobs.timed?.[s]?.dwellMs ?? Infinity;
+
   function addFlag(id: string, ff: DispatchFlag): void {
     const arr = flags.get(id) ?? [];
     if (!arr.some((x) => x.type === ff.type && x.reason === ff.reason)) arr.push(ff);
@@ -72,7 +77,7 @@ export function createDispatcher(
   }
 
   const slotsOf = (station: Station) => [...slots.values()].filter((s) => s.station === station);
-  const isOnline = (s: SlotState) => !!s.connId;
+  const isOnline = (s: SlotState) => isTimed(s.station) || !!s.connId;
   const occupiedVisitorIds = () =>
     new Set([...slots.values()].flatMap((s) => (s.occupant ? [s.occupant.visitorId] : [])));
   const slotOfVisitor = (visitorId: string) =>
@@ -85,6 +90,7 @@ export function createDispatcher(
     if (!v.intakeAt) out.push("intake");
     if (!v.poseAt) out.push("bodyscan");
     if (v.intakeAt && v.poseAt && !v.sessionEndAt) out.push("altar");
+    if (!v.paperAt) out.push("paper"); // non-gating, ungated timed station (spec 2026-06-22)
     return out;
   }
 
@@ -225,8 +231,7 @@ export function createDispatcher(
     if (!v) return false;
     const station = slot?.station ?? (v.location.station as Station | undefined);
     if (station) {
-      const field = station === "intake" ? "intakeAt" : station === "bodyscan" ? "poseAt" : "sessionEndAt";
-      store.stampMilestone(visitorId, field);
+      store.stampMilestone(visitorId, milestoneField(station));
     }
     freeSlotOf(visitorId);
     store.setLocation(visitorId, { state: "waiting", since: nowIso() });
@@ -263,9 +268,17 @@ export function createDispatcher(
     return { record };
   }
 
+  function milestoneField(station: Station): "intakeAt" | "poseAt" | "paperAt" | "sessionEndAt" {
+    if (station === "intake") return "intakeAt";
+    if (station === "bodyscan") return "poseAt";
+    if (station === "paper") return "paperAt";
+    return "sessionEndAt"; // altar held through the reading
+  }
+
   function completionMilestoneSet(v: VisitorRecord, station: Station): boolean {
     if (station === "intake") return !!v.intakeAt;
     if (station === "bodyscan") return !!v.poseAt;
+    if (station === "paper") return !!v.paperAt;
     return !!v.sessionEndAt; // altar held through the reading
   }
 
@@ -285,6 +298,17 @@ export function createDispatcher(
       if (!occ) continue;
       const v = store.get(occ.visitorId);
       if (!v) { slot.occupant = undefined; continue; }
+      if (isTimed(slot.station)) {
+        // Timer-from-call: a confirmed (called) occupant completes once the dwell elapses.
+        // No auto-arrive (stays `called` so /board shows it); no no-show / stale for timed stations.
+        if (occ.phase === "called" && ageMs(occ.since) > dwellMs(slot.station)) {
+          store.stampMilestone(occ.visitorId, milestoneField(slot.station));
+          slot.occupant = undefined;
+          store.setLocation(occ.visitorId, { state: "waiting", since: nowIso() });
+          clearFlags(occ.visitorId);
+        }
+        continue; // skip the kiosk-station in_progress/called handling below
+      }
       if (occ.phase === "in_progress") {
         if (completionMilestoneSet(v, slot.station)) {
           slot.occupant = undefined;
@@ -337,13 +361,17 @@ export function createDispatcher(
       intake: slotsOf("intake").some(isOnline),
       bodyscan: slotsOf("bodyscan").some(isOnline),
       altar: slotsOf("altar").some(isOnline),
+      paper: slotsOf("paper").some(isOnline),
     };
+    const timedDwellMs: Partial<Record<Station, number>> = {};
+    for (const s of STATION_ORDER) if (isTimed(s)) timedDwellMs[s] = dwellMs(s);
     return {
       slots: slotList,
       queue: queueEntries(),
       completed: completedEntries(),
       surplus: [...surplus.values()],
       stationsOnline,
+      timedDwellMs,
       warmedUp: warmedUp(),
     };
   }

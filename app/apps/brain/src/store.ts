@@ -105,7 +105,9 @@ export const store = {
   /** Stamp a milestone timestamp directly (operator "mark-complete" backstop, spec §10). */
   stampMilestone(
     id: string,
-    field: "intakeAt" | "poseAt" | "personaAt" | "poseVerifiedAt" | "sessionStartAt" | "sessionEndAt",
+    field:
+      | "intakeAt" | "poseAt" | "personaAt" | "paperAt"
+      | "poseVerifiedAt" | "sessionStartAt" | "sessionEndAt",
   ): VisitorRecord | undefined {
     const v = visitors.get(id);
     if (!v) return undefined;

@@ -297,3 +297,22 @@ describe("choreo fan-out (both timings)", () => {
     await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
   });
 });
+
+describe("paper feed", () => {
+  it("feeds a page → returns text + fedAt (offline → placeholder)", async () => {
+    const res = await app.inject({
+      method: "POST", url: "/api/paper/feed",
+      payload: { image: "data:image/jpeg;base64,AAAA" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(typeof body.text).toBe("string");
+    expect(body.text.length).toBeGreaterThan(0);
+    expect(body.fedAt).toBeTruthy();
+  });
+
+  it("400s a feed with no image", async () => {
+    const res = await app.inject({ method: "POST", url: "/api/paper/feed", payload: {} });
+    expect(res.statusCode).toBe(400);
+  });
+});

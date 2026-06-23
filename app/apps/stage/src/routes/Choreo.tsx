@@ -5,8 +5,7 @@ import { useBrainSocket } from "../lib/useBrainSocket";
 import { speak, stopSpeaking } from "../lib/speech";
 import { useDevices } from "../lib/devices";
 import { DevicePicker } from "../components/DevicePicker";
-
-type CueLine = { sessionId: string; text: string };
+import { initialChoreoFeed, reduceChoreoFeed, type CueLine } from "../lib/choreoFeed";
 
 /**
  * Pure presentational cue display — unit-testable without a socket.
@@ -55,7 +54,7 @@ export function Choreo() {
   const [log, setLog] = useState<CueLine[]>([]);
   const [reactToOracle, setReactToOracle] = useState(true);
   const [speakCues, setSpeakCues] = useState(true);
-  const live = useRef("");
+  const feed = useRef(initialChoreoFeed);
 
   const out = useDevices("audiooutput", "out.choreo", "out");
   const outRef = useRef(out.deviceId);
@@ -64,15 +63,13 @@ export function Choreo() {
   speakRef.current = speakCues;
 
   const { connected } = useBrainSocket((m: WsServerMsg) => {
-    if (m.kind === "choreo.delta") {
-      live.current += m.text;
-      setCue(live.current);
-    } else if (m.kind === "choreo.done") {
-      live.current = "";
-      setCue(m.text);
-      setLog((l) => [{ sessionId: m.sessionId, text: m.text }, ...l].slice(0, 30));
-      if (speakRef.current) void speak(m.text, { sinkId: outRef.current }); // no archetype → neutral voice
-    }
+    const next = reduceChoreoFeed(feed.current, m);
+    if (next === feed.current) return; // not a choreo.* message
+    feed.current = next;
+    setCue(next.cue);
+    setLog(next.log);
+    // Only the focused session voices a cue; speak() itself preempts any in-flight clip.
+    if (next.speak && speakRef.current) void speak(next.speak.text, { sinkId: outRef.current }); // no archetype → neutral voice
   });
 
   useEffect(() => {

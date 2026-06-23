@@ -1,0 +1,88 @@
+/* /feed — Scan/Shred/Feed station: webcam capture + "into the matrix" text dissolve. */
+.feed-route {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(120% 120% at 50% 0%, #0a0a14 0%, #02020a 70%, #000 100%);
+  color: #d6ffe0;
+  overflow: hidden;
+}
+
+/* The camera preview sits small + dim in a corner — this is a capture device, not the show. */
+.feed-cam {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 180px;
+  max-width: 28vw;
+  opacity: 0.35;
+  border: 1px solid rgba(120, 255, 170, 0.25);
+  border-radius: 6px;
+}
+
+.feed-matrix {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(94vw, 1400px);
+  min-height: 72vh;
+  text-align: center;
+}
+
+/* The text grid: fixed-width monospace cells (so a letter→digit swap never shifts the layout).
+   font-size is set by FeedMatrix's fit-to-viewport hook; the clamp is the pre-fit default. */
+.feed-matrix-grid {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: clamp(1.2rem, 4vw, 3rem);
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: normal;
+  text-shadow: 0 0 12px rgba(110, 255, 170, 0.5);
+  animation: feed-appear 220ms ease-out; /* the whole text appears at once */
+  /* keep fadeOutMs in DEFAULT_KNOBS (paperAnim.ts) in sync with this duration */
+  transition: opacity 0.9s ease-in, filter 0.9s ease-in;
+}
+@keyframes feed-appear { from { opacity: 0; } to { opacity: 1; } }
+/* End of sequence: the whole field drifts "into the matrix". */
+.feed-matrix-grid.fading { opacity: 0; filter: blur(8px); }
+
+/* A word never breaks mid-way; wrapping happens at the spaces between words. */
+.feed-word { display: inline-block; white-space: nowrap; }
+
+.feed-cell {
+  display: inline-block;
+  width: 1ch; /* fixed advance — letter and digit occupy the same cell */
+  text-align: center;
+}
+.feed-cell.letter { opacity: 1; }                    /* readable */
+.feed-cell.binary { opacity: 0.92; color: #9effc6; } /* constantly-flipping 0/1 */
+
+.feed-idle { opacity: 0.4; font-style: italic; letter-spacing: 0.08em; }
+
+.feed-status {
+  position: absolute;
+  bottom: 6%;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0.6;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+}
+
+.feed-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  opacity: 0.5;
+  font-size: 0.8rem;
+}
+.feed-controls:hover { opacity: 1; }
