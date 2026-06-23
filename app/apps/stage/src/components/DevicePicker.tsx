@@ -21,13 +21,15 @@ export function DevicePicker({
   warn?: boolean;
 }) {
   const showWarn = warn ?? (kind === "audiooutput" && !canRouteAudio());
-  const noun = kind === "audiooutput" ? "Output" : "Camera";
+  const noun = kind === "audiooutput" ? "Output" : kind === "audioinput" ? "Mic" : "Camera";
+  const defaultLabel =
+    kind === "audiooutput" ? "System default" : kind === "audioinput" ? "Default mic" : "Default camera";
   return (
     <span className="device-picker">
       <label>
         {label}{" "}
         <select value={value} onChange={(e) => onChange(e.target.value)}>
-          <option value="">{kind === "audiooutput" ? "System default" : "Default camera"}</option>
+          <option value="">{defaultLabel}</option>
           {devices.map((d, i) => (
             <option key={d.deviceId} value={d.deviceId}>
               {d.label || `${noun} ${i + 1}`}

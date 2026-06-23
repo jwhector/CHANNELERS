@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-23 — /channel: per-tab mic input picker
+
+- **What:** Added a **mic input picker** to the `/channel` performer page, mirroring the existing earpiece-output picker. New `useDevices("audioinput", "in.channel", "in")` hook + a second `DevicePicker` in the in-session header; `?in=` URL override (label substring) and per-tab `sessionStorage` persistence, same as `?out=`. The STT recognizer (`createRecognizer`) now takes a `{ getDeviceId }` option and builds its `getUserMedia` constraint from it (`{ audio: { deviceId: { exact } } }` when chosen, else `{ audio: true }`); read at each `start()` so changing the picker takes effect on the next listen. `DeviceKind` gained `"audioinput"`; `DevicePicker` learned the "Mic"/"Default mic" labels (the output-routing warn stays output-only).
+- **Why:** Performers channelling via the central machine need to point each window at a specific mic (e.g. a Scarlett input / lav) rather than the system default — the input-side counterpart to the per-performer earpiece routing.
+- **Files/areas:** stage `lib/speech.ts` (recognizer `getDeviceId` option), `lib/devices.ts` (`audioinput` kind), `components/DevicePicker.tsx` (mic labels), `routes/Channel.tsx` (mic hook + picker), `lib/speech.test.ts` (+2 recognizer device-constraint tests). Branch `group-timed-stations`.
+- **Verification:** TDD red→green on the recognizer constraint; `pnpm -r typecheck` 0 errors; stage **50** tests pass (15 files). **Not run here:** in-browser mic-routing smoke.
+- **Docs touched:** this entry; `app/CLAUDE.md` (/channel mic picker note).
+
 ## 2026-06-23 — /feed animation: word-by-word reveal → flipping binary
 
 - **What:** Reworked the `/feed` post-OCR spectacle. Instead of one text block dissolving, the fed text lays out as fixed-width monospace cells (so a letter→digit swap never shifts the layout) sized to fit the viewport; each **word fades in readable, holds (~560 ms), then its letters convert to constantly-flipping 0/1** as the next word fades in — accumulating across the field — and the whole thing fades out at the end. New `apps/stage/src/lib/paperAnim.ts` (pure, unit-tested timeline: `tokenize` / `cellPhaseAt` / `binaryDigit` / `fadeStartMs` / `largestFitting` + `DEFAULT_KNOBS`) + `components/FeedMatrix.tsx` (rAF clock, `nowMs`-injectable for tests; `useFitText`-style binary-search fit). `FeedDisplay` swaps its dissolving `<p>` for `<FeedMatrix>`; `feed.css` gains grid/cell/fade rules (the old `feed-dissolve` keyframe removed).

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi, type Mock } from "vitest";
-import { speak } from "./speech";
+import { speak, createRecognizer } from "./speech";
 
 let speakSpy: Mock;
 
@@ -67,4 +67,35 @@ test("reports via:speechSynthesis when the brain returns 204 (no keys)", async (
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 204 }));
   const r = await speak("hello", { sinkId: "iem-2" });
   expect(r).toEqual({ via: "speechSynthesis" });
+});
+
+class FakeRecorder {
+  state = "inactive";
+  mimeType = "audio/webm";
+  ondataavailable: unknown = null;
+  onstop: unknown = null;
+  constructor(public stream: unknown) {}
+  start() {
+    this.state = "recording";
+  }
+  stop() {}
+}
+
+test("createRecognizer records from the chosen mic when getDeviceId returns an id", async () => {
+  const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [] });
+  vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+  vi.stubGlobal("MediaRecorder", FakeRecorder);
+  const rec = createRecognizer({ onFinal: () => {} }, { getDeviceId: () => "mic-2" });
+  rec.start();
+  await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalled());
+  expect(getUserMedia).toHaveBeenCalledWith({ audio: { deviceId: { exact: "mic-2" } } });
+});
+
+test("createRecognizer uses the default mic when no device is chosen", async () => {
+  const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [] });
+  vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+  vi.stubGlobal("MediaRecorder", FakeRecorder);
+  const rec = createRecognizer({ onFinal: () => {} }, { getDeviceId: () => "" });
+  rec.start();
+  await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledWith({ audio: true }));
 });

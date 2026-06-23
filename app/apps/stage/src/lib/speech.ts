@@ -120,8 +120,15 @@ async function transcribeViaBrain(wav: Blob): Promise<string> {
   return String(data.text ?? "").trim();
 }
 
-/** MediaRecorder STT → the brain's Whisper endpoint (OpenAI when keyed, else local). */
-export function createRecognizer(handlers: RecognizerHandlers): Recognizer {
+/**
+ * MediaRecorder STT → the brain's Whisper endpoint (OpenAI when keyed, else local).
+ * Pass `getDeviceId` to record from a chosen mic (read at each start() so changing the
+ * picker takes effect on the next listen); falsy/absent → the system default mic.
+ */
+export function createRecognizer(
+  handlers: RecognizerHandlers,
+  opts: { getDeviceId?: () => string | undefined } = {},
+): Recognizer {
   const supported = typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
   let mediaRecorder: MediaRecorder | null = null;
   let stream: MediaStream | null = null;
@@ -133,7 +140,10 @@ export function createRecognizer(handlers: RecognizerHandlers): Recognizer {
       chunks = [];
       void (async () => {
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const id = opts.getDeviceId?.();
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: id ? { deviceId: { exact: id } } : true,
+          });
           mediaRecorder = new MediaRecorder(stream);
           mediaRecorder.ondataavailable = (e) => {
             if (e.data.size) chunks.push(e.data);

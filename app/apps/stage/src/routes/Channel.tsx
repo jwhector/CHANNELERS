@@ -52,6 +52,11 @@ export function Channel() {
   const outRef = useRef(out.deviceId);
   outRef.current = out.deviceId;
 
+  // Mic input device for the visitor's words. Per-tab; read at each listen via micRef.
+  const mic = useDevices("audioinput", "in.channel", "in");
+  const micRef = useRef(mic.deviceId);
+  micRef.current = mic.deviceId;
+
   const whisperRef = useRef(whisper);
   whisperRef.current = whisper;
   const mySessionIdRef = useRef(mySessionId);
@@ -192,7 +197,7 @@ export function Channel() {
       onStart: () => setError(null),
       onEnd: () => setListening(false),
       onError: (msg) => { setListening(false); setError(msg); },
-    });
+    }, { getDeviceId: () => micRef.current });
   }
 
   // Update locally now (snappy sliders), push to the brain debounced.
@@ -250,6 +255,15 @@ export function Channel() {
             onChange={out.setDeviceId}
             needsPermission={out.needsPermission}
             onEnableLabels={out.enableLabels}
+          />
+          <DevicePicker
+            kind="audioinput"
+            label="mic"
+            devices={mic.devices}
+            value={mic.deviceId}
+            onChange={mic.setDeviceId}
+            needsPermission={mic.needsPermission}
+            onEnableLabels={mic.enableLabels}
           />
           <button className="end" onClick={endSession}>End</button>
         </header>
