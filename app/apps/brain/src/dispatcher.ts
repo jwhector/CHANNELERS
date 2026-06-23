@@ -65,6 +65,7 @@ export function createDispatcher(
   // A timed group station (e.g. `paper`): kiosk-less, always-online slots, completed by a dwell
   // timer from Confirm-call instead of a task milestone (spec 2026-06-22).
   const isTimed = (s: Station): boolean => !!knobs.timed?.[s];
+  const dwellMs = (s: Station): number => knobs.timed?.[s]?.dwellMs ?? Infinity;
 
   function addFlag(id: string, ff: DispatchFlag): void {
     const arr = flags.get(id) ?? [];
@@ -230,8 +231,7 @@ export function createDispatcher(
     if (!v) return false;
     const station = slot?.station ?? (v.location.station as Station | undefined);
     if (station) {
-      const field = station === "intake" ? "intakeAt" : station === "bodyscan" ? "poseAt" : "sessionEndAt";
-      store.stampMilestone(visitorId, field);
+      store.stampMilestone(visitorId, milestoneField(station));
     }
     freeSlotOf(visitorId);
     store.setLocation(visitorId, { state: "waiting", since: nowIso() });
@@ -268,9 +268,17 @@ export function createDispatcher(
     return { record };
   }
 
+  function milestoneField(station: Station): "intakeAt" | "poseAt" | "paperAt" | "sessionEndAt" {
+    if (station === "intake") return "intakeAt";
+    if (station === "bodyscan") return "poseAt";
+    if (station === "paper") return "paperAt";
+    return "sessionEndAt"; // altar held through the reading
+  }
+
   function completionMilestoneSet(v: VisitorRecord, station: Station): boolean {
     if (station === "intake") return !!v.intakeAt;
     if (station === "bodyscan") return !!v.poseAt;
+    if (station === "paper") return !!v.paperAt;
     return !!v.sessionEndAt; // altar held through the reading
   }
 
@@ -290,6 +298,17 @@ export function createDispatcher(
       if (!occ) continue;
       const v = store.get(occ.visitorId);
       if (!v) { slot.occupant = undefined; continue; }
+      if (isTimed(slot.station)) {
+        // Timer-from-call: a confirmed (called) occupant completes once the dwell elapses.
+        // No auto-arrive (stays `called` so /board shows it); no no-show / stale for timed stations.
+        if (occ.phase === "called" && ageMs(occ.since) > dwellMs(slot.station)) {
+          store.stampMilestone(occ.visitorId, milestoneField(slot.station));
+          slot.occupant = undefined;
+          store.setLocation(occ.visitorId, { state: "waiting", since: nowIso() });
+          clearFlags(occ.visitorId);
+        }
+        continue; // skip the kiosk-station in_progress/called handling below
+      }
       if (occ.phase === "in_progress") {
         if (completionMilestoneSet(v, slot.station)) {
           slot.occupant = undefined;
