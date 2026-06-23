@@ -29,6 +29,9 @@ export const config = {
   // When the key is unset the client falls back to browser speechSynthesis.
   elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
   elevenLabsModel: process.env.ELEVENLABS_MODEL ?? "eleven_flash_v2_5",
+  // OpenAI TTS fallback (apps/brain/src/tts.ts) when ELEVENLABS_API_KEY is unset but OPENAI_API_KEY is.
+  // Returns routable MP3 so the stage's setSinkId output routing keeps working. Verified model id.
+  openAiTtsModel: process.env.OPENAI_TTS_MODEL ?? "gpt-4o-mini-tts",
   // Choreography agent: the second live loop (apps/brain/src/choreo.ts). Mirrors the oracle model.
   choreoModel: process.env.CHOREO_MODEL ?? "gpt-4o",
   choreo: {
