@@ -5,6 +5,7 @@ import { useDevices } from "../lib/devices";
 import { DevicePicker } from "../components/DevicePicker";
 import { api } from "../lib/api";
 import { paperFedText, captureDataUrl } from "../lib/paperFeed";
+import { FeedMatrix } from "../components/FeedMatrix";
 import "../styles/feed.css";
 
 /** Presentational "into the matrix" surface — the fed text dissolving, or an idle prompt. */
@@ -14,7 +15,7 @@ export function FeedDisplay({
   return (
     <div className="feed-matrix">
       {text ? (
-        <p key={text} className="feed-text feed-dissolve">{text}</p>
+        <FeedMatrix key={text} text={text} />
       ) : (
         <p className="feed-idle">Feed a page to the machine.</p>
       )}

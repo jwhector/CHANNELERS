@@ -28,28 +28,38 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: min(90vw, 1100px);
-  min-height: 40vh;
+  width: min(94vw, 1400px);
+  min-height: 72vh;
   text-align: center;
 }
 
-.feed-text {
+/* The text grid: fixed-width monospace cells (so a letter→digit swap never shifts the layout).
+   font-size is set by FeedMatrix's fit-to-viewport hook; the clamp is the pre-fit default. */
+.feed-matrix-grid {
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  font-size: clamp(1.4rem, 4vw, 3rem);
-  line-height: 1.35;
-  letter-spacing: 0.04em;
-  text-shadow: 0 0 12px rgba(110, 255, 170, 0.55);
-  white-space: pre-wrap;
+  font-size: clamp(1.2rem, 4vw, 3rem);
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: normal;
+  text-shadow: 0 0 12px rgba(110, 255, 170, 0.5);
+  /* keep fadeOutMs in DEFAULT_KNOBS (paperAnim.ts) in sync with this duration */
+  transition: opacity 1.5s ease-in, filter 1.5s ease-in;
 }
+/* End of sequence: the whole field drifts "into the matrix". */
+.feed-matrix-grid.fading { opacity: 0; filter: blur(8px); }
 
-/* Text materializes, then drifts "into the matrix" (fade + recede + blur). */
-@keyframes feed-dissolve {
-  0% { opacity: 0; transform: translateZ(0) scale(1.04); filter: blur(6px); }
-  18% { opacity: 1; transform: none; filter: blur(0); }
-  78% { opacity: 1; transform: none; filter: blur(0); }
-  100% { opacity: 0; transform: translateY(-10%) scale(0.92); filter: blur(8px); }
+/* A word never breaks mid-way; wrapping happens at the spaces between words. */
+.feed-word { display: inline-block; white-space: nowrap; }
+
+.feed-cell {
+  display: inline-block;
+  width: 1ch; /* fixed advance — letter and digit occupy the same cell */
+  text-align: center;
 }
-.feed-dissolve { animation: feed-dissolve 9s ease-in-out forwards; }
+.feed-cell.hidden { opacity: 0; }                 /* reserved space, not yet revealed */
+.feed-cell.letter { opacity: 1; transition: opacity 250ms ease-out; } /* word fades in readable */
+.feed-cell.binary { opacity: 0.92; color: #9effc6; }                  /* constantly-flipping 0/1 */
 
 .feed-idle { opacity: 0.4; font-style: italic; letter-spacing: 0.08em; }
 
