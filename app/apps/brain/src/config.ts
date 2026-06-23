@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 
 // Load the monorepo-root .env (the brain's cwd is apps/brain when run via pnpm).
@@ -7,6 +8,16 @@ loadEnv({ path: "../../.env" });
 export const config = {
   host: process.env.HOST ?? "127.0.0.1",
   port: Number(process.env.PORT ?? 8787),
+  // Single-origin deployment: when true the Brain also serves the stage's Vite build,
+  // so one HTTPS origin answers the screens (relative /api + /ws) and the WS upgrade.
+  // Off by default — dev uses Vite's proxy; the container sets SERVE_STAGE=true.
+  serveStage: process.env.SERVE_STAGE === "true",
+  // Absolute path to apps/stage/dist. Default resolves from this source file so it's
+  // correct regardless of cwd; override with STAGE_DIST in other layouts.
+  stageDist: process.env.STAGE_DIST ?? fileURLToPath(new URL("../../stage/dist", import.meta.url)),
+  // WebSocket keepalive: ping every N ms so campus/venue proxies don't reap idle sockets
+  // and half-open connections are detected. 0 disables.
+  wsHeartbeatMs: Number(process.env.WS_HEARTBEAT_MS ?? 30_000),
   openaiApiKey: process.env.OPENAI_API_KEY,
   transformModel: process.env.TRANSFORM_MODEL ?? "gpt-4o",
   // Both default to gpt-4o; override per-role via env (ARCHITECTURE.md §5.3).

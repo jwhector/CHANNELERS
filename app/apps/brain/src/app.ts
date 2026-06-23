@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import staticPlugin from "@fastify/static";
 import { SurveyResponse, ScanResult, PoseVector, Station, type ShowEvent } from "@channelers/shared";
 import { z } from "zod";
 import { store } from "./store";
@@ -15,7 +16,13 @@ import { generateFirstPass, getChoreoConfig, setChoreoConfig } from "./choreo";
 import { config } from "./config";
 import { initAbleton } from "./ableton";
 
-export async function buildApp(): Promise<FastifyInstance> {
+/** `serveStage`/`stageDist` default to `config`; tests inject a fixture dir. */
+export async function buildApp(
+  opts: { serveStage?: boolean; stageDist?: string } = {},
+): Promise<FastifyInstance> {
+  const serveStage = opts.serveStage ?? config.serveStage;
+  const stageDist = opts.stageDist ?? config.stageDist;
+
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true });
   await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
@@ -28,7 +35,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerDivination(bus);
   registerTuning(bus);
   const dispatcher = createDispatcher(bus);
-  app.addHook("onClose", async () => dispatcher.stop());
+  app.addHook("onClose", async () => {
+    dispatcher.stop();
+    bus.dispose();
+  });
 
   app.get("/api/health", async () => ({ ok: true, at: new Date().toISOString() }));
 
@@ -222,6 +232,21 @@ export async function buildApp(): Promise<FastifyInstance> {
     for (const e of samples) bus.publish(e);
     return { published: samples.length };
   });
+
+  // ── single-origin: serve the stage's Vite build + SPA fallback ──
+  // One HTTPS origin then answers the screens (relative /api + /ws) with no CORS/proxy.
+  // `wildcard: false` serves real files and lets misses fall through to the notFound
+  // handler, which returns index.html for client-routed paths (/intake, /channel, …)
+  // while leaving /api and /ws as genuine JSON 404s.
+  if (serveStage) {
+    await app.register(staticPlugin, { root: stageDist, wildcard: false });
+    app.setNotFoundHandler((req, reply) => {
+      if (req.method !== "GET" || req.url.startsWith("/api") || req.url.startsWith("/ws")) {
+        return reply.code(404).send({ error: "not found" });
+      }
+      return reply.sendFile("index.html");
+    });
+  }
 
   return app;
 }

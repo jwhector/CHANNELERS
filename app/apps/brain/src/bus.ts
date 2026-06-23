@@ -6,6 +6,8 @@ import { config } from "./config";
 
 type OscSend = (address: string, ...args: Array<string | number>) => void;
 type ReplyFn = (msg: WsServerMsg) => void;
+/** ws sockets, tagged with the keepalive liveness flag (true since the last pong). */
+type LiveSocket = WebSocket & { isAlive?: boolean };
 
 /**
  * The event bus + WebSocket hub.
@@ -25,12 +27,17 @@ export class Bus {
   private onCmdHooks: Array<(cmd: WsClientMsg, reply: ReplyFn, connId: string) => void> = [];
   private onConnectHooks: Array<(reply: ReplyFn, connId: string) => void> = [];
   private onDisconnectHooks: Array<(connId: string) => void> = [];
+  private heartbeatTimer?: ReturnType<typeof setInterval>;
 
-  constructor(server: Server) {
+  constructor(server: Server, opts: { heartbeatMs?: number } = {}) {
     this.wss = new WebSocketServer({ server, path: "/ws" });
-    this.wss.on("connection", (ws) => {
+    this.wss.on("connection", (ws: LiveSocket) => {
       const connId = randomUUID();
       const reply: ReplyFn = (msg) => this.sendTo(ws, msg);
+      ws.isAlive = true;
+      ws.on("pong", () => {
+        ws.isAlive = true;
+      });
       this.sendTo(ws, { kind: "hello" });
       for (const hook of this.onConnectHooks) hook(reply, connId);
       ws.on("message", (raw) => {
@@ -41,7 +48,37 @@ export class Bus {
         for (const hook of this.onDisconnectHooks) hook(connId);
       });
     });
+    const heartbeatMs = opts.heartbeatMs ?? config.wsHeartbeatMs;
+    if (heartbeatMs > 0) {
+      this.heartbeatTimer = setInterval(() => this.pingTick(), heartbeatMs);
+      this.heartbeatTimer.unref(); // never keep the process (or a test) alive
+    }
     if (config.osc.enabled) void this.initOsc();
+  }
+
+  /**
+   * One keepalive tick: ping every live socket, and terminate any that hasn't
+   * answered (ponged) since the previous tick. Keeps idle sockets warm through
+   * NAT/proxy idle timeouts and reaps half-open connections.
+   */
+  pingTick(): void {
+    for (const client of this.wss.clients) {
+      const ws = client as LiveSocket;
+      if (ws.isAlive === false) {
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      ws.ping();
+    }
+  }
+
+  /** Stop the keepalive timer (wired to Fastify onClose). */
+  dispose(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+    }
   }
 
   /** Register a command handler. Multiple subsystems may register; each sees every command. */
