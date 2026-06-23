@@ -49,7 +49,7 @@ describe("slot derivation from config counts", () => {
       ["altar-0", "bodyscan-0", "bodyscan-1", "intake-0", "intake-1", "intake-2"],
     );
     expect(s.slots.every((x) => x.online === false && !x.kioskId)).toBe(true);
-    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false });
+    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false, paper: false });
   });
 });
 

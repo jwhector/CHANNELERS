@@ -337,6 +337,7 @@ export function createDispatcher(
       intake: slotsOf("intake").some(isOnline),
       bodyscan: slotsOf("bodyscan").some(isOnline),
       altar: slotsOf("altar").some(isOnline),
+      paper: slotsOf("paper").some(isOnline),
     };
     return {
       slots: slotList,
