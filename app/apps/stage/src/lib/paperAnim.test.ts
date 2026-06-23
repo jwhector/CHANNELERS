@@ -13,13 +13,14 @@ test("tokenize splits into fixed cells with word indices, spaces reserved", () =
   expect(wordCount(cells)).toBe(2);
 });
 
-test("cellPhaseAt reveals words sequentially: hidden → letter → binary", () => {
+test("cellPhaseAt: whole text readable at once, then a quick per-cell ripple into binary", () => {
   const k = DEFAULT_KNOBS;
   expect(cellPhaseAt(0, 0, k)).toBe("letter");
-  expect(cellPhaseAt(0, k.readHoldMs + 40, k)).toBe("binary");
-  expect(cellPhaseAt(1, 0, k)).toBe("hidden");
-  expect(cellPhaseAt(1, k.wordStepMs, k)).toBe("letter"); // word 1 fades in as word 0 converts
-  expect(cellPhaseAt(1, k.wordStepMs + k.readHoldMs + 40, k)).toBe("binary");
+  expect(cellPhaseAt(50, 0, k)).toBe("letter"); // every cell is readable at t=0
+  expect(cellPhaseAt(0, k.readHoldMs + 1, k)).toBe("binary");
+  // later cells convert a touch later (the quick ripple), not all at once
+  expect(cellPhaseAt(10, k.readHoldMs + 1, k)).toBe("letter");
+  expect(cellPhaseAt(10, k.readHoldMs + 10 * k.transformStaggerMs + 1, k)).toBe("binary");
 });
 
 test("binaryDigit is deterministic, flips over time, and shimmers across cells", () => {
@@ -31,9 +32,9 @@ test("binaryDigit is deterministic, flips over time, and shimmers across cells",
   expect(acrossCells.size).toBe(2); // cells are not all in lockstep
 });
 
-test("fadeStartMs accounts for all words + the end hold", () => {
+test("fadeStartMs accounts for the ripple across all cells + the end hold", () => {
   const k = DEFAULT_KNOBS;
-  expect(fadeStartMs(2, k)).toBe(1 * k.wordStepMs + k.readHoldMs + k.endHoldMs);
+  expect(fadeStartMs(5, k)).toBe(k.readHoldMs + 4 * k.transformStaggerMs + k.endHoldMs);
 });
 
 test("largestFitting binary-searches the biggest fitting size", () => {

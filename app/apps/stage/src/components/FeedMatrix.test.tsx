@@ -2,11 +2,11 @@ import { render, screen } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { FeedMatrix } from "./FeedMatrix";
 
-test("exposes the full text via aria-label and shows the first word readable at t=0", () => {
+test("exposes the full text via aria-label and shows the WHOLE text readable at t=0", () => {
   render(<FeedMatrix text="hi yo" nowMs={0} />);
   const grid = screen.getByLabelText("hi yo");
   expect(grid).toBeInTheDocument();
-  expect(grid.textContent).toContain("hi"); // word 0 is readable letters
+  expect(grid.textContent).toBe("hi yo"); // entire text appears readable at once
 });
 
 test("renders only flipping binary once every word has converted", () => {

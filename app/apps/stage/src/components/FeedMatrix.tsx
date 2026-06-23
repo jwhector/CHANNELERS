@@ -39,7 +39,7 @@ export function FeedMatrix({
   // Fire onDone once the whole sequence (reveal + end hold + fade-out) has played.
   useEffect(() => {
     if (nowMs !== undefined || !onDone) return;
-    const total = fadeStartMs(words.length, knobs) + knobs.fadeOutMs;
+    const total = fadeStartMs(cells.length, knobs) + knobs.fadeOutMs;
     const id = setTimeout(() => onDone(), total);
     return () => clearTimeout(id);
   }, [displayText]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -66,7 +66,7 @@ export function FeedMatrix({
     return () => ro.disconnect();
   }, [displayText]);
 
-  const fading = now >= fadeStartMs(words.length, knobs);
+  const fading = now >= fadeStartMs(cells.length, knobs);
 
   return (
     <div
@@ -74,21 +74,21 @@ export function FeedMatrix({
       className={`feed-matrix-grid${fading ? " fading" : ""}`}
       aria-label={displayText}
     >
-      {words.map((word, gi) => {
-        const phase = cellPhaseAt(gi, now, knobs);
-        return (
-          <Fragment key={gi}>
-            {gi > 0 ? " " : null}
-            <span className="feed-word">
-              {word.map((c) => (
+      {words.map((word, gi) => (
+        <Fragment key={gi}>
+          {gi > 0 ? " " : null}
+          <span className="feed-word">
+            {word.map((c) => {
+              const phase = cellPhaseAt(c.cellIndex, now, knobs);
+              return (
                 <span key={c.cellIndex} className={`feed-cell ${phase}`}>
                   {phase === "binary" ? binaryDigit(c.cellIndex, now, knobs) : c.char}
                 </span>
-              ))}
-            </span>
-          </Fragment>
-        );
-      })}
+              );
+            })}
+          </span>
+        </Fragment>
+      ))}
     </div>
   );
 }

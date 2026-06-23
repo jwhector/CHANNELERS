@@ -12,26 +12,26 @@ export type Cell = { char: string; isSpace: boolean; wordIndex: number; cellInde
 export type CellPhase = "hidden" | "letter" | "binary";
 
 export type PaperAnimKnobs = {
-  /** Cadence between consecutive word reveals (ms). */
-  wordStepMs: number;
-  /** How long a word stays readable before its letters convert to binary (ms). */
+  /** How long the whole text stays readable before it transforms into binary (ms). */
   readHoldMs: number;
+  /** Per-cell delay across the transform so it ripples into binary quickly rather than all at once (ms). */
+  transformStaggerMs: number;
   /** Per-cell binary flip period range (ms) — varied per cell for shimmer. */
   flipMinMs: number;
   flipMaxMs: number;
-  /** Hold after the last word converts, before the whole field fades out (ms). */
+  /** Hold in flipping binary after the transform, before the field fades out (ms). */
   endHoldMs: number;
   /** Final fade-out duration (ms). */
   fadeOutMs: number;
 };
 
 export const DEFAULT_KNOBS: PaperAnimKnobs = {
-  wordStepMs: 560,
-  readHoldMs: 560,
-  flipMinMs: 90,
-  flipMaxMs: 160,
-  endHoldMs: 1200,
-  fadeOutMs: 1500,
+  readHoldMs: 1000,
+  transformStaggerMs: 8,
+  flipMinMs: 70,
+  flipMaxMs: 140,
+  endHoldMs: 1400,
+  fadeOutMs: 900,
 };
 
 /** Split text into fixed cells. Non-space runs are words (0,1,2…); whitespace cells reserve space. */
@@ -58,12 +58,13 @@ export function wordCount(cells: Cell[]): number {
   return cells.reduce((max, c) => (c.wordIndex > max ? c.wordIndex : max), -1) + 1;
 }
 
-/** Phase of a word's cells at elapsed time t. */
-export function cellPhaseAt(wordIndex: number, tMs: number, k: PaperAnimKnobs): CellPhase {
-  const start = wordIndex * k.wordStepMs;
-  if (tMs < start) return "hidden";
-  if (tMs < start + k.readHoldMs) return "letter";
-  return "binary";
+/**
+ * Phase of a cell at elapsed time t. The whole text is readable from the start ("letter"); after
+ * `readHoldMs` it transforms into binary, rippling quickly across cells by `transformStaggerMs`.
+ */
+export function cellPhaseAt(cellIndex: number, tMs: number, k: PaperAnimKnobs): CellPhase {
+  const convertAt = k.readHoldMs + cellIndex * k.transformStaggerMs;
+  return tMs < convertAt ? "letter" : "binary";
 }
 
 /** Deterministic flipping digit for a binary cell — per-cell period + offset give an alive shimmer. */
@@ -74,9 +75,9 @@ export function binaryDigit(cellIndex: number, tMs: number, k: PaperAnimKnobs): 
   return Math.floor((tMs + offset) / period) % 2 === 0 ? "0" : "1";
 }
 
-/** When the whole field should begin fading out (after the last word converts + end hold). */
-export function fadeStartMs(words: number, k: PaperAnimKnobs): number {
-  const lastConvertsAt = (Math.max(1, words) - 1) * k.wordStepMs + k.readHoldMs;
+/** When the whole field should begin fading out (after the last cell converts + end hold). */
+export function fadeStartMs(cellCount: number, k: PaperAnimKnobs): number {
+  const lastConvertsAt = k.readHoldMs + Math.max(0, cellCount - 1) * k.transformStaggerMs;
   return lastConvertsAt + k.endHoldMs;
 }
 

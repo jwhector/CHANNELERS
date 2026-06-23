@@ -43,9 +43,11 @@
   text-align: center;
   white-space: normal;
   text-shadow: 0 0 12px rgba(110, 255, 170, 0.5);
+  animation: feed-appear 220ms ease-out; /* the whole text appears at once */
   /* keep fadeOutMs in DEFAULT_KNOBS (paperAnim.ts) in sync with this duration */
-  transition: opacity 1.5s ease-in, filter 1.5s ease-in;
+  transition: opacity 0.9s ease-in, filter 0.9s ease-in;
 }
+@keyframes feed-appear { from { opacity: 0; } to { opacity: 1; } }
 /* End of sequence: the whole field drifts "into the matrix". */
 .feed-matrix-grid.fading { opacity: 0; filter: blur(8px); }
 
@@ -57,9 +59,8 @@
   width: 1ch; /* fixed advance — letter and digit occupy the same cell */
   text-align: center;
 }
-.feed-cell.hidden { opacity: 0; }                 /* reserved space, not yet revealed */
-.feed-cell.letter { opacity: 1; transition: opacity 250ms ease-out; } /* word fades in readable */
-.feed-cell.binary { opacity: 0.92; color: #9effc6; }                  /* constantly-flipping 0/1 */
+.feed-cell.letter { opacity: 1; }                    /* readable */
+.feed-cell.binary { opacity: 0.92; color: #9effc6; } /* constantly-flipping 0/1 */
 
 .feed-idle { opacity: 0.4; font-style: italic; letter-spacing: 0.08em; }
 
