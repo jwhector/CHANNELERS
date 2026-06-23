@@ -8,6 +8,8 @@ import { CalledGate } from "../components/CalledGate";
 import { Bar, drawSkeleton } from "../components/poseUI";
 import { useStationPresence } from "../lib/useStationPresence";
 import { useReleaseToGate } from "../lib/useReleaseToGate";
+import { useDevices } from "../lib/devices";
+import { DevicePicker } from "../components/DevicePicker";
 
 export function Altar() {
   const { connected, slot } = useStationPresence("altar");
@@ -30,6 +32,7 @@ function Gate({ visitor, connected }: { visitor: VisitorProfile; connected: bool
   const [similarity, setSimilarity] = useState(0);
   const [holdProgress, setHoldProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const cam = useDevices("videoinput", "cam.altar", "cam");
 
   const verifiedRef = useRef(verified);
   verifiedRef.current = verified;
@@ -74,7 +77,7 @@ function Gate({ visitor, connected }: { visitor: VisitorProfile; connected: bool
     if (prog >= 1) { holdStartRef.current = null; void markVerified(); }
   }, [template, stillness, matchThresh, verifySec]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { videoRef, status, error: camError, start } = usePoseLandmarker(onFrame);
+  const { videoRef, status, error: camError, start } = usePoseLandmarker(onFrame, cam.deviceId);
   const ready = verified && !!archetype;
 
   return (
@@ -107,6 +110,15 @@ function Gate({ visitor, connected }: { visitor: VisitorProfile; connected: bool
             </div>
           )}
           <button className="end" onClick={() => void markVerified()}>Manual unlock (override)</button>
+          <DevicePicker
+            kind="videoinput"
+            label="camera"
+            devices={cam.devices}
+            value={cam.deviceId}
+            onChange={cam.setDeviceId}
+            needsPermission={cam.needsPermission}
+            onEnableLabels={cam.enableLabels}
+          />
         </div>
       )}
       {camError && <p className="error">camera/model error: {camError}</p>}
