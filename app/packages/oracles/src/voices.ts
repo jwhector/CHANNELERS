@@ -1,7 +1,7 @@
 import { PERSONAS } from "./personas";
 
 /** Neutral fallback voice (ElevenLabs "Rachel", a stock premade voice) for any archetype without its own. */
-export const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
+export const DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
 
 /** Neutral OpenAI TTS voice for the fallback synthesis path (and choreo cues). */
 export const DEFAULT_OPENAI_VOICE = "sage";

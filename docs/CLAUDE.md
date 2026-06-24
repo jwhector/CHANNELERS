@@ -26,7 +26,7 @@ A local **Show Brain** (Fastify + `ws` + OSC + OpenAI SDK) owns visitor data and
 - **Music output** = lyrics + mood/tempo/key/synth-palette params for Anna to perform live (not finished audio, not raw MIDI).
 
 ## Working agreements
-- **After every change, update `CHANGELOG.md` (newest entry on top) and any docs the change affects** (ARCHITECTURE.md, this file, app docs). The changelog is how context transfers between sessions — treat it as required, not optional.
+- **After a substantive change, update `CHANGELOG.md`** (newest entry on top: what / why / files-areas / docs-touched) — it's how context transfers between sessions. Update `ARCHITECTURE.md` only on a real architectural shift, and a `CLAUDE.md` only when its stack/routes/conventions actually change. Skip the churn for trivial or no-op edits.
 - New team questions go in **ARCHITECTURE.md §12**, not a new file.
 - Keep work scoped to the workshop MVP; prefer one full working path over breadth.
 - For anything touching the OpenAI API (models, params, caching, fine-tuning), check the current reference rather than relying on memory.

@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
-  tokenize, wordCount, cellPhaseAt, binaryDigit, fadeStartMs, largestFitting, DEFAULT_KNOBS,
+  tokenize, wordCount, cellPhaseAt, binaryDigit, shredBeginMs, shredDelayFor, shredSpinDeg,
+  totalMs, largestFitting, DEFAULT_KNOBS,
 } from "./paperAnim";
 
 test("tokenize splits into fixed cells with word indices, spaces reserved", () => {
@@ -32,9 +33,35 @@ test("binaryDigit is deterministic, flips over time, and shimmers across cells",
   expect(acrossCells.size).toBe(2); // cells are not all in lockstep
 });
 
-test("fadeStartMs accounts for the ripple across all cells + the end hold", () => {
+test("shredBeginMs (black hole opens) accounts for the ripple across all cells + the binary hold", () => {
   const k = DEFAULT_KNOBS;
-  expect(fadeStartMs(5, k)).toBe(k.readHoldMs + 4 * k.transformStaggerMs + k.endHoldMs);
+  expect(shredBeginMs(5, k)).toBe(k.readHoldMs + 4 * k.transformStaggerMs + k.binaryHoldMs);
+});
+
+test("shredDelayFor is deterministic, inside [0, shredWindowMs), and scatters the rip order", () => {
+  const k = DEFAULT_KNOBS;
+  for (const i of [0, 1, 7, 42, 99]) {
+    const d = shredDelayFor(i, k);
+    expect(d).toBeGreaterThanOrEqual(0);
+    expect(d).toBeLessThan(k.shredWindowMs);
+    expect(shredDelayFor(i, k)).toBe(d); // deterministic
+  }
+  // consecutive cells do NOT get monotonic delays — the rip looks random, not left-to-right
+  const seq = [0, 1, 2, 3, 4, 5].map((i) => shredDelayFor(i, k));
+  const sorted = [...seq].sort((a, b) => a - b);
+  expect(seq).not.toEqual(sorted);
+});
+
+test("shredSpinDeg is deterministic and spins both directions", () => {
+  expect(shredSpinDeg(3)).toBe(shredSpinDeg(3));
+  const spins = [0, 1, 2, 3, 4, 5, 6, 7].map(shredSpinDeg);
+  expect(spins.some((s) => s < 0)).toBe(true);
+  expect(spins.some((s) => s > 0)).toBe(true);
+});
+
+test("totalMs covers the whole sequence: black hole open + full shred window + one cell's travel", () => {
+  const k = DEFAULT_KNOBS;
+  expect(totalMs(5, k)).toBe(shredBeginMs(5, k) + k.shredWindowMs + k.shredDurationMs);
 });
 
 test("largestFitting binary-searches the biggest fitting size", () => {

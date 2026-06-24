@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Stop hook: after a turn, if source code changed in the working tree but
-# docs/CHANGELOG.md was left untouched, block the stop and wake Claude to
-# evaluate documentation updates (CHANGELOG, ARCHITECTURE, directory CLAUDE.md).
+# docs/CHANGELOG.md was left untouched, wake Claude ONCE to *judge* whether the
+# docs need updating. This is an advisory nudge, not a mandatory gate — the
+# whole point is that not every code change warrants a doc change.
 #
-# Deterministic trigger = CHANGELOG.md not touched while code changed.
-# The broader "do ARCHITECTURE/CLAUDE.md need updating?" judgment is delegated
-# back to Claude via the reason text — a hook can't reliably decide that.
+# A hook can only see "code changed, CHANGELOG didn't" — it can't tell a
+# substantive change from a trivial one, or whether ARCHITECTURE/CLAUDE.md is
+# actually affected. So it delegates that judgment back to Claude via the reason
+# text, which explicitly invites dismissal when the change doesn't merit a doc.
 #
 # Wired from .claude/settings.json as a Stop hook. Receives hook JSON on stdin.
 set -uo pipefail
@@ -29,22 +31,20 @@ paths=$(git status --porcelain -uall 2>/dev/null | cut -c4-)
 
 # Code = changed paths that are not Markdown docs and not .claude/ config.
 code=$(printf '%s\n' "$paths" | grep -vE '(\.md$|^\.claude/)')
-# Did the required changelog get touched?
+# Did the changelog get touched?
 changelog=$(printf '%s\n' "$paths" | grep -E '(^|/)CHANGELOG\.md$')
 
 if [ -n "$code" ] && [ -z "$changelog" ]; then
-  reason="You changed code but docs/CHANGELOG.md is untouched.
+  reason="You changed code but docs/CHANGELOG.md is untouched. Decide whether this change warrants a doc update — this is a reminder to judge, not a requirement to write.
 
-Per CLAUDE.md, after every change you must update docs/CHANGELOG.md (newest entry on top: what / why / files-areas / docs-touched).
+If the change is substantive (a feature, a behavior change, an architectural move), add a docs/CHANGELOG.md entry (newest on top: what / why / files-areas / docs-touched), and ONLY where actually affected:
+- docs/ARCHITECTURE.md — only on a genuine architectural deviation; new team questions go in §12.
+- A directory CLAUDE.md (e.g. app/CLAUDE.md) — only if its stack, routes, or conventions actually shifted.
 
-Also evaluate whether these need updating and apply changes if so:
-- docs/ARCHITECTURE.md — for any architectural deviation from the existing design; put new questions for the team in §11.
-- The CLAUDE.md of each directory whose code changed (e.g. app/CLAUDE.md) — if conventions, layout, or commands shifted.
+If the change is trivial or a no-op for the docs (refactor, formatting, a fix that changes nothing a future session needs to know, or you've already updated what's needed), just stop again to dismiss this — no entry required.
 
 Changed code files:
-${code}
-
-If you have genuinely already covered the docs, say so and stop again to dismiss this."
+${code}"
   jq -cn --arg r "$reason" '{decision:"block", reason:$r}'
   exit 0
 fi
