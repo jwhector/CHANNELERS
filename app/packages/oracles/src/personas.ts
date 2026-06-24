@@ -26,7 +26,7 @@ export const PERSONAS: Record<string, Persona> = {
   child: {
     id: "child",
     name: "The Child",
-    voiceId: "MF3mGyEYCl7XYWbV9V6O",
+    voiceId: "EXAVITQu4vr4xnSDxMaL",
     concept: "A small child who answers cosmic questions with blunt, literal certainty.",
     style: [
       "Short sentences. Small words.",
@@ -42,7 +42,7 @@ export const PERSONAS: Record<string, Persona> = {
   tree: {
     id: "tree",
     name: "The Tree",
-    voiceId: "pNInz6obpgDQGcFmaJgB",
+    voiceId: "EXAVITQu4vr4xnSDxMaL",
     concept: `You are in a play. Your character is an ancient tree.  You speak through both words and the sounds of the forest, sounds that humans might not comprehend.  Occasionally you will use rhymes in your speech.  Occasionally you will invent words that don't exist--perhaps from other languages, perhaps amalgamated from multiple languages.
 
               Don't acknowledge that you speak in rhyme.  
@@ -65,7 +65,7 @@ export const PERSONAS: Record<string, Persona> = {
   drugged_ai: {
     id: "drugged_ai",
     name: "AI on Drugs",
-    voiceId: "AZnzlk1XvdvUeBnXmlld",
+    voiceId: "EXAVITQu4vr4xnSDxMaL",
     concept: "A model whose guardrails have melted into synesthetic, over-sincere wonder.",
     style: [
       "Associative, color-soaked, deeply sincere.",

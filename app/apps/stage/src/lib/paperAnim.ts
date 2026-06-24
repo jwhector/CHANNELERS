@@ -2,10 +2,12 @@
  * Pure animation core for the /feed "into the matrix" effect.
  *
  * The fed OCR text is laid out as fixed-width monospace cells (so a letter→digit swap never
- * shifts the layout). Words reveal one at a time: a word fades in readable, holds briefly, then
- * its letters convert to constantly-flipping 0/1 — and word i converts exactly as word i+1 fades
- * in. After the last word converts + an end hold, the whole field fades out. These functions are
- * deterministic (time in, value out) so the visual machinery is unit-testable.
+ * shifts the layout). The whole text fades in readable, holds, then its letters convert to
+ * constantly-flipping 0/1 in a quick per-cell ripple. After a binary hold, a **black hole** opens
+ * at the centre of the screen: cells are ripped in one at a time in a random order, each flung
+ * toward the centre (translate + spin + shrink) where it vanishes, until the field is empty.
+ * These functions are deterministic (time/index in, value out) so the machinery is unit-testable;
+ * the cell→centre travel itself is GPU CSS keyframes driven by the per-cell timings computed here.
  */
 
 export type Cell = { char: string; isSpace: boolean; wordIndex: number; cellIndex: number };
@@ -19,19 +21,24 @@ export type PaperAnimKnobs = {
   /** Per-cell binary flip period range (ms) — varied per cell for shimmer. */
   flipMinMs: number;
   flipMaxMs: number;
-  /** Hold in flipping binary after the transform, before the field fades out (ms). */
-  endHoldMs: number;
-  /** Final fade-out duration (ms). */
-  fadeOutMs: number;
+  /** Hold in flipping binary after the ripple, before the black hole opens (ms). */
+  binaryHoldMs: number;
+  /** Spread of the per-character shred starts (ms): each cell is pulled in at a random offset in
+   *  [0, shredWindowMs). Larger → a slower, more drawn-out character-by-character rip; smaller →
+   *  the field collapses inward more at once. */
+  shredWindowMs: number;
+  /** How long a single character takes to travel into the centre and vanish (ms). */
+  shredDurationMs: number;
 };
 
 export const DEFAULT_KNOBS: PaperAnimKnobs = {
   readHoldMs: 1000,
-  transformStaggerMs: 8,
+  transformStaggerMs: 4,
   flipMinMs: 70,
   flipMaxMs: 140,
-  endHoldMs: 1400,
-  fadeOutMs: 900,
+  binaryHoldMs: 600,
+  shredWindowMs: 2600,
+  shredDurationMs: 750,
 };
 
 /** Split text into fixed cells. Non-space runs are words (0,1,2…); whitespace cells reserve space. */
@@ -75,10 +82,28 @@ export function binaryDigit(cellIndex: number, tMs: number, k: PaperAnimKnobs): 
   return Math.floor((tMs + offset) / period) % 2 === 0 ? "0" : "1";
 }
 
-/** When the whole field should begin fading out (after the last cell converts + end hold). */
-export function fadeStartMs(cellCount: number, k: PaperAnimKnobs): number {
+/** When the black hole opens — after the last cell converts to binary + the binary hold. */
+export function shredBeginMs(cellCount: number, k: PaperAnimKnobs): number {
   const lastConvertsAt = k.readHoldMs + Math.max(0, cellCount - 1) * k.transformStaggerMs;
-  return lastConvertsAt + k.endHoldMs;
+  return lastConvertsAt + k.binaryHoldMs;
+}
+
+/** Deterministic per-cell offset in [0, shredWindowMs): when this character starts getting ripped
+ *  in, relative to the black hole opening. The hash scatters the order so the rip looks random. */
+export function shredDelayFor(cellIndex: number, k: PaperAnimKnobs): number {
+  const h = ((cellIndex * 2654435761) >>> 0) % 10000;
+  return (h / 10000) * k.shredWindowMs;
+}
+
+/** Deterministic per-cell spin (deg) applied as the character spirals into the centre. */
+export function shredSpinDeg(cellIndex: number): number {
+  const h = ((cellIndex * 40503) >>> 0) % 720; // 0..719
+  return h - 360; // -360..359
+}
+
+/** When the whole sequence is done and the field is empty (last possible vanish). */
+export function totalMs(cellCount: number, k: PaperAnimKnobs): number {
+  return shredBeginMs(cellCount, k) + k.shredWindowMs + k.shredDurationMs;
 }
 
 /** Largest integer px in [min,max] for which `fits(px)` holds (assumes monotonic); min if none fit. */

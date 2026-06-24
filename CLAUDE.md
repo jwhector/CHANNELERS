@@ -11,8 +11,8 @@ Experimental AI-driven performance piece: a "DMV-esque void" where visitors fill
 
 Each subdirectory has its own `CLAUDE.md` with specifics; this file is the top-level map, loaded as a parent for sessions anywhere in the tree.
 
-## Always
-- **After every change, update `docs/CHANGELOG.md`** (newest entry on top: what / why / files-areas / docs-touched) and any docs the change affects. This is how context transfers between sessions — required, not optional.
-- Update `docs/ARCHITECTURE.md` after any architectural deviations from the existing document.
+## Docs upkeep
+- **After a substantive change, update `docs/CHANGELOG.md`** (newest entry on top: what / why / files-areas / docs-touched). This is how context transfers between sessions. Skip it for trivial or no-op edits.
+- Update `docs/ARCHITECTURE.md` only on a genuine architectural deviation from the existing document; update a directory `CLAUDE.md` only when its stack, routes, or conventions actually change.
 - New questions for the team go in `docs/ARCHITECTURE.md` §12, not a new file.
 - For anything touching the OpenAI API (models, params, caching, fine-tuning), check the current reference rather than relying on memory.

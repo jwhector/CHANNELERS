@@ -1,14 +1,18 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  tokenize, cellPhaseAt, binaryDigit, fadeStartMs, largestFitting,
-  DEFAULT_KNOBS, type Cell, type PaperAnimKnobs,
+  CSSProperties, Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState,
+} from "react";
+import {
+  tokenize, cellPhaseAt, binaryDigit, shredBeginMs, shredDelayFor, shredSpinDeg, totalMs,
+  largestFitting, DEFAULT_KNOBS, type Cell, type PaperAnimKnobs,
 } from "../lib/paperAnim";
 
 /**
- * The "into the matrix" surface. The fed text is laid out as fixed-width monospace cells; words
- * reveal one at a time (fade in readable → hold → convert to constantly-flipping 0/1, accumulating),
- * then the whole field fades out. Sized to fit the viewport. Pass `nowMs` to drive the timeline
- * deterministically (tests); otherwise it runs off an internal rAF clock.
+ * The "into the matrix" surface. The fed text is laid out as fixed-width monospace cells; the whole
+ * text fades in readable, holds, then converts to constantly-flipping 0/1 in a quick ripple. A black
+ * hole then opens at the centre of the screen and rips the characters in one at a time, in a random
+ * order, each spiralling toward the centre where it vanishes — until the field is empty. Sized to fit
+ * the viewport. Pass `nowMs` to drive the timeline deterministically (tests); otherwise it runs off an
+ * internal rAF clock.
  */
 export function FeedMatrix({
   text, onDone, nowMs, knobs = DEFAULT_KNOBS,
@@ -25,6 +29,10 @@ export function FeedMatrix({
   const [now, setNow] = useState(nowMs ?? 0);
   const gridRef = useRef<HTMLDivElement>(null);
 
+  // Per-cell vector (px) from where the character sits to the centre of the screen — measured once,
+  // the instant the black hole opens, so the CSS keyframes can fling each cell to the singularity.
+  const [pulls, setPulls] = useState<Map<number, { dx: number; dy: number }> | null>(null);
+
   // Timeline clock: controlled (tests) or an internal rAF loop that restarts on each new text.
   useEffect(() => {
     if (nowMs !== undefined) { setNow(nowMs); return; }
@@ -36,11 +44,13 @@ export function FeedMatrix({
     return () => cancelAnimationFrame(raf);
   }, [nowMs, displayText]);
 
-  // Fire onDone once the whole sequence (reveal + end hold + fade-out) has played.
+  // New text → fresh animation: drop any measured pull vectors from the previous shred.
+  useEffect(() => { setPulls(null); }, [displayText]);
+
+  // Fire onDone once the whole sequence (reveal → binary → black-hole shred) has played.
   useEffect(() => {
     if (nowMs !== undefined || !onDone) return;
-    const total = fadeStartMs(cells.length, knobs) + knobs.fadeOutMs;
-    const id = setTimeout(() => onDone(), total);
+    const id = setTimeout(() => onDone(), totalMs(cells.length, knobs));
     return () => clearTimeout(id);
   }, [displayText]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -66,22 +76,51 @@ export function FeedMatrix({
     return () => ro.disconnect();
   }, [displayText]);
 
-  const fading = now >= fadeStartMs(cells.length, knobs);
+  const shredding = now >= shredBeginMs(cells.length, knobs);
+
+  // The instant the black hole opens, measure each (still-static) cell's distance to the centre of
+  // the viewport; that vector drives the per-cell CSS travel. Measured once per animation.
+  useLayoutEffect(() => {
+    if (!shredding || pulls || typeof window === "undefined") return;
+    const el = gridRef.current;
+    if (!el) return;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    const next = new Map<number, { dx: number; dy: number }>();
+    el.querySelectorAll<HTMLElement>("[data-ci]").forEach((node) => {
+      const r = node.getBoundingClientRect();
+      if (!r.width && !r.height) return; // no layout (e.g. jsdom) — skip; cells stay in place
+      next.set(Number(node.dataset.ci), { dx: cx - (r.left + r.width / 2), dy: cy - (r.top + r.height / 2) });
+    });
+    if (next.size) setPulls(next);
+  }, [shredding, pulls]);
 
   return (
-    <div
-      ref={gridRef}
-      className={`feed-matrix-grid${fading ? " fading" : ""}`}
-      aria-label={displayText}
-    >
+    <div ref={gridRef} className="feed-matrix-grid" aria-label={displayText}>
+      {shredding && pulls && <span className="feed-singularity" aria-hidden />}
       {words.map((word, gi) => (
         <Fragment key={gi}>
           {gi > 0 ? " " : null}
           <span className="feed-word">
             {word.map((c) => {
               const phase = cellPhaseAt(c.cellIndex, now, knobs);
+              const pull = shredding ? pulls?.get(c.cellIndex) : undefined;
+              const style = pull
+                ? ({
+                    "--dx": `${pull.dx}px`,
+                    "--dy": `${pull.dy}px`,
+                    "--spin": `${shredSpinDeg(c.cellIndex)}deg`,
+                    animationDelay: `${shredDelayFor(c.cellIndex, knobs)}ms`,
+                    animationDuration: `${knobs.shredDurationMs}ms`,
+                  } as CSSProperties)
+                : undefined;
               return (
-                <span key={c.cellIndex} className={`feed-cell ${phase}`}>
+                <span
+                  key={c.cellIndex}
+                  data-ci={c.cellIndex}
+                  className={`feed-cell ${phase}${pull ? " shred" : ""}`}
+                  style={style}
+                >
                   {phase === "binary" ? binaryDigit(c.cellIndex, now, knobs) : c.char}
                 </span>
               );

@@ -46,15 +46,18 @@ channelers/
                   /intake    visitor kiosk: confirm-at-station gate → data-only survey → handoff to Physical Challenge
                   /bodyscan  pose identity token enrollment (enroll self-invented pose → poseTemplate)
                   /altar     pose verify + persona pick → oracle-ready
-                  /channel   performer page: lobby of oracle-ready visitors → teleprompter (renamed from /station)
+                  /channel   performer page: lobby → teleprompter + the Altered-State Console (oracle tuning, §5.3)
+                  /choreo    Tier 2 choreography feed: live movement cue + in-ear TTS (§5.6)
                   /console   master overseer: visitors+controls / flow funnel+station LEDs / sessions+event log
                   /board     public call display: #N → STATION (live dispatch.state broadcast)
                   /dispatch  lobby-operator interface: register arrivals, confirm/skip calls, manage queue
+                  /feed      Scan/Shred/Feed — the first timed group station (§5.7)
                   /souvenir  QR takeaway
                   -- Tier 3 deferred: /waiting (waiting-room self-serve kiosk, not yet built)
   packages/
-    shared/     zod schemas + TS types + the OSC/event contract
-    oracles/    persona prompt templates (child / AI-on-drugs / tree / …)
+    shared/             zod schemas + TS types + the OSC/event contract + the tuning model
+    oracles/            persona prompt templates (child / AI-on-drugs / tree / …) + choreographer prompts
+    ableton-osc-bridge/ standalone OSC bridge, decoupled from CHANNELERS (§12)
 ```
 
 > Alternative: Next.js for `stage`. Recommendation is the Vite + standalone Fastify split — the WebSocket/OSC server has a cleaner lifecycle as its own long-lived process, and the kiosk screens are a plain SPA.
@@ -202,7 +205,7 @@ The dispatcher (`apps/brain/src/dispatcher.ts`, `createDispatcher(bus)`) is an i
 
 Defaults are rehearsal-fast (small K, short timers). Tune for a full-audience show via env.
 
-**Transport:** a `dispatch.state` WS broadcast carries the full `DispatchState` — now `{ slots: Slot[], queue, completed, surplus, stationsOnline, warmedUp }` (the slots array replaces the old per-station count map + call board; `completed` = visitors with `sessionEndAt`; `surplus` = connected screens with no free slot; `stationsOnline` = derived per-station LED). It is pushed on every state change **and** sent to each screen on connect. This channel is **screens-only — never OSC** — dispatcher logistics are deliberately kept off the `ShowEvent`/OSC contract (§9-ext). `/dispatch` renders this as a no-scroll 3-zone board (waiting pool · slot grid · completed); `/board` derives the public call list from slots in the `called` phase; `/console` reads the slots array and keeps the manual override.
+**Transport:** a `dispatch.state` WS broadcast carries the full `DispatchState` — now `{ slots: Slot[], queue, completed, surplus, stationsOnline, timedDwellMs?, warmedUp }` (the slots array replaces the old per-station count map + call board; `timedDwellMs` carries the per-timed-station dwell so the board can show a countdown, §5.7; `completed` = visitors with `sessionEndAt`; `surplus` = connected screens with no free slot; `stationsOnline` = derived per-station LED). It is pushed on every state change **and** sent to each screen on connect. This channel is **screens-only — never OSC** — dispatcher logistics are deliberately kept off the `ShowEvent`/OSC contract (§9-ext). `/dispatch` renders this as a no-scroll 3-zone board (waiting pool · slot grid · completed); `/board` derives the public call list from slots in the `called` phase; `/console` reads the slots array and keeps the manual override.
 
 **HTTP endpoints:** `POST /api/checkin` (`/console` override) · `GET /api/dispatch` · `POST /api/dispatch/arrive` · `POST /api/dispatch/assign { visitorId, slotId }` · `POST /api/dispatch/{confirm,repool,complete,remove}` (all `{ visitorId }`; `complete` infers the station from the slot). `recall` removed.
 
@@ -232,6 +235,15 @@ A choreographer agent runs **alongside** the oracle, turning the divination into
 - **Clarity prompt** — `packages/oracles/src/choreographer.ts` builds the prompts; `CHOREO_CLARITY_INSTRUCTION` is the §8 "clarity mirror" of the oracle's anti-slop deny-list (one concrete, present-tense, immediately-performable cue). The choreographer's voice is functional (an instructor to bodies), not a character.
 - **Model** — `config.choreoModel` (env `CHOREO_MODEL`, default **gpt-4o**), streaming, same pattern as the oracle. Offline (no key) → deterministic fallback cue, so the loop runs with no API key.
 - **Feed** — `choreo.delta`/`choreo.done` ride their own screens-only WS channel (§8), **deliberately off the `ShowEvent`/OSC contract**, like dispatcher logistics + tuning. The `/choreo` screen renders the live cue + the timing toggle. **Open / deferred:** in-ear vs loudspeaker routing (§12), and de-multiplexing concurrent sessions' cues (the MVP shares one cue line — fine while the altar is one-at-a-time).
+
+### 5.7 Timed group stations — Scan/Shred/Feed (`/feed`)
+
+A second station **kind**: a timed group station, the first instance being `paper` / `/feed` (spec `docs/superpowers/specs/2026-06-22-group-stations-design.md`; open questions in §12). It reuses the dispatcher but inverts its assumptions:
+
+- **Dispatcher kind (`config.dispatcher.timed`).** A timed station's slots are **always online** (no kiosk binding), capacity = `config.dispatcher.slots.paper` (group capacity, default 4), eligibility is non-gating (`!paperAt`), and it **completes by a dwell timer from Confirm-call** (`PAPER_DWELL_MS`, default 5 min) rather than a task milestone. Occupants stay `called` (so `/board` shows them) until `reconcile()` stamps `paperAt`; no-show/stale reaping is bypassed. `/dispatch` shows a live "Ns left" countdown per occupant (from `timedDwellMs`, §5.x).
+- **`/feed` screen — kiosk-less spectacle.** A webcam over the slot plus a physical button (Space/Enter keypress = USB arcade button/footswitch) grabs a frame → `POST /api/paper/feed` (data-URL) → Brain `gpt-4o` vision OCR (`apps/brain/src/paper.ts`, offline → placeholder) → emits **`paper.fed { text, fedAt }`** on the bus **and** OSC (`/channelers/paper/fed`). The event is **identity-agnostic** (no `visitorId`) — see the §12 upgrade path.
+- **Animation.** `components/FeedMatrix.tsx` drives the fed text "into the matrix": a fit-to-screen monospace grid where the whole text fades in readable, holds, ripples cell-by-cell into flipping `0/1`, then a centre **black hole** rips characters in one at a time until empty. Per-cell travel vectors are measured in JS when the hole opens (`getBoundingClientRect` vs viewport centre) and driven by GPU CSS keyframes (`styles/feed.css`). Pure, tested logic in `lib/paperFeed.ts` + `lib/paperAnim.ts` (deterministic timeline + `DEFAULT_KNOBS` speed knobs).
+- **Shred** is physical-only / unmodeled for the MVP (promotion to a `paper.shredded` event is a §12 question). **Station #2** of this kind is intentionally undefined — the backbone hosts it later via config + one eligibility line.
 
 ## 6. The human QR code
 

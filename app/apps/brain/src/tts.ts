@@ -17,6 +17,9 @@ export async function synthesizeSpeech(text: string, archetype: string): Promise
       text,
       modelId: config.elevenLabsModel,
       outputFormat: "mp3_44100_128",
+      voiceSettings: {
+        speed: 0.7,
+      }
     });
     const chunks: Uint8Array[] = [];
     for await (const chunk of audio) chunks.push(chunk);

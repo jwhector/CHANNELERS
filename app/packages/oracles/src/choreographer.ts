@@ -13,7 +13,7 @@ const CLARITY_CORE =
 
 /** Per-turn cue: a single short, followable movement. */
 export const CHOREO_CLARITY_INSTRUCTION =
-  "Output ONE movement cue of one or two short imperative sentences. " + CLARITY_CORE;
+  "Output 4-6 movement cues of short imperative sentences. " + CLARITY_CORE;
 
 /** First pass: a short opening score of a few movement ideas. */
 export const CHOREO_SCORE_INSTRUCTION =
@@ -65,6 +65,6 @@ export function buildChoreoSystemPrompt(
 export function buildChoreoTurnPrompt(turn: { visitor: string; oracle?: string }): string {
   const lines = [`The visitor said: "${turn.visitor}"`];
   if (turn.oracle) lines.push(`The oracle replied: "${turn.oracle}"`);
-  lines.push("Give the next movement cue.");
+  lines.push("Give the next 2-3 movement cues.");
   return lines.join("\n");
 }
