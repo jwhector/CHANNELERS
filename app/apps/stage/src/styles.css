@@ -181,3 +181,11 @@ pre {
 .as-val { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
 .as-check { display: flex; align-items: center; gap: 6px; padding: 3px 0; color: var(--ink); cursor: pointer; }
 .altered-state h4 .as-check { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--dim); font-weight: 400; }
+
+/* /station — per-station performer arrival-confirm view */
+.stationops .ops-group { margin: 1.5rem 0; }
+.stationops .ops-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; }
+.stationops .ops-row.warn { color: #f5a; }
+.stationops .ops-num { font-variant-numeric: tabular-nums; font-size: 1.25rem; min-width: 4ch; }
+.stationops .ops-flag { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.stationops .ghost { background: transparent; border: 1px solid currentColor; opacity: 0.7; }
