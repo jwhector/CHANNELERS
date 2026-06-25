@@ -34,6 +34,35 @@ test("shows a no-show warning when the occupant is flagged", () => {
   expect(screen.getByText(/no-show/i)).toBeInTheDocument();
 });
 
+test("a timed in-progress occupant shows Done and fires onComplete", () => {
+  const onComplete = vi.fn();
+  const slot: Slot = {
+    id: "waitingroom-0", station: "waitingroom", online: true,
+    occupant: { visitorId: "v9", number: 9, phase: "in_progress", since: "" },
+  };
+  render(
+    <StationOpsView
+      station="waitingroom" connected called={[]} inProgress={[slot]}
+      dwellMs={300_000} busyId={null}
+      onArrive={() => {}} onRelease={() => {}} onComplete={onComplete} />,
+  );
+  screen.getByRole("button", { name: /done/i }).click();
+  expect(onComplete).toHaveBeenCalledWith("v9");
+});
+
+test("a non-timed in-progress occupant shows no Done button", () => {
+  const slot: Slot = {
+    id: "bodyscan-0", station: "bodyscan", online: true,
+    occupant: { visitorId: "v1", number: 1, phase: "in_progress", since: "" },
+  };
+  render(
+    <StationOpsView
+      station="bodyscan" connected called={[]} inProgress={[slot]}
+      busyId={null} onArrive={() => {}} onRelease={() => {}} onComplete={() => {}} />,
+  );
+  expect(screen.queryByRole("button", { name: /done/i })).toBeNull();
+});
+
 test("a called row shows the no-show countdown when noShowMs is provided", () => {
   const since = "2026-06-21T00:00:00.000Z";
   const slot: Slot = {
