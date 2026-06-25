@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import staticPlugin from "@fastify/static";
-import { SurveyResponse, ScanResult, PoseVector, Station, type ShowEvent } from "@channelers/shared";
+import { SurveyResponse, ScanResult, PoseVector, Station, ChoreoConfig, type ShowEvent } from "@channelers/shared";
 import { z } from "zod";
 import { store } from "./store";
 import { Bus } from "./bus";
@@ -72,9 +72,8 @@ export async function buildApp(
 
   // ── choreography: live timing toggle (reactToOracle), §8 ──
   app.get("/api/choreo/config", async () => getChoreoConfig());
-  const ChoreoConfigBody = z.object({ reactToOracle: z.boolean() });
   app.post("/api/choreo/config", async (req, reply) => {
-    const parsed = ChoreoConfigBody.safeParse(req.body);
+    const parsed = ChoreoConfig.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     return setChoreoConfig(parsed.data);
   });

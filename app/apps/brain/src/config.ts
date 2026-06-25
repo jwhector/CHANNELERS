@@ -38,6 +38,11 @@ export const config = {
     /** When true, the per-turn cue reacts to the visitor utterance AND the oracle reply (spec §8);
      *  when false it runs in parallel from the utterance alone. Live-toggleable at /api/choreo/config. */
     reactToOracle: process.env.CHOREO_REACT_TO_ORACLE !== "false",
+    /** "Dancers mimic the oracle" — sustained manual override (off by default). */
+    mimicManual: false,
+    /** Auto-mimic every Nth oracle turn (off by default). */
+    mimicCadenceEnabled: false,
+    mimicEveryNTurns: Number(process.env.CHOREO_MIMIC_EVERY_N ?? 3),
   },
   osc: {
     enabled: process.env.OSC_ENABLED === "true",

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../src/app";
 import type { FastifyInstance } from "fastify";
+import { DEFAULT_CHOREO_CONFIG } from "@channelers/shared";
 import WebSocket from "ws";
 
 let app: FastifyInstance;
@@ -230,13 +231,14 @@ describe("choreo first-pass + config", () => {
     expect(score.length).toBeGreaterThan(0);
   });
 
-  it("GET/POST /api/choreo/config round-trips the flag", async () => {
-    const set = await app.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: false } });
-    expect(set.json().reactToOracle).toBe(false);
+  it("GET/POST /api/choreo/config round-trips the full config", async () => {
+    const payload = { reactToOracle: false, mimicManual: true, mimicCadenceEnabled: true, mimicEveryNTurns: 5 };
+    const set = await app.inject({ method: "POST", url: "/api/choreo/config", payload });
+    expect(set.json()).toMatchObject(payload);
     const get = await app.inject({ method: "GET", url: "/api/choreo/config" });
-    expect(get.json().reactToOracle).toBe(false);
+    expect(get.json()).toMatchObject(payload);
     // restore default so later tests see the spec-default behavior
-    await app.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
+    await app.inject({ method: "POST", url: "/api/choreo/config", payload: { ...DEFAULT_CHOREO_CONFIG } });
   });
 });
 
