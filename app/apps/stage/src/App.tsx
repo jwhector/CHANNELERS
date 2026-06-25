@@ -40,7 +40,6 @@ function Home() {
   return (
     <main className="void">
       <h1>CHANNELERS</h1>
-      <p className="dim">Take a number. Choose a station.</p>
       <nav className="stations">
         {SCREENS.map((s) => (
           <Link key={s} to={`/${s}`} className="station">
