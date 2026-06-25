@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import { synthesizeSpeech } from "../src/tts";
+import { synthesizeSpeech, clearTtsCache } from "../src/tts";
 import { voiceForArchetype } from "@channelers/oracles";
 
 // vitest hoists vi.hoisted + vi.mock above the imports, so the mock vars exist when ../src/tts loads.
@@ -24,6 +24,7 @@ beforeEach(() => {
   mockConfig.openaiApiKey = undefined;
   convert.mockReset();
   speechCreate.mockReset();
+  clearTtsCache();
 });
 
 describe("voiceForArchetype", () => {
@@ -38,6 +39,17 @@ describe("synthesizeSpeech", () => {
     expect(await synthesizeSpeech("hi", "tree")).toBeNull();
     expect(convert).not.toHaveBeenCalled();
     expect(speechCreate).not.toHaveBeenCalled();
+  });
+
+  it("caches by (text, archetype) — a repeat hit skips re-synthesis", async () => {
+    mockConfig.elevenLabsApiKey = "el-key";
+    async function* one() { yield new Uint8Array([5, 5]); }
+    convert.mockResolvedValueOnce(one());
+    const a = await synthesizeSpeech("same", "tree");
+    const b = await synthesizeSpeech("same", "tree"); // served from cache
+    expect(convert).toHaveBeenCalledTimes(1);
+    expect([...a!]).toEqual([5, 5]);
+    expect(b).toBe(a); // identical Buffer, no second synthesis
   });
 
   it("falls back to OpenAI TTS (routable MP3) when only OPENAI_API_KEY is set", async () => {
