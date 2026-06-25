@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { DispatchState, Slot, WsServerMsg } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
+import { useNow } from "../lib/useNow";
+import { remainingSec, fmtClock } from "../lib/dispatchTiming";
 
 const elapsed = (since: string) =>
   `${Math.max(0, Math.round((Date.now() - Date.parse(since)) / 1000))}s`;
@@ -11,7 +13,7 @@ export function Dispatch() {
   const [state, setState] = useState<DispatchState | null>(null);
   const [arrival, setArrival] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [, tick] = useState(0);
+  const now = useNow();
 
   const { connected } = useBrainSocket((m: WsServerMsg) => {
     if (m.kind === "dispatch.state") setState(m.state);
@@ -19,8 +21,6 @@ export function Dispatch() {
 
   useEffect(() => {
     void api.dispatch.state().then(setState).catch(() => {});
-    const t = setInterval(() => tick((n) => n + 1), 1000); // refresh elapsed clocks
-    return () => clearInterval(t);
   }, []);
 
   async function register() {
@@ -71,6 +71,10 @@ export function Dispatch() {
                 <div className="pool-item-meta">
                   {v.eligible.map((s) => <span key={s} className="pool-chip">{s}</span>)}
                   {v.flags.length > 0 && <span className="pool-flag">{v.flags.map((f) => f.type).join(" ")}</span>}
+                  {v.heldUntil && (() => {
+                    const sec = remainingSec(Date.parse(v.heldUntil), now);
+                    return sec > 0 ? <span className="pool-flag hold">on hold · {v.holdReason} {fmtClock(sec)}</span> : null;
+                  })()}
                 </div>
               </li>
             ))}
