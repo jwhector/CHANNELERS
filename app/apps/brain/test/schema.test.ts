@@ -39,6 +39,17 @@ describe("schema: VisitorProfile", () => {
     expect(r.location.station).toBe("paper"); // throws before "paper" is in the Station enum
   });
 
+  it("retains waitingRoomAt + a waitingroom location (timed group station)", () => {
+    const ts = "2026-06-25T00:00:00.000Z";
+    const r = VisitorProfile.parse({
+      id: "u1", number: 42, scans: [],
+      location: { state: "in_progress", station: "waitingroom", since: ts },
+      createdAt: ts, waitingRoomAt: ts,
+    });
+    expect(r.waitingRoomAt).toBe(ts); // zod strips unknown keys → fails before waitingRoomAt is declared
+    expect(r.location.station).toBe("waitingroom"); // throws before "waitingroom" is in the Station enum
+  });
+
   it("accepts a fully-progressed record", () => {
     const r = VisitorProfile.safeParse({
       id: "u1", number: 42, scans: [],
@@ -68,6 +79,7 @@ describe("schema: Station + station.hello", () => {
   it("exports a Station enum", () => {
     expect(Station.safeParse("intake").success).toBe(true);
     expect(Station.safeParse("paper").success).toBe(true);
+    expect(Station.safeParse("waitingroom").success).toBe(true);
     expect(Station.safeParse("nope").success).toBe(false);
   });
   it("parses a station.hello command", () => {

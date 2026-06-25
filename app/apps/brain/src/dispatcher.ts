@@ -5,7 +5,7 @@ import type {
   WsServerMsg, WsClientMsg,
 } from "@channelers/shared";
 
-const STATION_ORDER: Station[] = ["intake", "bodyscan", "altar", "paper"];
+const STATION_ORDER: Station[] = ["intake", "bodyscan", "altar", "paper", "waitingroom"];
 
 export interface DispatcherBus {
   broadcast(msg: WsServerMsg): void;
@@ -92,6 +92,7 @@ export function createDispatcher(
     if (!v.poseAt) out.push("bodyscan");
     if (v.intakeAt && v.poseAt && !v.sessionEndAt) out.push("altar");
     if (!v.paperAt) out.push("paper"); // non-gating, ungated timed station (spec 2026-06-22)
+    if (!v.waitingRoomAt) out.push("waitingroom"); // non-gating timed station (5-min hourglass hold)
     return out;
   }
 
@@ -279,10 +280,11 @@ export function createDispatcher(
     return { record };
   }
 
-  function milestoneField(station: Station): "intakeAt" | "poseAt" | "paperAt" | "sessionEndAt" {
+  function milestoneField(station: Station): "intakeAt" | "poseAt" | "paperAt" | "waitingRoomAt" | "sessionEndAt" {
     if (station === "intake") return "intakeAt";
     if (station === "bodyscan") return "poseAt";
     if (station === "paper") return "paperAt";
+    if (station === "waitingroom") return "waitingRoomAt";
     return "sessionEndAt"; // altar held through the reading
   }
 
@@ -290,6 +292,7 @@ export function createDispatcher(
     if (station === "intake") return !!v.intakeAt;
     if (station === "bodyscan") return !!v.poseAt;
     if (station === "paper") return !!v.paperAt;
+    if (station === "waitingroom") return !!v.waitingRoomAt;
     return !!v.sessionEndAt; // altar held through the reading
   }
 
@@ -400,6 +403,7 @@ export function createDispatcher(
       bodyscan: slotsOf("bodyscan").some(isOnline),
       altar: slotsOf("altar").some(isOnline),
       paper: slotsOf("paper").some(isOnline),
+      waitingroom: slotsOf("waitingroom").some(isOnline),
     };
     const timedDwellMs: Partial<Record<Station, number>> = {};
     for (const s of STATION_ORDER) if (isTimed(s)) timedDwellMs[s] = dwellMs(s);

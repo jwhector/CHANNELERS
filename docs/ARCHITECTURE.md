@@ -51,10 +51,11 @@ channelers/
                   /console   master overseer: visitors+controls / flow funnel+station LEDs / sessions+event log
                   /board     public call display: #N → STATION (live dispatch.state broadcast)
                   /dispatch  lobby-operator interface: register arrivals, confirm/skip calls, manage queue
-                  /station   per-station performer arrival-confirm view (bodyscan/altar/paper) (§5.x)
+                  /station   per-station performer arrival-confirm view (bodyscan/altar/paper/waitingroom) (§5.x)
                   /feed      Scan/Shred/Feed — the first timed group station (§5.7)
                   /souvenir  QR takeaway
-                  -- Tier 3 deferred: /waiting (waiting-room self-serve kiosk, not yet built)
+                  -- waitingroom is a timed group station (5-min hourglass hold), confirmed at /station/waitingroom; it has no own screen.
+                  -- Tier 3 deferred: /waiting (an optional waiting-room self-serve kiosk screen, not yet built)
   packages/
     shared/             zod schemas + TS types + the OSC/event contract + the tuning model
     oracles/            persona prompt templates (child / AI-on-drugs / tree / …) + choreographer prompts
@@ -245,7 +246,8 @@ A second station **kind**: a timed group station, the first instance being `pape
 - **Dispatcher kind (`config.dispatcher.timed`).** A timed station's slots are **always online** (no kiosk binding), capacity = `config.dispatcher.slots.paper` (group capacity, default 4), eligibility is non-gating (`!paperAt`), and it **completes by a dwell timer measured from Confirm-arrival** (`PAPER_DWELL_MS`, default 5 min) rather than a task milestone. A timed occupant flows through the same lifecycle as a kiosk one — `called → (performer confirms arrival at `/station/paper`) → in_progress → (dwell elapses) → `reconcile()` stamps `paperAt`. **No-show applies while `called`** (a participant called to `/feed` who never arrives is repooled/flagged, not falsely completed — the prior timer-from-call behavior would stamp `paperAt` for an absent person). Stale is a backstop only when a timed station has no finite dwell. `/dispatch` shows a live "Ns left" countdown per in-progress occupant (from `timedDwellMs`, §5.x).
 - **`/feed` screen — kiosk-less spectacle.** A webcam over the slot plus a physical button (Space/Enter keypress = USB arcade button/footswitch) grabs a frame → `POST /api/paper/feed` (data-URL) → Brain `gpt-4o` vision OCR (`apps/brain/src/paper.ts`, offline → placeholder) → emits **`paper.fed { text, fedAt }`** on the bus **and** OSC (`/channelers/paper/fed`). The event is **identity-agnostic** (no `visitorId`) — see the §12 upgrade path.
 - **Animation.** `components/FeedMatrix.tsx` drives the fed text "into the matrix": a fit-to-screen monospace grid where the whole text fades in readable, holds, ripples cell-by-cell into flipping `0/1`, then a centre **black hole** rips characters in one at a time until empty. Per-cell travel vectors are measured in JS when the hole opens (`getBoundingClientRect` vs viewport centre) and driven by GPU CSS keyframes (`styles/feed.css`). Pure, tested logic in `lib/paperFeed.ts` + `lib/paperAnim.ts` (deterministic timeline + `DEFAULT_KNOBS` speed knobs).
-- **Shred** is physical-only / unmodeled for the MVP (promotion to a `paper.shredded` event is a §12 question). **Station #2** of this kind is intentionally undefined — the backbone hosts it later via config + one eligibility line.
+- **Shred** is physical-only / unmodeled for the MVP (promotion to a `paper.shredded` event is a §12 question).
+- **Station #2 of this kind — `waitingroom`.** A DMV-style waiting room where a visitor holds an hourglass for a fixed dwell. It is the same timed-group-station kind hosted via config + one eligibility line, exactly as anticipated: `config.dispatcher.slots.waitingroom` (group capacity, default 10) + `config.dispatcher.timed.waitingroom.dwellMs` (`WAITINGROOM_DWELL_MS`, default 5 min), eligibility non-gating (`!waitingRoomAt`), milestone `waitingRoomAt`. Unlike `/feed` it has **no own screen** — arrival is performer-confirmed at `/station/waitingroom` and the dwell auto-completes the visit. The hourglass is a physical prop.
 
 ## 6. The human QR code
 

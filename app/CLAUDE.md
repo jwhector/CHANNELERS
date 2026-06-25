@@ -16,8 +16,8 @@ Application monorepo for CHANNELERS. **Design lives in `../docs`** — read `../
   - `/choreo` — Tier 2 choreography feed (text + in-ear TTS).
   - `/console` — master overseer (visitors / flow funnel / sessions).
   - `/board` — public call display · `/dispatch` — lobby-operator queue board · `/souvenir` — QR takeaway.
-  - `/station` (`/station/:station`) — per-station performer arrival-confirm view (bodyscan/altar/paper); passive, calls `arrive`/`repool`.
-  - `/feed` — Scan/Shred/Feed, the first **timed group station** (kiosk-less spectacle screen). `/waiting` — deferred.
+  - `/station` (`/station/:station`) — per-station performer arrival-confirm view (bodyscan/altar/paper/waitingroom); passive, calls `arrive`/`repool`.
+  - `/feed` — Scan/Shred/Feed, the first **timed group station** (kiosk-less spectacle screen). `waitingroom` is a second timed group station (10 slots, 5-min hourglass hold) confirmed at `/station/waitingroom` — no own screen; the `/waiting` self-serve kiosk screen stays deferred.
 
   See ARCHITECTURE.md §3 for the route map and the relevant §5 subsection for each one's internals.
 - **`packages/shared`** — zod schemas, the `ShowEvent` + OSC contract, the WS divination protocol, tuning, the survey.

@@ -80,6 +80,16 @@ describe("paper station milestone", () => {
   });
 });
 
+describe("waitingroom station milestone", () => {
+  it("stamps waitingRoomAt via stampMilestone", () => {
+    store.clear();
+    const v = store.register(780001);
+    expect(v.waitingRoomAt).toBeUndefined();
+    store.stampMilestone(v.id, "waitingRoomAt");
+    expect(store.get(v.id)?.waitingRoomAt).toBeTruthy();
+  });
+});
+
 describe("store choreography first-pass", () => {
   it("stores a choreography first-pass on the record", () => {
     const v = store.register(NUM());

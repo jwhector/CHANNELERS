@@ -13,6 +13,18 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-25 — Waiting room: second timed group station (10 slots, 5-min hourglass hold)
+
+- **What:** Added a new station `waitingroom` — a DMV-style waiting room where a visitor holds an hourglass for a fixed dwell. It is a **second instance of the existing timed-group-station kind** (the first being `paper`/`/feed`, ARCHITECTURE §5.7), added exactly as that section anticipated: "via config + one eligibility line." No new dispatcher mechanics.
+  - **Shared:** `Station` enum `+ "waitingroom"`; `VisitorProfile.waitingRoomAt` milestone.
+  - **Config:** `dispatcher.slots.waitingroom = 10` (group capacity); `dispatcher.timed.waitingroom.dwellMs = 300_000` (env `WAITINGROOM_DWELL_MS`, 5 min).
+  - **Dispatcher:** `STATION_ORDER`, `eligibleStations` (`!waitingRoomAt`, non-gating), `milestoneField`/`completionMilestoneSet` (`waitingRoomAt`), and `snapshot().stationsOnline` all gain the new station. Slots are always-online/kiosk-less; the **dwell is measured from performer-confirmed arrival** and on expiry stamps `waitingRoomAt`, frees the slot, and re-pools — identical lifecycle to `paper`. No-show still applies while `called`.
+  - **Stage:** `waitingroom` added to `PERFORMER_STATIONS` so it appears in the `/station` picker and is admitted at `/station/waitingroom`. The presentational `StationOpsView` is station-agnostic (renders the dwell/no-show countdowns from `timedDwellMs`/`noShowMs`), so no UI changes were needed. **Backend-only by design** — the hourglass is a physical prop; the deferred `/waiting` self-serve kiosk screen was *not* built (Jared's call).
+- **Why:** Team direction for a forced-hold waiting room. Chose standalone/non-gating (mirrors `paper`) over an entry gate so it never bottlenecks the rest of the flow, and backend-only (no screen) since the hourglass is physical and `/station` already does performer arrival-confirm.
+- **Files/areas:** `packages/shared/src/schemas.ts`; `apps/brain/src/{config,dispatcher,store}.ts` (+ tests `{dispatcher,schema,store}.test.ts`); `apps/stage/src/routes/Station.tsx`; `app/.env.example` (`WAITINGROOM_DWELL_MS`). Branch `performer-confirmed-arrivals`.
+- **Verification:** `pnpm -r typecheck` 0 errors; brain **131** tests pass (17 files; +8 new for waitingroom enum/eligibility/milestone/dwell lifecycle, TDD red→green); stage **64** tests pass (no regressions). **Not run here:** real-rig smoke (a performer confirming arrivals at `/station/waitingroom` while the operator watches the `/dispatch` countdown). Tune `slots.waitingroom` / `WAITINGROOM_DWELL_MS` in rehearsal.
+- **Docs touched:** this entry; `ARCHITECTURE.md` (§3 route map + §5.7 "Station #2 — waitingroom" bullet, replacing the "intentionally undefined" note); `app/CLAUDE.md` (`/station` + waiting-room route notes); `app/.env.example`.
+
 ## 2026-06-25 — Per-visitor dispatch holds: intro wait + no-show cooldown + remaining-time UI
 
 - **What:** Replaced the coarse global warm-up (`K` / `warmupMs` / `warmedUp`) with a unified per-visitor **hold** concept. A visitor is ineligible for a new slot assignment until `max(createdAt + introHoldMs, no-show cooldown)`. Two sources feed one `isHeld(v)` gate in `select()`:

@@ -55,13 +55,16 @@ export const config = {
     agentPath: process.env.ABLETON_AGENT_PATH ?? "/agent",
   },
   dispatcher: {
-    /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper` is a timed group's capacity. */
-    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 4 } as Record<
-      "intake" | "bodyscan" | "altar" | "paper", number
+    /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper`/`waitingroom` are timed group capacities. */
+    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 4, waitingroom: 10 } as Record<
+      "intake" | "bodyscan" | "altar" | "paper" | "waitingroom", number
     >,
     /** Timed group stations: present ⇒ kiosk-less, always-online, completed by a dwell timer (spec 2026-06-22). */
-    timed: { paper: { dwellMs: Number(process.env.PAPER_DWELL_MS ?? 300_000) } } as Partial<
-      Record<"intake" | "bodyscan" | "altar" | "paper", { dwellMs: number }>
+    timed: {
+      paper: { dwellMs: Number(process.env.PAPER_DWELL_MS ?? 300_000) },
+      waitingroom: { dwellMs: Number(process.env.WAITINGROOM_DWELL_MS ?? 300_000) },
+    } as Partial<
+      Record<"intake" | "bodyscan" | "altar" | "paper" | "waitingroom", { dwellMs: number }>
     >,
     /** Per-visitor intro hold: a fresh registrant is ineligible for new assignment for this long
      *  after registration (replaces the old global K / warm-up). */

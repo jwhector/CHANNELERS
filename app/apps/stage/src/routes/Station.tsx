@@ -7,7 +7,7 @@ import { useNow } from "../lib/useNow";
 import { remainingSec, fmtClock, noShowDeadline } from "../lib/dispatchTiming";
 
 /** Stations a performer admits arrivals for. Intake self-confirms; it is not here. */
-const PERFORMER_STATIONS: StationName[] = ["bodyscan", "altar", "paper"];
+const PERFORMER_STATIONS: StationName[] = ["bodyscan", "altar", "paper", "waitingroom"];
 
 /** Route entry: bare /station shows a picker; /station/:station opens that station's view. */
 export function Station() {
