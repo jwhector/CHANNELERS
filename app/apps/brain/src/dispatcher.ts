@@ -340,6 +340,11 @@ export function createDispatcher(
         if (slot.occupant?.phase === "pending") confirm(slot.occupant.visitorId);
       }
     }
+    if (knobs.autoArrive) {
+      for (const slot of slots.values()) {
+        if (slot.occupant?.phase === "called") arrive(slot.occupant.visitorId);
+      }
+    }
   }
 
   function kick(): void {

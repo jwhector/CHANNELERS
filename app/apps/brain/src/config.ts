@@ -73,6 +73,8 @@ export const config = {
     tickMs: Number(process.env.DISPATCH_TICK_MS ?? 5_000),
     /** Flip ON to skip the operator confirm step (pending auto-promotes to called). */
     autoConfirm: process.env.DISPATCH_AUTO_CONFIRM === "true",
+    /** Flip ON to skip the performer arrival step (called auto-promotes to in_progress) — dev/stub flow. */
+    autoArrive: process.env.DISPATCH_AUTO_ARRIVE === "true",
     /** Flip ON to auto-re-pool no-shows instead of just flagging them. */
     noShowAutoRepool: process.env.DISPATCH_NOSHOW_AUTOREPOOL === "true",
   },

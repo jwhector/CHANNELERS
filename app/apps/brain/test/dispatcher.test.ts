@@ -164,6 +164,20 @@ describe("recovery", () => {
     d2.stop();
   });
 
+  it("autoArrive advances a called occupant to in_progress", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { ...KNOBS, autoConfirm: true, autoArrive: true } as any,
+      autoStart: false,
+    });
+    f2.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); // fill → pending → (autoConfirm in fill) → called
+    d2.kick(); // reconcile → autoArrive → in_progress
+    expect(store.get(v.id)?.location.state).toBe("in_progress");
+    d2.stop();
+  });
+
   it("flags a no-show by default", () => {
     const d2 = createDispatcher(f.bus, { knobs: { ...KNOBS, noShowMs: 90_000 }, autoStart: false });
     f.hello("intake", "kA", "cA");
