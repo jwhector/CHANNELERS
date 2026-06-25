@@ -15,8 +15,8 @@ Application monorepo for CHANNELERS. **Design lives in `../docs`** — read `../
   - `/channel` — performer teleprompter + the operator **Altered-State Console** (oracle tuning dials).
   - `/choreo` — Tier 2 choreography feed (text + in-ear TTS).
   - `/console` — master overseer (visitors / flow funnel / sessions).
-  - `/board` — public call display · `/dispatch` — lobby-operator queue board · `/souvenir` — QR takeaway.
-  - `/station` (`/station/:station`) — per-station performer arrival-confirm view (bodyscan/altar/paper/waitingroom); passive, calls `arrive`/`repool`.
+  - `/board` — public call display · `/dispatch` — lobby-operator queue board (+ flow strip: altar CLOSED/OPEN gate, altar-ready count, bodyscan idle/blocked) · `/souvenir` — QR takeaway.
+  - `/station` (`/station/:station`) — per-station performer arrival-confirm view (bodyscan/altar/paper/waitingroom); passive, calls `arrive`/`repool` (+ `complete` "Done" early-completes a timed station).
   - `/feed` — Scan/Shred/Feed, the first **timed group station** (kiosk-less spectacle screen). `waitingroom` is a second timed group station (10 slots, 5-min hourglass hold) confirmed at `/station/waitingroom` — no own screen; the `/waiting` self-serve kiosk screen stays deferred.
 
   See ARCHITECTURE.md §3 for the route map and the relevant §5 subsection for each one's internals.
