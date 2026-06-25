@@ -67,6 +67,8 @@ export type SlotOccupant = {
   number: number;
   phase: "pending" | "called" | "in_progress";
   since: string;
+  /** Review flags carried by this occupant (e.g. a no-show on a called participant). */
+  flags?: DispatchFlag[];
 };
 
 /** An addressable station slot, optionally bound to a kiosk screen (spec §3.2). */
@@ -94,6 +96,8 @@ export type DispatchState = {
   stationsOnline: Record<Station, boolean>;
   /** Dwell (ms) per timed group station, so the operator board can show a remaining-time countdown. */
   timedDwellMs?: Partial<Record<Station, number>>;
+  /** Called-but-not-arrived threshold (ms), so a station view can flag a likely no-show. */
+  noShowMs?: number;
   /** False during the warm-up window (spec §9 of the Tier 3 spec). */
   warmedUp: boolean;
 };

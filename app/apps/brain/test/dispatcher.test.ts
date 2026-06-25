@@ -230,6 +230,25 @@ describe("operator backstops", () => {
   });
 });
 
+describe("snapshot surfaces occupant flags + noShowMs", () => {
+  it("exposes a no-show flag on a called occupant and the noShowMs threshold", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { ...KNOBS, noShowMs: 90_000, noShowAutoRepool: false } as any,
+      autoStart: false,
+    });
+    f2.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); d2.confirm(v.id); // called
+    vi.setSystemTime(new Date("2026-06-21T00:02:00.000Z")); // > noShowMs
+    d2.kick();
+    const occ = d2.snapshot().slots.find((s) => s.occupant?.visitorId === v.id)?.occupant;
+    expect(occ?.flags?.some((fl) => fl.type === "no-show")).toBe(true);
+    expect(d2.snapshot().noShowMs).toBe(90_000);
+    d2.stop();
+  });
+});
+
 describe("paper: timed group station", () => {
   const P_KNOBS = {
     slots: { intake: 0, bodyscan: 0, altar: 0, paper: 2 },

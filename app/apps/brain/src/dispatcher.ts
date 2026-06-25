@@ -355,7 +355,10 @@ export function createDispatcher(
 
   // ── snapshot ──
   function toSlot(s: SlotState): Slot {
-    return { id: s.id, station: s.station, kioskId: s.kioskId, online: isOnline(s), occupant: s.occupant };
+    const occupant = s.occupant
+      ? { ...s.occupant, flags: flags.get(s.occupant.visitorId) }
+      : undefined;
+    return { id: s.id, station: s.station, kioskId: s.kioskId, online: isOnline(s), occupant };
   }
   function queueEntries(): DispatchQueueEntry[] {
     const occupied = occupiedVisitorIds();
@@ -389,6 +392,7 @@ export function createDispatcher(
       surplus: [...surplus.values()],
       stationsOnline,
       timedDwellMs,
+      noShowMs: knobs.noShowMs,
       warmedUp: warmedUp(),
     };
   }
