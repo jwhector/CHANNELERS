@@ -13,6 +13,17 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-24 — Choreo "mimic the oracle" mode (synchronized channeling)
+
+- **What:** A new `/choreo` mode where the dancers' feed periodically replaces its movement cues with the **oracle's actual voice**, so the oracle performer and the dancers all hear the same line to channel at the same time.
+  - **Trigger (brain-owned).** Per oracle turn the brain decides `isMimicTurn = mimicManual || (mimicCadenceEnabled && turnNumber % N === 0)` — a sustained manual override **and** an enable/disable "every N turns" cadence (default off, N=3, `CHOREO_MIMIC_EVERY_N`). On a mimic turn the choreographer is **fully suppressed** and, once the reply lands, the brain broadcasts a new `choreo.mimic` message carrying the oracle line + archetype.
+  - **Replay (per-screen).** `/choreo` plays `choreo.mimic` on its own already-configured output device, in the **persona voice** (archetype rides along), and shows a "▶ channelling" banner. Each screen voices its own output — chosen over fanning `/channel`'s audio to a second sink so it scales to many devices and matches the future intake all-devices feature.
+  - **TTS cache.** `synthesizeSpeech` is memoized by `(text, archetype)` so the line voiced for the performer earpiece is replayed **byte-identical** on the dancers' device with one ElevenLabs/OpenAI synthesis (no double charge). This is the primitive the proposed "one clip → all station devices during intake" feature will reuse.
+  - **Config contract.** The live choreo config grew from `{ reactToOracle }` to the shared `ChoreoConfig` (4 fields); `/api/choreo/config` validates with it and the stage client posts the whole object.
+- **Why:** Synchronized channeling — everyone in the room hears the voice to mimic at once, rather than the oracle alone getting the channel stream while dancers get abstract movement cues. The intake all-devices feature is explicitly **out of scope** (YAGNI); only the reusable TTS cache was built now.
+- **Files/areas:** `packages/shared/src/protocol.ts` (`ChoreoConfig`, `DEFAULT_CHOREO_CONFIG`, `choreo.mimic`); `apps/brain/src/{config,choreo,tts,divination,app}.ts` (+ tests `choreo`, `tts`, `endpoints`, `schema`); `apps/stage/src/lib/{api,choreoFeed}.ts`, `apps/stage/src/routes/Choreo.tsx`, `apps/stage/src/styles.css` (+ tests `choreoFeed`, `Choreo`).
+- **Docs touched:** this entry; plan at `docs/superpowers/plans/2026-06-24-choreo-mimic-oracle.md`. ARCHITECTURE.md unchanged (no architectural deviation — screen-only `choreo.*` stream, consistent with §5/§7).
+
 ## 2026-06-24 — Performer-confirmed arrivals + timed-station arrival lifecycle
 
 - **What:** Every non-intake station now requires a **performer** to confirm each participant's arrival, and timed stations gate their dwell on that confirmed arrival.
