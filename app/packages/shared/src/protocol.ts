@@ -31,6 +31,26 @@ export const WsClientMsg = z.discriminatedUnion("kind", [
 ]);
 export type WsClientMsg = z.infer<typeof WsClientMsg>;
 
+/** Live choreographer config — flippable at /api/choreo/config (apps/brain/src/choreo.ts). */
+export const ChoreoConfig = z.object({
+  /** Per-turn cue reacts to utterance + oracle reply (true) or the utterance alone (false). */
+  reactToOracle: z.boolean(),
+  /** Sustained "dancers mimic the oracle" override — every turn is a mimic turn while on. */
+  mimicManual: z.boolean(),
+  /** When on, the brain auto-makes every Nth oracle turn a mimic turn. */
+  mimicCadenceEnabled: z.boolean(),
+  /** Cadence period (turns): mimic fires when turnNumber % mimicEveryNTurns === 0. */
+  mimicEveryNTurns: z.number().int().min(1),
+});
+export type ChoreoConfig = z.infer<typeof ChoreoConfig>;
+
+export const DEFAULT_CHOREO_CONFIG: ChoreoConfig = {
+  reactToOracle: true,
+  mimicManual: false,
+  mimicCadenceEnabled: false,
+  mimicEveryNTurns: 3,
+};
+
 /** A summary of one active session for the roster broadcast. */
 export type SessionSummary = {
   sessionId: string;
@@ -128,6 +148,7 @@ export type WsServerMsg =
   | { kind: "oracle.done"; sessionId: string; text: string }
   | { kind: "choreo.delta"; sessionId: string; text: string }
   | { kind: "choreo.done"; sessionId: string; text: string }
+  | { kind: "choreo.mimic"; sessionId: string; text: string; archetype: string }
   | { kind: "session.ended"; sessionId: string }
   | { kind: "session.error"; sessionId?: string; visitorId?: string; message: string }
   | { kind: "roster"; sessions: SessionSummary[] }

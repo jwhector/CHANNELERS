@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { VisitorProfile, PoseVector, SurveyResponse, ChoreoScore } from "@channelers/shared";
-import { WsClientMsg, Station } from "@channelers/shared";
+import { WsClientMsg, Station, ChoreoConfig } from "@channelers/shared";
+
+describe("schema: ChoreoConfig", () => {
+  it("accepts a full config and rejects N < 1", () => {
+    const ok = { reactToOracle: true, mimicManual: false, mimicCadenceEnabled: false, mimicEveryNTurns: 3 };
+    expect(ChoreoConfig.safeParse(ok).success).toBe(true);
+    expect(ChoreoConfig.safeParse({ ...ok, mimicEveryNTurns: 0 }).success).toBe(false);
+  });
+});
 
 describe("schema: PoseVector", () => {
   it("accepts an angle/weight vector", () => {
