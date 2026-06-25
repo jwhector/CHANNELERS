@@ -409,6 +409,30 @@ export function createDispatcher(
       .filter((v) => !!v.sessionEndAt)
       .map((v) => ({ id: v.id, number: v.number, name: v.survey?.name, at: v.sessionEndAt as string }));
   }
+  function flowHealth(): {
+    altarReady: number;
+    bodyscanIdle: boolean;
+    bodyscanBlocked: DispatchState["bodyscanBlocked"];
+  } {
+    const list = store.list();
+    const altarReady = list.filter(
+      (v) => v.location.state === "waiting" && v.intakeAt && v.poseAt && !v.sessionEndAt,
+    ).length;
+    const bodyscanIdle = slotsOf("bodyscan").some((s) => isOnline(s) && !s.occupant);
+    let bodyscanBlocked: DispatchState["bodyscanBlocked"] = "none";
+    if (bodyscanIdle) {
+      const occupied = occupiedVisitorIds();
+      const unposed = list.filter((v) => !v.poseAt);
+      const available = unposed.some(
+        (v) => v.location.state === "waiting" && !isHeld(v) && !occupied.has(v.id),
+      );
+      const soaking = unposed.some((v) => v.location.state === "in_progress");
+      const held = unposed.some((v) => v.location.state === "waiting" && isHeld(v));
+      bodyscanBlocked = available ? "none" : soaking ? "soaking" : held ? "held" : "empty";
+    }
+    return { altarReady, bodyscanIdle, bodyscanBlocked };
+  }
+
   function snapshot(): DispatchState {
     const slotList = [...slots.values()].map(toSlot);
     const stationsOnline = {
@@ -429,6 +453,7 @@ export function createDispatcher(
       timedDwellMs,
       noShowMs: knobs.noShowMs,
       altarOpen,
+      ...flowHealth(),
     };
   }
   function broadcastState(): void {

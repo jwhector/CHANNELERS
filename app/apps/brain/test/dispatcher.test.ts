@@ -146,6 +146,55 @@ describe("altar gate", () => {
   });
 });
 
+describe("flow-health snapshot fields", () => {
+  it("counts altar-ready waiting visitors and reports bodyscan empty when no one needs a scan", () => {
+    f.hello("bodyscan", "kb", "cb"); // online + idle
+    let s = d.snapshot();
+    expect(s.bodyscanIdle).toBe(true);
+    expect(s.bodyscanBlocked).toBe("empty");
+    expect(s.altarReady).toBe(0);
+
+    const v = store.register(NUM());
+    store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] });
+    store.setPoseTemplate(v.id, { angles: [0], weights: [1] }); // posed → altar-ready
+    store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
+    s = d.snapshot();
+    expect(s.altarReady).toBe(1);
+    expect(s.bodyscanBlocked).toBe("empty"); // posed person is not a bodyscan candidate
+  });
+
+  it("reports 'soaking' when the only unposed person is in a timed station while bodyscan is idle", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { slots: { intake: 0, bodyscan: 1, altar: 0, paper: 0, waitingroom: 1 },
+               timed: { waitingroom: { dwellMs: 300_000 } }, introHoldMs: 0 } as any,
+      autoStart: false,
+    });
+    f2.hello("bodyscan", "kb", "cb");        // bodyscan idle
+    const v = store.register(NUM());
+    d2.checkin(v.number, "waitingroom");     // unposed v forced in_progress @ waitingroom
+    const s = d2.snapshot();
+    expect(s.bodyscanIdle).toBe(true);
+    expect(s.bodyscanBlocked).toBe("soaking");
+    d2.stop();
+  });
+
+  it("reports 'held' when the only unposed candidate is on an intro hold", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { slots: { intake: 0, bodyscan: 1, altar: 0, paper: 0, waitingroom: 0 },
+               introHoldMs: 600_000 } as any,
+      autoStart: false,
+    });
+    f2.hello("bodyscan", "kb", "cb");
+    store.register(NUM()); // fresh, unposed, held by the 10-min intro hold
+    const s = d2.snapshot();
+    expect(s.bodyscanIdle).toBe(true);
+    expect(s.bodyscanBlocked).toBe("held");
+    d2.stop();
+  });
+});
+
 describe("pinned dispatch only fills free ONLINE slots", () => {
   it("does not dispatch when no slot is online", () => {
     store.register(NUM());

@@ -123,6 +123,12 @@ export type DispatchState = {
   noShowMs?: number;
   /** Operator gate: when false, no new visitor is dispatched to the altar (in-progress readings continue). */
   altarOpen: boolean;
+  /** Waiting visitors who are altar-ready (intakeAt && poseAt && !sessionEndAt) — the operator's buffer gauge. */
+  altarReady: number;
+  /** True when ≥1 bodyscan slot is online with no occupant. */
+  bodyscanIdle: boolean;
+  /** When bodyscan is idle, why nothing is filling it (actionable when "soaking"/"held"). */
+  bodyscanBlocked: "none" | "soaking" | "held" | "empty";
 };
 
 /** Server → client messages. The server constructs these, so a plain union is enough. */
