@@ -1,6 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { synthesizeSpeech, clearTtsCache } from "../src/tts";
-import { voiceForArchetype } from "@channelers/oracles";
+import { voiceForArchetype, PERSONAS, DEFAULT_VOICE_ID } from "@channelers/oracles";
 
 // vitest hoists vi.hoisted + vi.mock above the imports, so the mock vars exist when ../src/tts loads.
 const { mockConfig, convert, speechCreate } = vi.hoisted(() => ({
@@ -28,9 +28,9 @@ beforeEach(() => {
 });
 
 describe("voiceForArchetype", () => {
-  it("maps known + unknown archetypes", () => {
-    expect(voiceForArchetype("tree")).toBe("pNInz6obpgDQGcFmaJgB");
-    expect(voiceForArchetype("nope")).toBe("21m00Tcm4TlvDq8ikWAM");
+  it("maps a known archetype to its persona voice and an unknown one to the default", () => {
+    expect(voiceForArchetype("tree")).toBe(PERSONAS.tree.voiceId);
+    expect(voiceForArchetype("nope")).toBe(DEFAULT_VOICE_ID);
   });
 });
 
@@ -87,10 +87,11 @@ describe("synthesizeSpeech", () => {
     }
     convert.mockResolvedValue(fakeStream());
     const out = await synthesizeSpeech("hello", "tree");
-    expect(convert).toHaveBeenCalledWith("pNInz6obpgDQGcFmaJgB", {
+    expect(convert).toHaveBeenCalledWith(voiceForArchetype("tree"), {
       text: "hello",
       modelId: "eleven_flash_v2_5",
       outputFormat: "mp3_44100_128",
+      voiceSettings: { speed: 0.7 },
     });
     expect(Buffer.isBuffer(out)).toBe(true);
     expect([...out!]).toEqual([1, 2, 3]);
