@@ -23,7 +23,7 @@ export function BodyScan() {
     setDone(false);
   });
 
-  if (!visitor) return <CalledGate station="bodyscan" title="Body Scan" connected={connected} slot={slot} onArrived={setVisitor} />;
+  if (!visitor) return <CalledGate station="bodyscan" title="Body Scan" connected={connected} slot={slot} confirmedBy="performer" onArrived={setVisitor} />;
   return <Enroll visitor={visitor} connected={connected} onEnrolled={() => setDone(true)} />;
 }
 

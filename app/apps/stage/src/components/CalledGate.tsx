@@ -14,6 +14,7 @@ export function CalledGate({
   slot,
   onArrived,
   skin = "default",
+  confirmedBy = "visitor",
 }: {
   station: Station;
   title: string;
@@ -22,6 +23,8 @@ export function CalledGate({
   onArrived: (visitor: VisitorProfile) => void;
   /** "crt" renders shell-less CRT content meant to live inside Intake's <CrtShell>. */
   skin?: "crt" | "default";
+  /** "performer" hides the self-confirm button; a station guide admits the visitor. */
+  confirmedBy?: "visitor" | "performer";
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,11 +91,15 @@ export function CalledGate({
       {slot && !occ && <p className="dim">Slot {slot.id} ready. Waiting to be called…</p>}
       {occ && occ.phase !== "in_progress" && occ.phase !=="pending" && (
         <section className="called">
-          <p className="dim">Now calling</p>
+          <p className="dim">{confirmedBy === "performer" ? "You've been called" : "Now calling"}</p>
           <div className="called-number">#{occ.number}</div>
-          <button className="submit" disabled={busy} onClick={() => void confirmArrival()}>
-            {busy ? "…" : "Confirm arrival"}
-          </button>
+          {confirmedBy === "performer" ? (
+            <p className="dim">Please proceed to the station — wait for staff to admit you.</p>
+          ) : (
+            <button className="submit" disabled={busy} onClick={() => void confirmArrival()}>
+              {busy ? "…" : "Confirm arrival"}
+            </button>
+          )}
         </section>
       )}
       {error && <p className="error">{error}</p>}
