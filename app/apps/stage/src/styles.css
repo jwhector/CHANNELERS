@@ -64,6 +64,19 @@ header { display: flex; align-items: center; gap: 14px; }
 .led.on { background: #3cff7a; }
 .toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); margin-left: auto; }
 
+/* /choreo control panel: title left, controls wrap on the right (no horizontal overflow). */
+.choreo-head { flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.choreo-head .head-title { display: flex; align-items: center; gap: 12px; }
+.choreo-head .head-controls {
+  margin-left: auto;
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 8px 16px;
+}
+/* Cancel the global per-toggle auto-push so the controls sit in an even row. */
+.choreo-head .head-controls .toggle { margin-left: 0; }
+.choreo-head .head-controls .period { white-space: nowrap; }
+.turns-input { width: 3.25em; }
+
 .visitors { list-style: none; padding: 0; }
 .visitors .row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .visitors code { color: var(--dim); }

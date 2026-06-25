@@ -33,43 +33,47 @@ export function ChoreoDisplay({
 }) {
   return (
     <main className="void choreo">
-      <header>
-        <h1>Choreography</h1>
-        <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
-        <label className="toggle" style={{ marginLeft: "auto" }}>
-          <input type="checkbox" checked={speakCues} onChange={(e) => onToggleSpeak(e.target.checked)} />{" "}
-          speak cues
-        </label>
-        <label className="toggle">
-          <input type="checkbox" checked={reactToOracle} onChange={(e) => onToggle(e.target.checked)} />{" "}
-          react to oracle reply
-        </label>
-        {onToggleMimic && (
+      <header className="choreo-head">
+        <div className="head-title">
+          <h1>Choreography</h1>
+          <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
+        </div>
+        <div className="head-controls">
           <label className="toggle">
-            <input type="checkbox" checked={!!mimicManual} onChange={(e) => onToggleMimic(e.target.checked)} />{" "}
-            mimic oracle
+            <input type="checkbox" checked={speakCues} onChange={(e) => onToggleSpeak(e.target.checked)} />{" "}
+            speak cues
           </label>
-        )}
-        {onToggleCadence && (
           <label className="toggle">
-            <input type="checkbox" checked={!!cadenceEnabled} onChange={(e) => onToggleCadence(e.target.checked)} />{" "}
-            cadence
+            <input type="checkbox" checked={reactToOracle} onChange={(e) => onToggle(e.target.checked)} />{" "}
+            react to oracle
           </label>
-        )}
-        {onChangeEveryN && (
-          <label className="toggle">
-            every{" "}
-            <input
-              type="number"
-              min={1}
-              value={everyN ?? 3}
-              style={{ width: "3em" }}
-              onChange={(e) => onChangeEveryN(Math.max(1, Number(e.target.value) || 1))}
-            />{" "}
-            turns
-          </label>
-        )}
-        {outputPicker}
+          {onToggleMimic && (
+            <label className="toggle">
+              <input type="checkbox" checked={!!mimicManual} onChange={(e) => onToggleMimic(e.target.checked)} />{" "}
+              mimic oracle
+            </label>
+          )}
+          {onToggleCadence && (
+            <label className="toggle">
+              <input type="checkbox" checked={!!cadenceEnabled} onChange={(e) => onToggleCadence(e.target.checked)} />{" "}
+              cadence
+            </label>
+          )}
+          {onChangeEveryN && (
+            <span className="toggle period">
+              every{" "}
+              <input
+                type="number"
+                min={1}
+                value={everyN ?? 3}
+                className="turns-input"
+                onChange={(e) => onChangeEveryN(Math.max(1, Number(e.target.value) || 1))}
+              />{" "}
+              turns
+            </span>
+          )}
+          {outputPicker}
+        </div>
       </header>
       {mimicking && <div className="mimic-banner">▶ channelling — mimic the voice</div>}
       <div className="teleprompter choreo-cue">{cue || "…"}</div>
