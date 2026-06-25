@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { WsServerMsg } from "@channelers/shared";
+import { DEFAULT_CHOREO_CONFIG, type ChoreoConfig, type WsServerMsg } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { speak, stopSpeaking } from "../lib/speech";
@@ -13,6 +13,7 @@ import { initialChoreoFeed, reduceChoreoFeed, type CueLine } from "../lib/choreo
  */
 export function ChoreoDisplay({
   cue, log, reactToOracle, connected, onToggle, speakCues, onToggleSpeak, outputPicker,
+  mimicking, mimicManual, onToggleMimic, cadenceEnabled, onToggleCadence, everyN, onChangeEveryN,
 }: {
   cue: string;
   log: CueLine[];
@@ -22,6 +23,13 @@ export function ChoreoDisplay({
   speakCues: boolean;
   onToggleSpeak: (next: boolean) => void;
   outputPicker?: ReactNode;
+  mimicking?: boolean;
+  mimicManual?: boolean;
+  onToggleMimic?: (next: boolean) => void;
+  cadenceEnabled?: boolean;
+  onToggleCadence?: (next: boolean) => void;
+  everyN?: number;
+  onChangeEveryN?: (next: number) => void;
 }) {
   return (
     <main className="void choreo">
@@ -36,8 +44,34 @@ export function ChoreoDisplay({
           <input type="checkbox" checked={reactToOracle} onChange={(e) => onToggle(e.target.checked)} />{" "}
           react to oracle reply
         </label>
+        {onToggleMimic && (
+          <label className="toggle">
+            <input type="checkbox" checked={!!mimicManual} onChange={(e) => onToggleMimic(e.target.checked)} />{" "}
+            mimic oracle
+          </label>
+        )}
+        {onToggleCadence && (
+          <label className="toggle">
+            <input type="checkbox" checked={!!cadenceEnabled} onChange={(e) => onToggleCadence(e.target.checked)} />{" "}
+            cadence
+          </label>
+        )}
+        {onChangeEveryN && (
+          <label className="toggle">
+            every{" "}
+            <input
+              type="number"
+              min={1}
+              value={everyN ?? 3}
+              style={{ width: "3em" }}
+              onChange={(e) => onChangeEveryN(Math.max(1, Number(e.target.value) || 1))}
+            />{" "}
+            turns
+          </label>
+        )}
         {outputPicker}
       </header>
+      {mimicking && <div className="mimic-banner">▶ channelling — mimic the voice</div>}
       <div className="teleprompter choreo-cue">{cue || "…"}</div>
       <ul className="transcript">
         {log.map((l, i) => (
@@ -52,7 +86,8 @@ export function ChoreoDisplay({
 export function Choreo() {
   const [cue, setCue] = useState("");
   const [log, setLog] = useState<CueLine[]>([]);
-  const [reactToOracle, setReactToOracle] = useState(true);
+  const [cfg, setCfg] = useState<ChoreoConfig>(DEFAULT_CHOREO_CONFIG);
+  const [mimicking, setMimicking] = useState(false);
   const [speakCues, setSpeakCues] = useState(true);
   const feed = useRef(initialChoreoFeed);
 
@@ -68,18 +103,22 @@ export function Choreo() {
     feed.current = next;
     setCue(next.cue);
     setLog(next.log);
-    // Only the focused session voices a cue; speak() itself preempts any in-flight clip.
-    if (next.speak && speakRef.current) void speak(next.speak.text, { sinkId: outRef.current }); // no archetype → neutral voice
+    setMimicking(next.mimicking);
+    // The focused session voices a cue (neutral) or a mimic line (persona voice via archetype);
+    // speak() itself preempts any in-flight clip.
+    if (next.speak && speakRef.current)
+      void speak(next.speak.text, { sinkId: outRef.current, archetype: next.speak.archetype });
   });
 
   useEffect(() => {
-    void api.choreo.config().then((c) => setReactToOracle(c.reactToOracle));
+    void api.choreo.config().then(setCfg);
     return () => stopSpeaking();
   }, []);
 
-  function toggle(next: boolean) {
-    setReactToOracle(next);
-    void api.choreo.setConfig(next);
+  function update(patch: Partial<ChoreoConfig>) {
+    const nextCfg = { ...cfg, ...patch };
+    setCfg(nextCfg);
+    void api.choreo.setConfig(nextCfg);
   }
   function toggleSpeak(next: boolean) {
     setSpeakCues(next);
@@ -102,12 +141,19 @@ export function Choreo() {
     <ChoreoDisplay
       cue={cue}
       log={log}
-      reactToOracle={reactToOracle}
+      reactToOracle={cfg.reactToOracle}
       connected={connected}
-      onToggle={toggle}
+      onToggle={(v) => update({ reactToOracle: v })}
       speakCues={speakCues}
       onToggleSpeak={toggleSpeak}
       outputPicker={picker}
+      mimicking={mimicking}
+      mimicManual={cfg.mimicManual}
+      onToggleMimic={(v) => update({ mimicManual: v })}
+      cadenceEnabled={cfg.mimicCadenceEnabled}
+      onToggleCadence={(v) => update({ mimicCadenceEnabled: v })}
+      everyN={cfg.mimicEveryNTurns}
+      onChangeEveryN={(n) => update({ mimicEveryNTurns: n })}
     />
   );
 }

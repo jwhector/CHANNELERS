@@ -1,4 +1,4 @@
-import type { SurveyResponse, VisitorProfile, PoseVector, Station, DispatchState } from "@channelers/shared";
+import type { SurveyResponse, VisitorProfile, PoseVector, Station, DispatchState, ChoreoConfig } from "@channelers/shared";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -43,8 +43,7 @@ export const api = {
     remove: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/remove", { visitorId }),
   },
   choreo: {
-    config: () => fetch("/api/choreo/config").then((r) => json<{ reactToOracle: boolean }>(r)),
-    setConfig: (reactToOracle: boolean) =>
-      post<{ reactToOracle: boolean }>("/api/choreo/config", { reactToOracle }),
+    config: () => fetch("/api/choreo/config").then((r) => json<ChoreoConfig>(r)),
+    setConfig: (cfg: ChoreoConfig) => post<ChoreoConfig>("/api/choreo/config", cfg),
   },
 };

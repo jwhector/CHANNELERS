@@ -30,3 +30,22 @@ test("toggling 'speak cues' fires onToggleSpeak with the new value", async () =>
   await userEvent.click(screen.getByRole("checkbox", { name: /speak cues/i }));
   expect(onToggleSpeak).toHaveBeenCalledWith(false);
 });
+
+test("shows the channelling banner when mimicking", () => {
+  render(
+    <ChoreoDisplay cue="The forms are processing." log={[]} reactToOracle connected
+      speakCues onToggleSpeak={() => {}} onToggle={() => {}} mimicking />,
+  );
+  expect(screen.getByText(/channelling/i)).toBeInTheDocument();
+});
+
+test("toggling 'mimic oracle' fires onToggleMimic with the new value", async () => {
+  const onToggleMimic = vi.fn();
+  render(
+    <ChoreoDisplay cue="" log={[]} reactToOracle connected
+      speakCues onToggleSpeak={() => {}} onToggle={() => {}}
+      mimicManual={false} onToggleMimic={onToggleMimic} />,
+  );
+  await userEvent.click(screen.getByRole("checkbox", { name: /mimic oracle/i }));
+  expect(onToggleMimic).toHaveBeenCalledWith(true);
+});
