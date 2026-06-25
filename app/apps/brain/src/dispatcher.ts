@@ -56,6 +56,7 @@ export function createDispatcher(
   }
 
   const flags = new Map<string, DispatchFlag[]>();
+  const noShowHoldUntil = new Map<string, number>(); // visitorId → epoch ms a no-show is held until
   const surplus = new Map<string, { station: Station; kioskId: string }>(); // connId → {station, kioskId} (connected screen with no free slot)
   const offlineTimers = new Map<string, ReturnType<typeof setTimeout>>(); // slotId → grace timer
 
@@ -150,11 +151,21 @@ export function createDispatcher(
     broadcastState();
   }
 
+  // ── per-visitor hold: intro wait (createdAt) + no-show cooldown (map) ──
+  function holdOf(v: VisitorRecord): { untilMs: number; reason: "intro" | "no-show" } | null {
+    const intro = Date.parse(v.createdAt) + knobs.introHoldMs;
+    const noShow = noShowHoldUntil.get(v.id) ?? 0;
+    const untilMs = Math.max(intro, noShow);
+    if (untilMs <= Date.now()) return null;
+    return { untilMs, reason: noShow >= intro ? "no-show" : "intro" };
+  }
+  const isHeld = (v: VisitorRecord): boolean => holdOf(v) !== null;
+
   // ── selection (anti-starvation over random; excludes occupied + non-waiting) ──
   function select(station: Station): VisitorRecord | undefined {
     const occupied = occupiedVisitorIds();
     const eligible = store.list().filter(
-      (v) => !occupied.has(v.id) && eligibleStations(v).includes(station),
+      (v) => !occupied.has(v.id) && !isHeld(v) && eligibleStations(v).includes(station),
     );
     if (eligible.length === 0) return undefined;
     const starving = eligible.filter((v) => ageMs(v.location.since) > knobs.maxWaitMs);
@@ -167,7 +178,6 @@ export function createDispatcher(
   }
 
   function fill(): void {
-    if (!warmedUp()) return;
     for (const slot of slots.values()) {
       if (!isOnline(slot) || slot.occupant) continue;
       const pick = select(slot.station);
@@ -245,6 +255,7 @@ export function createDispatcher(
     const ok = store.remove(visitorId);
     if (ok) {
       flags.delete(visitorId);
+      noShowHoldUntil.delete(visitorId);
       broadcastState();
     }
     return ok;
@@ -303,6 +314,8 @@ export function createDispatcher(
       //    included — a person called but never confirmed-arrived must not complete. ──
       if (occ.phase === "called") {
         if (ageMs(occ.since) > knobs.noShowMs) {
+          const cur = noShowHoldUntil.get(v.id) ?? 0;
+          if (cur <= Date.now()) noShowHoldUntil.set(v.id, Date.now() + knobs.noShowHoldMs);
           if (knobs.noShowAutoRepool) reapOccupant(slot, "no-show");
           else addFlag(v.id, { type: "no-show", since: nowIso() });
         }
@@ -364,11 +377,16 @@ export function createDispatcher(
     const occupied = occupiedVisitorIds();
     return store.list()
       .filter((v) => !occupied.has(v.id) && eligibleStations(v).length > 0)
-      .map((v) => ({
-        id: v.id, number: v.number, name: v.survey?.name,
-        eligible: eligibleStations(v), waitingSince: v.location.since,
-        flags: flags.get(v.id) ?? [],
-      }));
+      .map((v) => {
+        const hold = holdOf(v);
+        return {
+          id: v.id, number: v.number, name: v.survey?.name,
+          eligible: eligibleStations(v), waitingSince: v.location.since,
+          flags: flags.get(v.id) ?? [],
+          heldUntil: hold ? new Date(hold.untilMs).toISOString() : undefined,
+          holdReason: hold?.reason,
+        };
+      });
   }
   function completedEntries(): DispatchDone[] {
     return store.list()
@@ -393,24 +411,10 @@ export function createDispatcher(
       stationsOnline,
       timedDwellMs,
       noShowMs: knobs.noShowMs,
-      warmedUp: warmedUp(),
     };
   }
   function broadcastState(): void {
     bus.broadcast({ kind: "dispatch.state", state: snapshot() });
-  }
-
-  // warm-up (Task 3 uses this in fill; defined here for the snapshot)
-  function warmedUp(): boolean {
-    const visitors = store.list();
-    const occupied = occupiedVisitorIds();
-    const pool = visitors.filter((v) => !occupied.has(v.id) && eligibleStations(v).length > 0);
-    if (pool.length >= knobs.K) return true;
-    const earliest = visitors.reduce<number | null>((min, v) => {
-      const t = Date.parse(v.createdAt);
-      return min === null || t < min ? t : min;
-    }, null);
-    return earliest !== null && Date.now() - earliest >= knobs.warmupMs;
   }
 
   // ── lifecycle ──

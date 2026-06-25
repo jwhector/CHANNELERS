@@ -79,6 +79,9 @@ export type DispatchQueueEntry = {
   eligible: Station[];
   waitingSince: string;
   flags: DispatchFlag[];
+  /** Epoch-ISO until which this visitor is held out of new assignment (intro wait or no-show cooldown). */
+  heldUntil?: string;
+  holdReason?: "intro" | "no-show";
 };
 
 /** One occupant pinned to a slot. `phase` is the slot-level occupancy stage. */
@@ -118,8 +121,6 @@ export type DispatchState = {
   timedDwellMs?: Partial<Record<Station, number>>;
   /** Called-but-not-arrived threshold (ms), so a station view can flag a likely no-show. */
   noShowMs?: number;
-  /** False during the warm-up window (spec §9 of the Tier 3 spec). */
-  warmedUp: boolean;
 };
 
 /** Server → client messages. The server constructs these, so a plain union is enough. */

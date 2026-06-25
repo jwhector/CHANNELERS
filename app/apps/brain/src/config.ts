@@ -63,13 +63,15 @@ export const config = {
     timed: { paper: { dwellMs: Number(process.env.PAPER_DWELL_MS ?? 300_000) } } as Partial<
       Record<"intake" | "bodyscan" | "altar" | "paper", { dwellMs: number }>
     >,
-    /** Warm-up pool size — don't dispatch until this many are waiting OR T_warmup elapses. */
-    K: Number(process.env.DISPATCH_K ?? 3),
-    warmupMs: Number(process.env.DISPATCH_T_WARMUP_MS ?? 60_000),
+    /** Per-visitor intro hold: a fresh registrant is ineligible for new assignment for this long
+     *  after registration (replaces the old global K / warm-up). */
+    introHoldMs: Number(process.env.DISPATCH_INTRO_HOLD_MS ?? 30_000),
     /** Anti-starvation: waiting longer than this jumps the random pick. */
     maxWaitMs: Number(process.env.DISPATCH_T_MAX_MS ?? 240_000),
     /** Called-but-not-arrived past this → flagged (or auto-repooled if noShowAutoRepool). */
     noShowMs: Number(process.env.DISPATCH_T_NOSHOW_MS ?? 90_000),
+    /** No-show cooldown: a no-show number is held out of new assignment for this long. */
+    noShowHoldMs: Number(process.env.DISPATCH_NOSHOW_HOLD_MS ?? 120_000),
     /** in_progress past this with no completion → auto-reap to waiting. */
     staleMs: Number(process.env.DISPATCH_T_STALE_MS ?? 300_000),
     /** Station-screen socket-drop grace before reaping its in_progress occupants. */

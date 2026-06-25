@@ -29,7 +29,7 @@ function fakeBus() {
 
 // Counts chosen to exercise multi-slot + singletons; engine must derive everything from these.
 const SLOTS = { intake: 3, bodyscan: 2, altar: 1 } as const;
-const KNOBS = { slots: SLOTS, K: 1, warmupMs: 0, graceMs: 20_000, tickMs: 5_000 };
+const KNOBS = { slots: SLOTS, introHoldMs: 0, graceMs: 20_000, tickMs: 5_000 };
 
 let f: ReturnType<typeof fakeBus>;
 let d: ReturnType<typeof createDispatcher>;
@@ -256,7 +256,7 @@ describe("paper: timed group station", () => {
     // Timed stations now share the kiosk lifecycle: called → arrive → dwell.
     // noShowAutoRepool ON so a called-but-never-arrived paper occupant is repooled
     // at noShowMs(90s) rather than left hanging.
-    K: 1, warmupMs: 0, tickMs: 5_000, noShowAutoRepool: true,
+    introHoldMs: 0, tickMs: 5_000, noShowAutoRepool: true,
   };
   let pf: ReturnType<typeof fakeBus>;
   let pd: ReturnType<typeof createDispatcher>;
@@ -282,7 +282,7 @@ describe("paper: timed group station", () => {
 
   it("confirm calls a paper occupant; arrival starts the dwell", () => {
     const v = store.register(771002);
-    pd.kick(); // warmup K=1 met → fill
+    pd.kick(); // intro hold 0 → fill
     const pending = pd.snapshot().slots.find((x) => x.station === "paper" && x.occupant);
     expect(pending?.occupant?.phase).toBe("pending");
     expect(pd.confirm(v.id)).toBe(true);
@@ -357,5 +357,54 @@ describe("paper: timed group station", () => {
   it("exposes the paper dwell in the snapshot for the operator countdown", () => {
     expect(pd.snapshot().timedDwellMs?.paper).toBe(300_000);
     expect(pd.snapshot().timedDwellMs?.intake).toBeUndefined();
+  });
+});
+
+describe("per-visitor holds (intro wait + no-show cooldown)", () => {
+  it("holds a fresh visitor out of dispatch until introHoldMs elapses, surfaced in the queue", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, { knobs: { ...KNOBS, introHoldMs: 60_000 } as any, autoStart: false });
+    f2.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); // within the intro hold → no dispatch
+    expect(d2.snapshot().slots.every((s) => !s.occupant)).toBe(true);
+    const held = d2.snapshot().queue.find((e) => e.id === v.id);
+    expect(held?.holdReason).toBe("intro");
+    expect(held?.heldUntil).toBeTruthy();
+    vi.setSystemTime(new Date("2026-06-21T00:01:01.000Z")); // > 60s after createdAt
+    d2.kick();
+    expect(d2.snapshot().slots.some((s) => s.occupant?.visitorId === v.id)).toBe(true);
+    d2.stop();
+  });
+
+  it("holds a no-show number for noShowHoldMs, then frees it", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { ...KNOBS, introHoldMs: 0, noShowMs: 90_000, noShowHoldMs: 120_000, noShowAutoRepool: true } as any,
+      autoStart: false,
+    });
+    f2.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); d2.confirm(v.id); // called
+    vi.setSystemTime(new Date("2026-06-21T00:01:31.000Z")); // > noShowMs → no-show repool + hold
+    d2.kick();
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    expect(d2.snapshot().slots.some((s) => s.occupant?.visitorId === v.id)).toBe(false); // held, not re-dispatched
+    expect(d2.snapshot().queue.find((e) => e.id === v.id)?.holdReason).toBe("no-show");
+    vi.setSystemTime(new Date("2026-06-21T00:03:40.000Z")); // > 00:01:31 + 120s
+    d2.kick();
+    expect(d2.snapshot().slots.some((s) => s.occupant?.visitorId === v.id)).toBe(true);
+    d2.stop();
+  });
+
+  it("does not let anti-starvation rescue a held visitor", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, { knobs: { ...KNOBS, introHoldMs: 600_000, maxWaitMs: 1_000 } as any, autoStart: false });
+    f2.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    vi.setSystemTime(new Date("2026-06-21T00:00:05.000Z")); // waited 5s > maxWaitMs 1s
+    d2.kick();
+    expect(d2.snapshot().slots.every((s) => !s.occupant)).toBe(true); // still intro-held
+    d2.stop();
   });
 });

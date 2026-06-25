@@ -42,7 +42,6 @@ export function Dispatch() {
       <header>
         <h1>Dispatch</h1>
         <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
-        {!state.warmedUp && <span className="dim">warming up…</span>}
         <span className="arrivals">
           <input
             inputMode="numeric" value={arrival} placeholder="add #"
