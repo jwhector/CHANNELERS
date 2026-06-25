@@ -13,6 +13,21 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-25 — Per-visitor dispatch holds: intro wait + no-show cooldown + remaining-time UI
+
+- **What:** Replaced the coarse global warm-up (`K` / `warmupMs` / `warmedUp`) with a unified per-visitor **hold** concept. A visitor is ineligible for a new slot assignment until `max(createdAt + introHoldMs, no-show cooldown)`. Two sources feed one `isHeld(v)` gate in `select()`:
+  - **Intro hold** — derived from `createdAt + introHoldMs` (no new storage). Each registrant gets a startup stagger before being callable.
+  - **No-show hold** — written to a `noShowHoldUntil` map when the no-show timer fires. The repooled visitor is held out for `noShowHoldMs` before becoming eligible again. The hold re-arms only when the prior entry has expired (no drift during a held `called` episode; correctly handles a second no-show). Cleared on `remove()`.
+  - Anti-starvation skips held visitors — they cannot be priority-rescued while held.
+  - `DispatchQueueEntry` gains `heldUntil?` (epoch-ISO) and `holdReason?: "intro" | "no-show"` so the UI can render countdowns.
+  - `DispatchState.warmedUp` is gone; `K` and `warmupMs` knobs removed.
+  - **`/station`** called rows now show "no-show in m:ss" so a performer knows how long they have before the participant auto-no-shows.
+  - **`/dispatch`** waiting-pool items show "on hold · intro|no-show m:ss" chip when held. The manual ticker was replaced by a shared `useNow()` 1 s hook.
+  - Shared timing helpers (`remainingSec`, `fmtClock`, `noShowDeadline`) in `apps/stage/src/lib/dispatchTiming.ts`.
+- **Why:** Three gaps: `/station` had no urgency signal; a no-show was immediately re-eligible (could be re-called into the same churn); the global warm-up couldn't express per-person stagger. The per-visitor hold covers all three with one concept and fewer knobs.
+- **Files/areas:** `apps/brain/src/{config,dispatcher}.ts`, `apps/brain/test/dispatcher.test.ts`, `packages/shared/src/protocol.ts`, `apps/stage/src/routes/{Station,Dispatch}.tsx`, `apps/stage/src/routes/Station.test.tsx`, `apps/stage/src/lib/{dispatchTiming.ts,dispatchTiming.test.ts,useNow.ts}`, `apps/stage/src/styles.css`.
+- **Docs touched:** this entry; `docs/ARCHITECTURE.md` (§5.x knobs table, Holds bullet, Transport shape, §12 resolved-knobs note).
+
 ## 2026-06-24 — Choreo "mimic the oracle" mode (synchronized channeling)
 
 - **What:** A new `/choreo` mode where the dancers' feed periodically replaces its movement cues with the **oracle's actual voice**, so the oracle performer and the dancers all hear the same line to channel at the same time.
