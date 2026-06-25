@@ -179,7 +179,13 @@ export function createDispatcher(
   }
 
   function fill(): void {
-    for (const slot of slots.values()) {
+    const order = knobs.fillPriority ?? STATION_ORDER;
+    const rank = (st: Station) => {
+      const i = order.indexOf(st);
+      return i === -1 ? order.length : i;
+    };
+    const ordered = [...slots.values()].sort((a, b) => rank(a.station) - rank(b.station));
+    for (const slot of ordered) {
       if (!isOnline(slot) || slot.occupant) continue;
       const pick = select(slot.station);
       if (!pick) continue;

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
+import type { Station } from "@channelers/shared";
 
 // Load the monorepo-root .env (the brain's cwd is apps/brain when run via pnpm).
 // Missing file is fine — dotenv just no-ops and the brain falls back to stub seeds.
@@ -59,6 +60,9 @@ export const config = {
     slots: { intake: 2, bodyscan: 1, altar: 1, paper: 4, waitingroom: 10 } as Record<
       "intake" | "bodyscan" | "altar" | "paper" | "waitingroom", number
     >,
+    /** Order fill() serves free slots in — scarce single gate (bodyscan) first, soaks last.
+     *  Keeps the one bodyscan station from losing its only candidate to the 2-wide intake. */
+    fillPriority: ["bodyscan", "intake", "altar", "paper", "waitingroom"] as Station[],
     /** Timed group stations: present ⇒ kiosk-less, always-online, completed by a dwell timer (spec 2026-06-22). */
     timed: {
       paper: { dwellMs: Number(process.env.PAPER_DWELL_MS ?? 300_000) },

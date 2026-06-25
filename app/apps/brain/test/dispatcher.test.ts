@@ -106,6 +106,28 @@ describe("socket-drop → slot offline after grace", () => {
 
 const NUM = () => 500000 + Math.floor(Math.random() * 400000);
 
+describe("fill priority: scarce gate first", () => {
+  it("pins a single waiting visitor to bodyscan, not intake", () => {
+    f.hello("intake", "ki", "ci");    // intake-0 online
+    f.hello("bodyscan", "kb", "cb");  // bodyscan-0 online
+    const v = store.register(NUM());
+    d.kick();
+    const slot = d.snapshot().slots.find((s) => s.occupant?.visitorId === v.id);
+    expect(slot?.station).toBe("bodyscan");
+  });
+
+  it("with two waiting, bodyscan and intake each take one", () => {
+    f.hello("intake", "ki", "ci");
+    f.hello("bodyscan", "kb", "cb");
+    store.register(NUM());
+    store.register(NUM());
+    d.kick();
+    const stations = d.snapshot().slots
+      .filter((s) => s.occupant).map((s) => s.station).sort();
+    expect(stations).toEqual(["bodyscan", "intake"]);
+  });
+});
+
 describe("pinned dispatch only fills free ONLINE slots", () => {
   it("does not dispatch when no slot is online", () => {
     store.register(NUM());
