@@ -41,6 +41,8 @@ export const api = {
     repool: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/repool", { visitorId }),
     complete: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/complete", { visitorId }),
     remove: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/remove", { visitorId }),
+    altar: (open: boolean) =>
+      post<{ ok: boolean; altarOpen: boolean }>("/api/dispatch/altar", { open }),
   },
   choreo: {
     config: () => fetch("/api/choreo/config").then((r) => json<ChoreoConfig>(r)),

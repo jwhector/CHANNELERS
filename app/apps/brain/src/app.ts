@@ -212,6 +212,13 @@ export async function buildApp(
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     return { ok: dispatcher.remove(parsed.data.visitorId) };
   });
+  const AltarBody = z.object({ open: z.boolean() });
+  app.post("/api/dispatch/altar", async (req, reply) => {
+    const parsed = AltarBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    dispatcher.setAltarOpen(parsed.data.open);
+    return { ok: true, altarOpen: parsed.data.open };
+  });
 
   // legacy scan + manual seeds regeneration (kept)
   app.post("/api/visitors/:id/scan", async (req, reply) => {

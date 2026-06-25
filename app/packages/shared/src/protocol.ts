@@ -121,6 +121,8 @@ export type DispatchState = {
   timedDwellMs?: Partial<Record<Station, number>>;
   /** Called-but-not-arrived threshold (ms), so a station view can flag a likely no-show. */
   noShowMs?: number;
+  /** Operator gate: when false, no new visitor is dispatched to the altar (in-progress readings continue). */
+  altarOpen: boolean;
 };
 
 /** Server → client messages. The server constructs these, so a plain union is enough. */

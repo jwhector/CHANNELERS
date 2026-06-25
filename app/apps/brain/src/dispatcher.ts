@@ -28,6 +28,7 @@ type SlotState = {
 export interface Dispatcher {
   confirm(visitorId: string): boolean;
   arrive(visitorId: string): boolean;
+  setAltarOpen(open: boolean): void;
   assign(visitorId: string, slotId: string): boolean;
   repool(visitorId: string): boolean;
   markComplete(visitorId: string): boolean;
@@ -59,6 +60,7 @@ export function createDispatcher(
   const noShowHoldUntil = new Map<string, number>(); // visitorId → epoch ms a no-show is held until
   const surplus = new Map<string, { station: Station; kioskId: string }>(); // connId → {station, kioskId} (connected screen with no free slot)
   const offlineTimers = new Map<string, ReturnType<typeof setTimeout>>(); // slotId → grace timer
+  let altarOpen = false; // operator gate; altar stays closed until /dispatch opens it
 
   const nowIso = () => new Date().toISOString();
   const ageMs = (iso: string) => Date.now() - Date.parse(iso);
@@ -90,7 +92,7 @@ export function createDispatcher(
     const out: Station[] = [];
     if (!v.intakeAt) out.push("intake");
     if (!v.poseAt) out.push("bodyscan");
-    if (v.intakeAt && v.poseAt && !v.sessionEndAt) out.push("altar");
+    if (altarOpen && v.intakeAt && v.poseAt && !v.sessionEndAt) out.push("altar");
     if (!v.paperAt) out.push("paper"); // non-gating, ungated timed station (spec 2026-06-22)
     if (!v.waitingRoomAt) out.push("waitingroom"); // non-gating timed station (5-min hourglass hold)
     return out;
@@ -214,6 +216,11 @@ export function createDispatcher(
     clearFlags(visitorId);
     broadcastState();
     return true;
+  }
+
+  function setAltarOpen(open: boolean): void {
+    altarOpen = open;
+    kick(); // re-fill so a ready visitor is dispatched the moment the altar opens
   }
 
   function assign(visitorId: string, slotId: string): boolean {
@@ -421,6 +428,7 @@ export function createDispatcher(
       stationsOnline,
       timedDwellMs,
       noShowMs: knobs.noShowMs,
+      altarOpen,
     };
   }
   function broadcastState(): void {
@@ -440,5 +448,5 @@ export function createDispatcher(
     offlineTimers.clear();
   }
 
-  return { confirm, arrive, assign, repool, markComplete, remove, checkin, clearFlags, snapshot, kick, stop };
+  return { confirm, arrive, setAltarOpen, assign, repool, markComplete, remove, checkin, clearFlags, snapshot, kick, stop };
 }

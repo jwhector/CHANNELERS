@@ -128,6 +128,24 @@ describe("fill priority: scarce gate first", () => {
   });
 });
 
+describe("altar gate", () => {
+  it("does not dispatch to a closed altar; setAltarOpen opens it", () => {
+    f.hello("altar", "ka", "ca"); // altar-0 online
+    const v = store.register(NUM());
+    store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] }); // intakeAt
+    store.setPoseTemplate(v.id, { angles: [0], weights: [1] });          // poseAt
+    store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
+
+    d.kick();
+    expect(d.snapshot().altarOpen).toBe(false);
+    expect(d.snapshot().slots.find((s) => s.station === "altar")?.occupant).toBeUndefined();
+
+    d.setAltarOpen(true);
+    expect(d.snapshot().altarOpen).toBe(true);
+    expect(d.snapshot().slots.find((s) => s.station === "altar")?.occupant?.visitorId).toBe(v.id);
+  });
+});
+
 describe("pinned dispatch only fills free ONLINE slots", () => {
   it("does not dispatch when no slot is online", () => {
     store.register(NUM());
