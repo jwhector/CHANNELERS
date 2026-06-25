@@ -211,3 +211,9 @@ pre {
 .stationops .ops-flag { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
 .stationops .ghost { background: transparent; border: 1px solid currentColor; opacity: 0.7; }
 .pool-flag.hold { border-color: var(--dim); color: var(--dim); }
+
+/* /dispatch — operator flow strip */
+.flow-strip { display: flex; gap: 1rem; align-items: center; padding: 0.4rem 0; }
+.flow-strip .ghost { background: transparent; border: 1px solid currentColor; opacity: 0.7; }
+.flow-strip .flow-stat { font-size: 0.85rem; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.flow-strip .flow-stat.warn { color: #e8a33d; opacity: 1; font-weight: 600; }

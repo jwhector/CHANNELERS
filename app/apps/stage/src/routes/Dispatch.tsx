@@ -8,6 +8,38 @@ import { remainingSec, fmtClock } from "../lib/dispatchTiming";
 const elapsed = (since: string) =>
   `${Math.max(0, Math.round((Date.now() - Date.parse(since)) / 1000))}s`;
 
+const BLOCKED_MSG: Record<"none" | "soaking" | "held" | "empty", string> = {
+  none: "",
+  soaking: "candidates soaking",
+  held: "candidates on hold",
+  empty: "no one needs a scan",
+};
+
+/** Operator flow strip: altar gate toggle + altar-ready buffer + bodyscan idle/blocked health. */
+export function FlowStrip({
+  altarOpen, altarReady, bodyscanIdle, bodyscanBlocked, onToggleAltar,
+}: {
+  altarOpen: boolean;
+  altarReady: number;
+  bodyscanIdle: boolean;
+  bodyscanBlocked: "none" | "soaking" | "held" | "empty";
+  onToggleAltar: (open: boolean) => void;
+}) {
+  const warn = bodyscanIdle && bodyscanBlocked !== "none";
+  return (
+    <div className="flow-strip">
+      <button className={altarOpen ? "submit" : "ghost"} onClick={() => onToggleAltar(!altarOpen)}>
+        Altar: {altarOpen ? "OPEN" : "CLOSED"}
+      </button>
+      <span className="flow-stat">altar-ready {altarReady}</span>
+      <span className={`flow-stat${warn ? " warn" : ""}`}>
+        bodyscan {bodyscanIdle ? "idle" : "busy"}
+        {warn ? ` · ${BLOCKED_MSG[bodyscanBlocked]}` : ""}
+      </span>
+    </div>
+  );
+}
+
 /** Lobby-operator board (spec §6): waiting pool · slots · completed. No-scroll 3-zone. */
 export function Dispatch() {
   const [state, setState] = useState<DispatchState | null>(null);
@@ -55,6 +87,13 @@ export function Dispatch() {
       {state.surplus.length > 0 && (
         <p className="error">Surplus screens: {state.surplus.map((s) => `${s.station}/${s.kioskId.slice(0, 6)}`).join(", ")}</p>
       )}
+      <FlowStrip
+        altarOpen={state.altarOpen}
+        altarReady={state.altarReady}
+        bodyscanIdle={state.bodyscanIdle}
+        bodyscanBlocked={state.bodyscanBlocked}
+        onToggleAltar={(open) => void api.dispatch.altar(open)}
+      />
 
       <div className="zones">
         {/* LEFT — waiting pool */}
