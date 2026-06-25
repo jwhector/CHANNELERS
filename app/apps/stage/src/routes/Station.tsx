@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import type { DispatchState, Slot, Station as StationName, WsServerMsg } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
+import { useNow } from "../lib/useNow";
+import { remainingSec, fmtClock, noShowDeadline } from "../lib/dispatchTiming";
 
 /** Stations a performer admits arrivals for. Intake self-confirms; it is not here. */
 const PERFORMER_STATIONS: StationName[] = ["bodyscan", "altar", "paper"];
@@ -41,6 +43,7 @@ function StationContainer({ station }: { station: StationName }) {
     try { await fn(); } finally { setBusyId(null); }
   }
 
+  const now = useNow();
   const slots = (state?.slots ?? []).filter((s) => s.station === station);
   return (
     <StationOpsView
@@ -49,6 +52,8 @@ function StationContainer({ station }: { station: StationName }) {
       called={slots.filter((s) => s.occupant?.phase === "called")}
       inProgress={slots.filter((s) => s.occupant?.phase === "in_progress")}
       dwellMs={state?.timedDwellMs?.[station]}
+      noShowMs={state?.noShowMs}
+      now={now}
       busyId={busyId}
       onArrive={(id) => void run(id, () => api.arrive(id))}
       onRelease={(id) => void run(id, () => api.dispatch.repool(id))}
@@ -58,17 +63,20 @@ function StationContainer({ station }: { station: StationName }) {
 
 /** Presentational — admit list + in-progress status. */
 export function StationOpsView({
-  station, connected, called, inProgress, dwellMs, busyId, onArrive, onRelease,
+  station, connected, called, inProgress, dwellMs, noShowMs, now, busyId, onArrive, onRelease,
 }: {
   station: StationName;
   connected: boolean;
   called: Slot[];
   inProgress: Slot[];
   dwellMs?: number;
+  noShowMs?: number;
+  now?: number;
   busyId: string | null;
   onArrive: (visitorId: string) => void;
   onRelease: (visitorId: string) => void;
 }) {
+  const nowMs = now ?? Date.now();
   return (
     <main className="void stationops">
       <header>
@@ -86,6 +94,9 @@ export function StationOpsView({
             <div key={s.id} className={`ops-row${noShow ? " warn" : ""}`}>
               <span className="ops-num">#{o.number}</span>
               {noShow && <span className="ops-flag">no-show?</span>}
+              {noShowMs !== undefined && (
+                <span className="dim">no-show in {fmtClock(remainingSec(noShowDeadline(o.since, noShowMs), nowMs))}</span>
+              )}
               <button className="submit" disabled={busyId === o.visitorId} onClick={() => onArrive(o.visitorId)}>
                 Confirm arrival
               </button>

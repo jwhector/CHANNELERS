@@ -33,3 +33,19 @@ test("shows a no-show warning when the occupant is flagged", () => {
   );
   expect(screen.getByText(/no-show/i)).toBeInTheDocument();
 });
+
+test("a called row shows the no-show countdown when noShowMs is provided", () => {
+  const since = "2026-06-21T00:00:00.000Z";
+  const slot: Slot = {
+    id: "bodyscan-0", station: "bodyscan", online: true,
+    occupant: { visitorId: "v1", number: 5, phase: "called", since },
+  };
+  render(
+    <StationOpsView
+      station="bodyscan" connected called={[slot]} inProgress={[]}
+      noShowMs={90_000} now={Date.parse(since) + 30_000}
+      busyId={null} onArrive={() => {}} onRelease={() => {}}
+    />,
+  );
+  expect(screen.getByText(/no-show in 1:00/)).toBeInTheDocument();
+});
