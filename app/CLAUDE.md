@@ -10,12 +10,13 @@ Application monorepo for CHANNELERS. **Design lives in `../docs`** — read `../
 
 ## Stack (pnpm + TypeScript monorepo)
 - **`apps/brain`** — Show Brain: Fastify + `ws` + OSC + OpenAI SDK. Owns visitor data and all AI calls. Also hosts the visitor **dispatcher** (`src/dispatcher.ts`), the **choreographer** loop (`src/choreo.ts`), oracle **tuning** (`src/tuning.ts`), `/api/tts` (routable fallback chain), and an optional token-gated `/agent` WS endpoint for the **Ableton dial-home bridge** (`src/ableton.ts`, off unless `ABLETON_AGENT_TOKEN` set). For cloud deploys, serves the stage build + `/api` + `/ws` from one origin (`SERVE_STAGE`). See ARCHITECTURE §5.x, §5.6, §7, §12; `DEPLOY.md`.
-- **`apps/stage`** — Vite/React; one app, role-based routes. Station screens (`/intake`, `/bodyscan`, `/altar`) gate on **confirm-at-station** (`CalledGate`), not a typed number. Routes:
+- **`apps/stage`** — Vite/React; one app, role-based routes. Station screens (`/intake`, `/bodyscan`, `/altar`) gate on **confirm-at-station** (`CalledGate`), not a typed number. `/intake` is visitor self-confirm; `/bodyscan` & `/altar` are **performer-confirmed** (the kiosk shows a wait-for-staff standby and auto-advances when a guide admits the visitor from `/station`). Routes:
   - `/intake` · `/bodyscan` · `/altar` — visitor stations (survey · pose enroll · pose verify + persona). `/intake` uses the CRT skin (`CrtShell`).
   - `/channel` — performer teleprompter + the operator **Altered-State Console** (oracle tuning dials).
   - `/choreo` — Tier 2 choreography feed (text + in-ear TTS).
   - `/console` — master overseer (visitors / flow funnel / sessions).
   - `/board` — public call display · `/dispatch` — lobby-operator queue board · `/souvenir` — QR takeaway.
+  - `/station` (`/station/:station`) — per-station performer arrival-confirm view (bodyscan/altar/paper); passive, calls `arrive`/`repool`.
   - `/feed` — Scan/Shred/Feed, the first **timed group station** (kiosk-less spectacle screen). `/waiting` — deferred.
 
   See ARCHITECTURE.md §3 for the route map and the relevant §5 subsection for each one's internals.
