@@ -220,8 +220,9 @@ describe("paper: timed group station", () => {
   const P_KNOBS = {
     slots: { intake: 0, bodyscan: 0, altar: 0, paper: 2 },
     timed: { paper: { dwellMs: 300_000 } },
-    // noShowAutoRepool ON proves the timed branch fully bypasses no-show: without it a paper
-    // occupant would be reaped at noShowMs(90s), well before the 300s dwell.
+    // Timed stations now share the kiosk lifecycle: called → arrive → dwell.
+    // noShowAutoRepool ON so a called-but-never-arrived paper occupant is repooled
+    // at noShowMs(90s) rather than left hanging.
     K: 1, warmupMs: 0, tickMs: 5_000, noShowAutoRepool: true,
   };
   let pf: ReturnType<typeof fakeBus>;
@@ -246,21 +247,23 @@ describe("paper: timed group station", () => {
     expect(q?.eligible).toContain("paper");
   });
 
-  it("dispatches a waiting visitor into a paper slot (no kiosk), confirm starts the dwell", () => {
+  it("confirm calls a paper occupant; arrival starts the dwell", () => {
     const v = store.register(771002);
     pd.kick(); // warmup K=1 met → fill
     const pending = pd.snapshot().slots.find((x) => x.station === "paper" && x.occupant);
     expect(pending?.occupant?.phase).toBe("pending");
     expect(pd.confirm(v.id)).toBe(true);
-    const called = pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id);
-    expect(called?.occupant?.phase).toBe("called");
     expect(store.get(v.id)?.location).toMatchObject({ state: "called", station: "paper" });
+    expect(pd.arrive(v.id)).toBe(true);
+    expect(store.get(v.id)?.location).toMatchObject({ state: "in_progress", station: "paper" });
+    expect(pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
   });
 
-  it("completes a paper occupant after dwellMs: stamps paperAt, frees the slot, repools", () => {
+  it("completes a paper occupant dwellMs after ARRIVAL: stamps paperAt, frees, repools", () => {
     const v = store.register(772001);
     pd.kick();
-    pd.confirm(v.id); // called → dwell starts from now
+    pd.confirm(v.id);
+    pd.arrive(v.id); // dwell starts at arrival
     vi.advanceTimersByTime(300_000 + 1_000);
     pd.kick(); // reconcile
     expect(store.get(v.id)?.paperAt).toBeTruthy();
@@ -268,26 +271,46 @@ describe("paper: timed group station", () => {
     expect(pd.snapshot().slots.some((x) => x.occupant?.visitorId === v.id)).toBe(false);
   });
 
-  it("does not complete before dwellMs", () => {
+  it("does not complete before dwellMs after arrival", () => {
     const v = store.register(772002);
     pd.kick();
     pd.confirm(v.id);
+    pd.arrive(v.id);
     vi.advanceTimersByTime(120_000); // < dwell
     pd.kick();
     expect(store.get(v.id)?.paperAt).toBeUndefined();
-    expect(pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("called");
+    expect(pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
   });
 
-  it("never applies the no-show timer to a timed station", () => {
+  it("applies the no-show timer to a called timed occupant that never arrives", () => {
     const v = store.register(772003);
     pd.kick();
-    pd.confirm(v.id);
-    vi.advanceTimersByTime(100_000); // > noShowMs(90s) but < dwell(300s)
+    pd.confirm(v.id); // called, NOT arrived
+    vi.advanceTimersByTime(90_000 + 1_000); // > noShowMs, dwell never started
     pd.kick();
+    expect(store.get(v.id)?.paperAt).toBeUndefined(); // no false completion
+    expect(store.get(v.id)?.location.state).toBe("waiting"); // repooled by no-show (noShowAutoRepool)
+    // the original called occupant was reaped; re-dispatch may re-pin it as a fresh pending,
+    // but it must never have progressed past called.
     const occ = pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant;
-    expect(occ?.phase).toBe("called"); // still there, not reaped, not flagged
-    const q = pd.snapshot().queue.find((e) => e.number === 772003);
-    expect(q).toBeUndefined(); // not back in the waiting pool
+    expect(occ?.phase).not.toBe("in_progress");
+    expect(occ?.phase).not.toBe("called");
+  });
+
+  it("a called timed occupant past the dwell is NOT completed if it never arrived (no false paperAt)", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { ...P_KNOBS, noShowAutoRepool: false, noShowMs: 600_000 } as any,
+      autoStart: false,
+    });
+    const v = store.register(772010);
+    d2.kick();
+    d2.confirm(v.id); // called, never arrived
+    vi.advanceTimersByTime(300_000 + 1_000); // past dwell, but < noShowMs
+    d2.kick();
+    expect(store.get(v.id)?.paperAt).toBeUndefined(); // dwell does NOT run for an absent occupant
+    expect(d2.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("called");
+    d2.stop();
   });
 
   it("markComplete stamps paperAt for a paper occupant", () => {

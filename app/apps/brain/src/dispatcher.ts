@@ -298,31 +298,43 @@ export function createDispatcher(
       if (!occ) continue;
       const v = store.get(occ.visitorId);
       if (!v) { slot.occupant = undefined; continue; }
-      if (isTimed(slot.station)) {
-        // Timer-from-call: a confirmed (called) occupant completes once the dwell elapses.
-        // No auto-arrive (stays `called` so /board shows it); no no-show / stale for timed stations.
-        if (occ.phase === "called" && ageMs(occ.since) > dwellMs(slot.station)) {
-          store.stampMilestone(occ.visitorId, milestoneField(slot.station));
-          slot.occupant = undefined;
-          store.setLocation(occ.visitorId, { state: "waiting", since: nowIso() });
-          clearFlags(occ.visitorId);
-        }
-        continue; // skip the kiosk-station in_progress/called handling below
-      }
-      if (occ.phase === "in_progress") {
-        if (completionMilestoneSet(v, slot.station)) {
-          slot.occupant = undefined;
-          store.setLocation(v.id, { state: "waiting", since: nowIso() });
-        } else if (ageMs(occ.since) > knobs.staleMs) {
-          reapOccupant(slot, "stale");
-        }
-      } else if (occ.phase === "called") {
+
+      // ── called: awaiting arrival. No-show now applies to EVERY station, timed
+      //    included — a person called but never confirmed-arrived must not complete. ──
+      if (occ.phase === "called") {
         if (ageMs(occ.since) > knobs.noShowMs) {
           if (knobs.noShowAutoRepool) reapOccupant(slot, "no-show");
           else addFlag(v.id, { type: "no-show", since: nowIso() });
         }
+        continue;
+      }
+
+      // ── in_progress ──
+      if (isTimed(slot.station)) {
+        // Dwell measured from ARRIVAL (occ.since was reset by arrive()); it completes the visit.
+        const dwell = dwellMs(slot.station);
+        if (ageMs(occ.since) > dwell) {
+          store.stampMilestone(occ.visitorId, milestoneField(slot.station));
+          slot.occupant = undefined;
+          store.setLocation(occ.visitorId, { state: "waiting", since: nowIso() });
+          clearFlags(occ.visitorId);
+        } else if (!Number.isFinite(dwell) && ageMs(occ.since) > knobs.staleMs) {
+          // Backstop only when a timed station has NO finite dwell to complete it
+          // (misconfiguration). A finite dwell always completes first and is never preempted.
+          reapOccupant(slot, "stale");
+        }
+        continue;
+      }
+
+      // ── kiosk in_progress: external milestone completes; stale reaps a hung occupant. ──
+      if (completionMilestoneSet(v, slot.station)) {
+        slot.occupant = undefined;
+        store.setLocation(v.id, { state: "waiting", since: nowIso() });
+      } else if (ageMs(occ.since) > knobs.staleMs) {
+        reapOccupant(slot, "stale");
       }
     }
+
     if (knobs.autoConfirm) {
       for (const slot of slots.values()) {
         if (slot.occupant?.phase === "pending") confirm(slot.occupant.visitorId);
