@@ -12,7 +12,7 @@ import {
 import { store } from "./store";
 import { config } from "./config";
 import { getTuning } from "./tuning";
-import { getChoreoConfig, streamCue, stubFirstPass, buildChoreoTurnPrompt, type ChoreoTurn } from "./choreo";
+import { getChoreoConfig, isMimicTurn, streamCue, stubFirstPass, buildChoreoTurnPrompt, type ChoreoTurn } from "./choreo";
 import type { Bus } from "./bus";
 
 type Turn = { role: "user" | "assistant"; content: string };
@@ -249,9 +249,13 @@ export function registerDivination(bus: Bus): void {
     session.history.push({ role: "user", content: text });
     bus.broadcast({ kind: "session.transcript", sessionId, role: "visitor", text });
 
-    const reactToOracle = getChoreoConfig().reactToOracle;
-    // Independent mode: kick the cue off in parallel from the utterance alone.
-    if (!reactToOracle) void runChoreo(session, { visitor: text });
+    const cfg = getChoreoConfig();
+    // 1-based index of the oracle reply this turn will produce (drives the mimic cadence).
+    const turnNumber = session.history.filter((t) => t.role === "assistant").length + 1;
+    const mimic = isMimicTurn(cfg, turnNumber);
+    // Cue mode, independent timing: kick the cue off in parallel from the utterance alone.
+    // On a mimic turn the choreographer is fully suppressed — the dancers hear the oracle instead.
+    if (!mimic && !cfg.reactToOracle) void runChoreo(session, { visitor: text });
 
     try {
       const full = await streamReply(session, (chunk) => {
@@ -260,8 +264,14 @@ export function registerDivination(bus: Bus): void {
       session.history.push({ role: "assistant", content: full });
       bus.broadcast({ kind: "oracle.done", sessionId, text: full });
       bus.broadcast(rosterMsg());
-      // Reactive mode: now that the oracle reply exists, react to utterance + reply.
-      if (reactToOracle) void runChoreo(session, { visitor: text, oracle: full });
+      if (mimic) {
+        // Hand the dancers' feed the oracle line + its persona voice to replay (one clip, both devices).
+        if (sessions.has(sessionId))
+          bus.broadcast({ kind: "choreo.mimic", sessionId, text: full, archetype: session.archetype });
+      } else if (cfg.reactToOracle) {
+        // Reactive cue mode: now that the oracle reply exists, react to utterance + reply.
+        void runChoreo(session, { visitor: text, oracle: full });
+      }
     } catch (err) {
       bus.broadcast({ kind: "session.error", sessionId, message: String(err) });
     }

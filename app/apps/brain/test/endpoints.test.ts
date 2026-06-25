@@ -298,6 +298,44 @@ describe("choreo fan-out (both timings)", () => {
     expect(seen.has("choreo.done")).toBe(true);
     await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
   });
+
+  /** Say one line and resolve once the turn settles (oracle.done + the choreo.mimic payload). */
+  function sayAndCollectMimic(visitorId: string): Promise<{ kinds: Set<string>; mimic: any }> {
+    return new Promise((resolve, reject) => {
+      const sock = new WebSocket(`ws://127.0.0.1:${cPort}/ws`);
+      const seen = new Set<string>();
+      let mimic: any = null;
+      let sid = "";
+      const timer = setTimeout(() => { sock.close(); resolve({ kinds: seen, mimic }); }, 4000);
+      sock.on("open", () => sock.send(JSON.stringify({ kind: "session.start", visitorId })));
+      sock.on("message", (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.kind === "session.started" && m.visitorId === visitorId) {
+          sid = m.sessionId;
+          sock.send(JSON.stringify({ kind: "session.say", sessionId: sid, text: "where do I go" }));
+        }
+        if (m.sessionId && m.sessionId === sid) {
+          seen.add(m.kind);
+          if (m.kind === "choreo.mimic") mimic = m;
+        }
+        if (seen.has("oracle.done") && mimic) { clearTimeout(timer); sock.close(); resolve({ kinds: seen, mimic }); }
+      });
+      sock.on("error", (e) => { clearTimeout(timer); reject(e); });
+    });
+  }
+
+  it("manual mimic suppresses cues and emits choreo.mimic with the oracle line + archetype", async () => {
+    await cApp.inject({ method: "POST", url: "/api/choreo/config",
+      payload: { ...DEFAULT_CHOREO_CONFIG, mimicManual: true } });
+    const { kinds, mimic } = await sayAndCollectMimic(await oracleReady(9403));
+    expect(kinds.has("oracle.done")).toBe(true);
+    expect(kinds.has("choreo.mimic")).toBe(true);
+    expect(kinds.has("choreo.delta")).toBe(false); // choreographer suppressed
+    expect(kinds.has("choreo.done")).toBe(false);
+    expect(mimic.archetype).toBe("tree");
+    expect(typeof mimic.text).toBe("string");
+    await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { ...DEFAULT_CHOREO_CONFIG } });
+  });
 });
 
 describe("paper feed", () => {
