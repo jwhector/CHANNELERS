@@ -94,6 +94,9 @@ export type SlotOccupant = {
   flags?: DispatchFlag[];
 };
 
+/** A camera the kiosk bound to a slot can offer (reported by the kiosk; id may be label-less until permission). */
+export type SlotCamera = { id: string; label: string };
+
 /** An addressable station slot, optionally bound to a kiosk screen (spec §3.2). */
 export type Slot = {
   id: string;            // `${station}-${i}`, e.g. "intake-0"
@@ -101,6 +104,10 @@ export type Slot = {
   kioskId?: string;      // present ⇒ a screen claimed this slot
   online: boolean;       // kiosk bound AND its socket connected
   occupant?: SlotOccupant;
+  /** Cameras the bound kiosk reported (bodyscan), so an operator screen can pick one remotely. */
+  cameras?: SlotCamera[];
+  /** The kiosk's currently-selected camera id. */
+  activeCameraId?: string;
 };
 
 /** A visitor who finished the whole ritual (sessionEndAt set). */
@@ -164,4 +171,6 @@ export type WsServerMsg =
   | { kind: "dispatch.state"; state: DispatchState }
   | { kind: "tuning.state"; tuning: OracleTuning }
   /** One-shot operator→kiosk command relay (e.g. /station taps Capture; the bodyscan kiosk acts). */
-  | { kind: "station.cmd"; station: Station; action: "capture"; visitorId: string };
+  | { kind: "station.cmd"; station: Station; action: "capture"; visitorId: string }
+  /** Operator→kiosk: switch the bodyscan kiosk's camera (targeted by kioskId). */
+  | { kind: "station.cmd"; station: Station; action: "set-camera"; kioskId: string; deviceId: string };

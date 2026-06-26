@@ -390,4 +390,35 @@ describe("bodyscan capture relay", () => {
     expect(await got).toEqual({ kind: "station.cmd", station: "bodyscan", action: "capture", visitorId: "v42" });
     ws.close();
   });
+
+  it("400s a camera report with no kioskId", async () => {
+    const res = await bApp.inject({ method: "POST", url: "/api/bodyscan/cameras", payload: { cameras: [] } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("accepts a camera report", async () => {
+    const res = await bApp.inject({
+      method: "POST", url: "/api/bodyscan/cameras",
+      payload: { kioskId: "kioskX", cameras: [{ id: "cam-a", label: "Front" }], activeId: "cam-a" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+  });
+
+  it("broadcasts a station.cmd set-camera to connected screens", async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${bPort}/ws`);
+    const got = new Promise<{ kind: string; station: string; action: string; kioskId: string; deviceId: string }>((resolve, reject) => {
+      const timer = setTimeout(() => { ws.close(); reject(new Error("timeout waiting for set-camera")); }, 3000);
+      ws.on("message", (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.kind === "station.cmd" && m.action === "set-camera") { clearTimeout(timer); resolve(m); }
+      });
+      ws.on("error", reject);
+    });
+    await new Promise<void>((r) => ws.on("open", () => r()));
+    const res = await bApp.inject({ method: "POST", url: "/api/bodyscan/camera", payload: { kioskId: "kioskX", deviceId: "cam-b" } });
+    expect(res.statusCode).toBe(200);
+    expect(await got).toEqual({ kind: "station.cmd", station: "bodyscan", action: "set-camera", kioskId: "kioskX", deviceId: "cam-b" });
+    ws.close();
+  });
 });

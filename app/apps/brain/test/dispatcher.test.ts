@@ -81,6 +81,14 @@ describe("kiosk binding", () => {
     expect(d.snapshot().slots.find((x) => x.id === again)!.online).toBe(true);
   });
 
+  it("attaches reported cameras (and the active id) to the kiosk's slot", () => {
+    f.hello("bodyscan", "kioskCam", "connCam");
+    d.setCameras("kioskCam", [{ id: "cam-a", label: "Front" }, { id: "cam-b", label: "Overhead" }], "cam-a");
+    const slot = d.snapshot().slots.find((x) => x.kioskId === "kioskCam");
+    expect(slot?.cameras).toEqual([{ id: "cam-a", label: "Front" }, { id: "cam-b", label: "Overhead" }]);
+    expect(slot?.activeCameraId).toBe("cam-a");
+  });
+
   it("flags a surplus screen when no slot is free (altar has 1)", () => {
     f.hello("altar", "kioskD", "connD");
     f.hello("altar", "kioskE", "connE"); // no free altar slot

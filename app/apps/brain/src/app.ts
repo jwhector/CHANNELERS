@@ -229,6 +229,28 @@ export async function buildApp(
     return { ok: true };
   });
 
+  // The bodyscan kiosk reports its available cameras so an operator screen can pick one remotely.
+  const CamerasBody = z.object({
+    kioskId: z.string(),
+    cameras: z.array(z.object({ id: z.string(), label: z.string() })),
+    activeId: z.string().optional(),
+  });
+  app.post("/api/bodyscan/cameras", async (req, reply) => {
+    const parsed = CamerasBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    dispatcher.setCameras(parsed.data.kioskId, parsed.data.cameras, parsed.data.activeId);
+    return { ok: true };
+  });
+
+  // Operator picks a camera on /station → relay a set-camera command to the targeted kiosk.
+  const SetCameraBody = z.object({ kioskId: z.string(), deviceId: z.string() });
+  app.post("/api/bodyscan/camera", async (req, reply) => {
+    const parsed = SetCameraBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    bus.broadcast({ kind: "station.cmd", station: "bodyscan", action: "set-camera", kioskId: parsed.data.kioskId, deviceId: parsed.data.deviceId });
+    return { ok: true };
+  });
+
   // legacy scan + manual seeds regeneration (kept)
   app.post("/api/visitors/:id/scan", async (req, reply) => {
     const { id } = req.params as { id: string };

@@ -1,7 +1,7 @@
 import { config } from "./config";
 import { store, type VisitorRecord } from "./store";
 import type {
-  Station, DispatchState, Slot, SlotOccupant, DispatchDone, DispatchQueueEntry, DispatchFlag,
+  Station, DispatchState, Slot, SlotOccupant, SlotCamera, DispatchDone, DispatchQueueEntry, DispatchFlag,
   WsServerMsg, WsClientMsg,
 } from "@channelers/shared";
 
@@ -35,6 +35,7 @@ export interface Dispatcher {
   remove(visitorId: string): boolean;
   checkin(num: number, station: Station): { record: VisitorRecord };
   clearFlags(visitorId: string): void;
+  setCameras(kioskId: string, cameras: SlotCamera[], activeId?: string): void;
   snapshot(): DispatchState;
   kick(): void;
   stop(): void;
@@ -59,6 +60,7 @@ export function createDispatcher(
   const flags = new Map<string, DispatchFlag[]>();
   const noShowHoldUntil = new Map<string, number>(); // visitorId → epoch ms a no-show is held until
   const surplus = new Map<string, { station: Station; kioskId: string }>(); // connId → {station, kioskId} (connected screen with no free slot)
+  const cameras = new Map<string, { cameras: SlotCamera[]; activeId?: string }>(); // kioskId → reported cameras (bodyscan)
   const offlineTimers = new Map<string, ReturnType<typeof setTimeout>>(); // slotId → grace timer
   let altarOpen = false; // operator gate; altar stays closed until /dispatch opens it
 
@@ -387,7 +389,11 @@ export function createDispatcher(
     const occupant = s.occupant
       ? { ...s.occupant, flags: flags.get(s.occupant.visitorId) }
       : undefined;
-    return { id: s.id, station: s.station, kioskId: s.kioskId, online: isOnline(s), occupant };
+    const cam = s.kioskId ? cameras.get(s.kioskId) : undefined;
+    return {
+      id: s.id, station: s.station, kioskId: s.kioskId, online: isOnline(s), occupant,
+      cameras: cam?.cameras, activeCameraId: cam?.activeId,
+    };
   }
   function queueEntries(): DispatchQueueEntry[] {
     const occupied = occupiedVisitorIds();
@@ -460,6 +466,12 @@ export function createDispatcher(
     bus.broadcast({ kind: "dispatch.state", state: snapshot() });
   }
 
+  /** A bodyscan kiosk reports its available cameras + active selection, keyed by kioskId. */
+  function setCameras(kioskId: string, list: SlotCamera[], activeId?: string): void {
+    cameras.set(kioskId, { cameras: list, activeId });
+    broadcastState();
+  }
+
   // ── lifecycle ──
   bus.onConnect((reply) => reply({ kind: "dispatch.state", state: snapshot() }));
   bus.onCommand((cmd, _reply, connId) => handleCommand(cmd, connId));
@@ -473,5 +485,5 @@ export function createDispatcher(
     offlineTimers.clear();
   }
 
-  return { confirm, arrive, setAltarOpen, assign, repool, markComplete, remove, checkin, clearFlags, snapshot, kick, stop };
+  return { confirm, arrive, setAltarOpen, assign, repool, markComplete, remove, checkin, clearFlags, setCameras, snapshot, kick, stop };
 }
