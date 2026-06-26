@@ -58,13 +58,14 @@ function StationContainer({ station }: { station: StationName }) {
       onArrive={(id) => void run(id, () => api.arrive(id))}
       onRelease={(id) => void run(id, () => api.dispatch.repool(id))}
       onComplete={(id) => void run(id, () => api.dispatch.complete(id))}
+      onCapture={station === "bodyscan" ? (id) => void run(id, () => api.captureBodyscan(id)) : undefined}
     />
   );
 }
 
 /** Presentational — admit list + in-progress status. */
 export function StationOpsView({
-  station, connected, called, inProgress, dwellMs, noShowMs, now, busyId, onArrive, onRelease, onComplete,
+  station, connected, called, inProgress, dwellMs, noShowMs, now, busyId, onArrive, onRelease, onComplete, onCapture,
 }: {
   station: StationName;
   connected: boolean;
@@ -77,6 +78,8 @@ export function StationOpsView({
   onArrive: (visitorId: string) => void;
   onRelease: (visitorId: string) => void;
   onComplete?: (visitorId: string) => void;
+  /** Provided only for bodyscan: relay a manual pose-capture to the kiosk. */
+  onCapture?: (visitorId: string) => void;
 }) {
   const nowMs = now ?? Date.now();
   return (
@@ -119,6 +122,12 @@ export function StationOpsView({
             <div key={s.id} className="ops-row">
               <span className="ops-num">#{o.number}</span>
               <span className="dim">{dwellMs ? "dwell running" : "in progress"}</span>
+              {onCapture && (
+                <button className="submit" disabled={busyId === o.visitorId}
+                  onClick={() => onCapture(o.visitorId)}>
+                  Capture pose
+                </button>
+              )}
               {dwellMs !== undefined && (
                 <>
                   <button className="submit" disabled={busyId === o.visitorId}

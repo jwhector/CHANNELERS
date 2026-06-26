@@ -63,6 +63,34 @@ test("a non-timed in-progress occupant shows no Done button", () => {
   expect(screen.queryByRole("button", { name: /done/i })).toBeNull();
 });
 
+test("bodyscan in-progress row shows Capture pose and fires onCapture", () => {
+  const onCapture = vi.fn();
+  const slot: Slot = {
+    id: "bodyscan-0", station: "bodyscan", online: true,
+    occupant: { visitorId: "v9", number: 9, phase: "in_progress", since: "" },
+  };
+  render(
+    <StationOpsView
+      station="bodyscan" connected called={[]} inProgress={[slot]}
+      busyId={null} onArrive={() => {}} onRelease={() => {}} onCapture={onCapture} />,
+  );
+  screen.getByRole("button", { name: /capture pose/i }).click();
+  expect(onCapture).toHaveBeenCalledWith("v9");
+});
+
+test("no Capture button when onCapture is not provided", () => {
+  const slot: Slot = {
+    id: "bodyscan-0", station: "bodyscan", online: true,
+    occupant: { visitorId: "v9", number: 9, phase: "in_progress", since: "" },
+  };
+  render(
+    <StationOpsView
+      station="bodyscan" connected called={[]} inProgress={[slot]}
+      busyId={null} onArrive={() => {}} onRelease={() => {}} />,
+  );
+  expect(screen.queryByRole("button", { name: /capture pose/i })).toBeNull();
+});
+
 test("a called row shows the no-show countdown when noShowMs is provided", () => {
   const since = "2026-06-21T00:00:00.000Z";
   const slot: Slot = {
