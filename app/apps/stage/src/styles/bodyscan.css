@@ -1,0 +1,23 @@
+/* Front-facing bodyscan display: full-bleed, controls-free (a TV in front of the visitor). */
+
+/* Mirror like a mirror so movement reads naturally; video + skeleton track together
+   (same trick as .posestage). The framehint un-mirrors its own text. */
+.bodyscan-cam { position: fixed; inset: 0; background: #000; transform: scaleX(-1); }
+.bodyscan-cam video,
+.bodyscan-cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* One-time camera setup overlay (/bodyscan?setup=1) — un-mirror so the control is usable. */
+.bodyscan-setup { position: fixed; right: 1rem; bottom: 1rem; z-index: 10; transform: scaleX(-1); }
+
+/* Standby / called number + post-capture confirmation — centered full-bleed. */
+.bodyscan-standby,
+.bodyscan-saved {
+  position: fixed; inset: 0;
+  display: grid; place-content: center; justify-items: center;
+  gap: 1.25rem; text-align: center; background: var(--bg);
+}
+.bodyscan-eyebrow {
+  letter-spacing: 0.4em; opacity: 0.7; text-transform: uppercase;
+  font-family: ui-monospace, monospace;
+}
+.bodyscan-led { position: fixed; top: 1rem; right: 1rem; }
