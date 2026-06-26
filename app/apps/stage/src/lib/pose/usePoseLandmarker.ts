@@ -68,7 +68,12 @@ export function usePoseLandmarker(
     if (!video) throw new Error("video element not mounted");
     (video.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop());
     video.srcObject = stream;
-    await video.play();
+    // play() rejects with AbortError when a newer load supersedes it (e.g. the
+    // device-id resolving from undefined → a real camera re-acquires mid-play).
+    // That's benign — the newer load plays — so only genuine failures propagate.
+    await video.play().catch((err) => {
+      if ((err as Error).name !== "AbortError") throw err;
+    });
   }, [deviceId]);
 
   const start = useCallback(async () => {
