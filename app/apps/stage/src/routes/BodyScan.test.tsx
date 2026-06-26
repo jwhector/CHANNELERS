@@ -9,6 +9,8 @@ const presence = { current: { connected: true, slot: undefined as Slot | undefin
 let onFrame: ((lms: Landmark[] | null, tMs: number) => void) | null = null;
 let onMessage: ((m: WsServerMsg) => void) | null = null;
 
+const dev = vi.hoisted(() => ({ setDeviceId: vi.fn(), refresh: vi.fn() }));
+
 vi.mock("../lib/useStationPresence", () => ({ useStationPresence: () => presence.current }));
 vi.mock("../lib/useBrainSocket", () => ({
   useBrainSocket: (cb: (m: WsServerMsg) => void) => { onMessage = cb; return { connected: true, send: () => {} }; },
@@ -20,9 +22,14 @@ vi.mock("../lib/pose/usePoseLandmarker", () => ({
   },
 }));
 vi.mock("../lib/devices", () => ({
-  useDevices: () => ({ devices: [], deviceId: undefined, setDeviceId: () => {}, needsPermission: false, enableLabels: () => {} }),
+  useDevices: () => ({
+    devices: [{ deviceId: "cam-a", label: "Front" }, { deviceId: "cam-b", label: "Overhead" }],
+    deviceId: "cam-a", setDeviceId: dev.setDeviceId, needsPermission: false, enableLabels: vi.fn(), refresh: dev.refresh,
+  }),
 }));
-vi.mock("../lib/api", () => ({ api: { enrollPose: vi.fn().mockResolvedValue({}) } }));
+vi.mock("../lib/api", () => ({
+  api: { enrollPose: vi.fn().mockResolvedValue({}), reportBodyscanCameras: vi.fn().mockResolvedValue({}) },
+}));
 
 import { BodyScan } from "./BodyScan";
 import { api } from "../lib/api";
@@ -102,4 +109,30 @@ test("a second capture tap toggles off, so a held pose no longer captures", () =
   act(() => onFrame!(lms, 100));
   act(() => onFrame!(lms, 4000));
   expect(api.enrollPose).not.toHaveBeenCalled();
+});
+
+const boundSlot = (kioskId: string, occupant?: SlotOccupant): Slot => ({ ...slot(occupant), kioskId });
+
+test("reports the kiosk's cameras to the brain (even in standby)", () => {
+  presence.current = { connected: true, slot: boundSlot("kioskCam", undefined) };
+  render(<BodyScan />);
+  expect(api.reportBodyscanCameras).toHaveBeenCalledWith(
+    "kioskCam",
+    [{ id: "cam-a", label: "Front" }, { id: "cam-b", label: "Overhead" }],
+    "cam-a",
+  );
+});
+
+test("a set-camera command for this kiosk switches the camera", () => {
+  presence.current = { connected: true, slot: boundSlot("kioskCam", undefined) };
+  render(<BodyScan />);
+  act(() => onMessage!({ kind: "station.cmd", station: "bodyscan", action: "set-camera", kioskId: "kioskCam", deviceId: "cam-b" }));
+  expect(dev.setDeviceId).toHaveBeenCalledWith("cam-b");
+});
+
+test("ignores a set-camera command for a different kiosk", () => {
+  presence.current = { connected: true, slot: boundSlot("kioskCam", undefined) };
+  render(<BodyScan />);
+  act(() => onMessage!({ kind: "station.cmd", station: "bodyscan", action: "set-camera", kioskId: "other-kiosk", deviceId: "cam-b" }));
+  expect(dev.setDeviceId).not.toHaveBeenCalled();
 });

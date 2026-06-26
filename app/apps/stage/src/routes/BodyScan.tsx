@@ -8,24 +8,45 @@ import { drawSkeleton } from "../components/poseUI";
 import { useStationPresence } from "../lib/useStationPresence";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { useDevices } from "../lib/devices";
-import { DevicePicker } from "../components/DevicePicker";
 import { SegmentNumber } from "../components/SegmentNumber";
 import "../styles/crt.css"; // .seg + DSEG7 font
 import "../styles/bodyscan.css";
 
+type ArmRef = { current: (() => void) | null };
+
 /**
  * The /bodyscan FRONT display — a controls-free TV in front of the visitor.
- * It renders purely from dispatch.state (no CalledGate, no visitor fetch):
+ * Renders purely from dispatch.state (no CalledGate, no visitor fetch):
  *   - no/ pending occupant → dim standby readout
  *   - called occupant      → the retro number, "proceed to body scan"
- *   - in_progress occupant → full-bleed camera + skeleton; performer captures from /station
- * After a pose is enrolled the dispatcher frees the slot, so standby returns on its own;
- * a brief "✓ saved" flash bridges that gap so the visitor still sees confirmation.
+ *   - in_progress occupant → full-bleed camera + skeleton; the operator arms capture from /station
+ * Camera selection lives here (always mounted): the kiosk reports its cameras to the brain so the
+ * performer can pick one remotely on /station, and a relayed set-camera command switches it.
  */
 export function BodyScan() {
   const { connected, slot } = useStationPresence("bodyscan");
   const occ = slot?.occupant;
+  const kioskId = slot?.kioskId;
+  const cam = useDevices("videoinput", "cam.bodyscan", "cam");
   const [savedNumber, setSavedNumber] = useState<number | null>(null);
+  const armRef = useRef<(() => void) | null>(null);
+
+  // Publish this kiosk's cameras so /station can pick one remotely (works in standby too).
+  useEffect(() => {
+    if (!kioskId || cam.devices.length === 0) return;
+    void api.reportBodyscanCameras(
+      kioskId,
+      cam.devices.map((d) => ({ id: d.deviceId, label: d.label })),
+      cam.deviceId || undefined,
+    );
+  }, [kioskId, cam.devices, cam.deviceId]);
+
+  // Relayed operator commands for this kiosk: set-camera (switch) + capture (arm the in-progress hold).
+  useBrainSocket((m: WsServerMsg) => {
+    if (m.kind !== "station.cmd" || m.station !== "bodyscan") return;
+    if (m.action === "set-camera" && m.kioskId === kioskId) cam.setDeviceId(m.deviceId);
+    else if (m.action === "capture" && occ?.phase === "in_progress" && m.visitorId === occ.visitorId) armRef.current?.();
+  });
 
   useEffect(() => {
     if (savedNumber == null) return;
@@ -35,7 +56,16 @@ export function BodyScan() {
 
   if (savedNumber != null) return <BodyScanSaved number={savedNumber} />;
   if (occ?.phase === "in_progress")
-    return <BodyScanCamera visitorId={occ.visitorId} number={occ.number} onSaved={setSavedNumber} />;
+    return (
+      <BodyScanCamera
+        visitorId={occ.visitorId}
+        number={occ.number}
+        deviceId={cam.deviceId}
+        armRef={armRef}
+        onCameraReady={cam.refresh}
+        onSaved={setSavedNumber}
+      />
+    );
   return <BodyScanStandby occ={occ} connected={connected} />;
 }
 
@@ -66,23 +96,28 @@ const STILLNESS = 0.05; // max per-frame motion (radians) that still counts as "
 function BodyScanCamera({
   visitorId,
   number,
+  deviceId,
+  armRef,
+  onCameraReady,
   onSaved,
 }: {
   visitorId: string;
   number: number;
+  deviceId: string;
+  armRef: ArmRef;
+  onCameraReady?: () => void;
   onSaved: (n: number) => void;
 }) {
-  const cam = useDevices("videoinput", "cam.bodyscan", "cam");
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const prevVecRef = useRef<PoseVector | null>(null);
   const holdStartRef = useRef<number | null>(null);
   const framedRef = useRef(false);
   const armedRef = useRef(false);
   const savingRef = useRef(false);
+  const readyRef = useRef(false);
   const [framed, setFramed] = useState(false);
   const [armed, setArmed] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
-  const setup = new URLSearchParams(location.search).get("setup") != null;
 
   const updateFramed = (coverage: number) => {
     const next = isBodyFramed(coverage, framedRef.current);
@@ -91,13 +126,14 @@ function BodyScanCamera({
   };
 
   // Toggle the armed (hold-watching) state and reset any hold in progress.
-  const setArmedBoth = (v: boolean) => {
+  const toggleArmed = useCallback(() => {
+    const v = !armedRef.current;
     armedRef.current = v;
     setArmed(v);
     holdStartRef.current = null;
     setHoldProgress(0);
     if (v) savingRef.current = false;
-  };
+  }, []);
 
   const persist = useCallback(async (vec: PoseVector) => {
     if (savingRef.current) return;
@@ -111,9 +147,9 @@ function BodyScanCamera({
     }
   }, [visitorId, number, onSaved]);
 
-  // The operator arms capture from /station; only then does the kiosk run the
-  // stillness-hold — which advances ONLY while the body is framed AND held still,
-  // and saves at the top. So a capture is impossible without a valid, in-frame pose.
+  // The operator arms capture from /station (relayed via the parent's armRef); only then does the
+  // kiosk run the stillness-hold — which advances ONLY while the body is framed AND held still, and
+  // saves at the top. So a capture is impossible without a valid, in-frame pose.
   const onFrame = useCallback((lms: Landmark[] | null, tMs: number) => {
     const canvas = canvasRef.current;
     const video = canvas?.previousElementSibling as HTMLVideoElement | null;
@@ -140,17 +176,20 @@ function BodyScanCamera({
     if (prog >= 1) { holdStartRef.current = null; void persist(vec); }
   }, [persist]);
 
-  const { videoRef, status, error, start } = usePoseLandmarker(onFrame, cam.deviceId);
+  const { videoRef, status, error, start } = usePoseLandmarker(onFrame, deviceId);
 
   // No Start button on a controls-free display — auto-start once the model is idle.
   useEffect(() => { if (status === "idle") void start(); }, [status, start]);
 
-  // The operator's Capture tap (relayed by the brain) toggles arming for this kiosk's occupant.
-  useBrainSocket((m: WsServerMsg) => {
-    if (m.kind === "station.cmd" && m.station === "bodyscan" && m.action === "capture" && m.visitorId === visitorId) {
-      setArmedBoth(!armedRef.current);
-    }
-  });
+  // Expose the arm-toggle to the parent's relay; once the camera is live, refresh the parent's
+  // device list so its now-permitted camera labels reach the operator's picker.
+  useEffect(() => {
+    armRef.current = toggleArmed;
+    return () => { armRef.current = null; };
+  }, [armRef, toggleArmed]);
+  useEffect(() => {
+    if (status === "running" && !readyRef.current) { readyRef.current = true; onCameraReady?.(); }
+  }, [status, onCameraReady]);
 
   const showFrameHint = status === "running" && !framed;
 
@@ -168,19 +207,6 @@ function BodyScanCamera({
         </div>
       )}
       {error && <div className="framehint">camera unavailable — {error}</div>}
-      {setup && (
-        <div className="bodyscan-setup">
-          <DevicePicker
-            kind="videoinput"
-            label="camera"
-            devices={cam.devices}
-            value={cam.deviceId}
-            onChange={cam.setDeviceId}
-            needsPermission={cam.needsPermission}
-            onEnableLabels={cam.enableLabels}
-          />
-        </div>
-      )}
     </div>
   );
 }
