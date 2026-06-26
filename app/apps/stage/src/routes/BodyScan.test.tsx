@@ -1,22 +1,44 @@
-import { render, screen } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
-import type { Slot, SlotOccupant } from "@channelers/shared";
+import { render, screen, act } from "@testing-library/react";
+import { beforeEach, expect, test, vi } from "vitest";
+import type { Slot, SlotOccupant, WsServerMsg } from "@channelers/shared";
+import type { Landmark } from "../lib/pose/landmarks";
 
-// Mock the live hooks so the camera path is inert and view-selection is what we assert.
+// Mock the live hooks so the camera path is inert; capture the callbacks the
+// component registers so tests can drive frames + relayed commands directly.
 const presence = { current: { connected: true, slot: undefined as Slot | undefined } };
+let onFrame: ((lms: Landmark[] | null, tMs: number) => void) | null = null;
+let onMessage: ((m: WsServerMsg) => void) | null = null;
+
 vi.mock("../lib/useStationPresence", () => ({ useStationPresence: () => presence.current }));
-vi.mock("../lib/useBrainSocket", () => ({ useBrainSocket: () => ({ connected: true, send: () => {} }) }));
+vi.mock("../lib/useBrainSocket", () => ({
+  useBrainSocket: (cb: (m: WsServerMsg) => void) => { onMessage = cb; return { connected: true, send: () => {} }; },
+}));
 vi.mock("../lib/pose/usePoseLandmarker", () => ({
-  usePoseLandmarker: () => ({ videoRef: { current: null }, status: "running", error: null, start: vi.fn() }),
+  usePoseLandmarker: (cb: (lms: Landmark[] | null, tMs: number) => void) => {
+    onFrame = cb;
+    return { videoRef: { current: null }, status: "running", error: null, start: vi.fn() };
+  },
 }));
 vi.mock("../lib/devices", () => ({
   useDevices: () => ({ devices: [], deviceId: undefined, setDeviceId: () => {}, needsPermission: false, enableLabels: () => {} }),
 }));
+vi.mock("../lib/api", () => ({ api: { enrollPose: vi.fn().mockResolvedValue({}) } }));
 
 import { BodyScan } from "./BodyScan";
+import { api } from "../lib/api";
 
 const slot = (occupant?: SlotOccupant): Slot => ({ id: "bodyscan-0", station: "bodyscan", online: true, occupant });
 const occ = (number: number, phase: SlotOccupant["phase"]): SlotOccupant => ({ visitorId: `v${number}`, number, phase, since: "" });
+
+// 33 BlazePose landmarks at distinct positions; coverage == the given visibility
+// (every joint weight is the min visibility of its triple), so vis 1 ⇒ framed, low ⇒ not.
+const landmarks = (visibility: number): Landmark[] =>
+  Array.from({ length: 33 }, (_, i) => ({ x: 0.1 + (i % 7) * 0.1, y: 0.1 + Math.floor(i / 7) * 0.08, z: 0, visibility }));
+
+const captureCmd = (visitorId: string): WsServerMsg =>
+  ({ kind: "station.cmd", station: "bodyscan", action: "capture", visitorId });
+
+beforeEach(() => { vi.clearAllMocks(); onFrame = null; onMessage = null; });
 
 test("dim standby when no occupant", () => {
   presence.current = { connected: true, slot: slot(undefined) };
@@ -36,4 +58,48 @@ test("renders the camera surface once in progress, with no controls", () => {
   const { container } = render(<BodyScan />);
   expect(container.querySelector(".bodyscan-cam")).not.toBeNull();
   expect(screen.queryByRole("button", { name: /record|start camera|capture/i })).toBeNull();
+});
+
+test("not armed: a still, framed pose does NOT capture (gated behind the operator)", () => {
+  presence.current = { connected: true, slot: slot(occ(7, "in_progress")) };
+  render(<BodyScan />);
+  const lms = landmarks(1);
+  act(() => onFrame!(lms, 0));
+  act(() => onFrame!(lms, 4000));
+  expect(api.enrollPose).not.toHaveBeenCalled();
+});
+
+test("armed + framed + held still past the hold window persists the pose", async () => {
+  presence.current = { connected: true, slot: slot(occ(7, "in_progress")) };
+  render(<BodyScan />);
+  const lms = landmarks(1);
+  act(() => onFrame!(lms, 0)); // establish framing + previous vector
+  act(() => onMessage!(captureCmd("v7"))); // operator arms
+  act(() => onFrame!(lms, 100)); // hold starts
+  await act(async () => { onFrame!(lms, 3700); }); // > 3.5s still + framed → save
+  expect(api.enrollPose).toHaveBeenCalledTimes(1);
+  expect(api.enrollPose).toHaveBeenCalledWith("v7", expect.objectContaining({ angles: expect.any(Array), weights: expect.any(Array) }));
+});
+
+test("armed but out of frame: the hold never completes", () => {
+  presence.current = { connected: true, slot: slot(occ(7, "in_progress")) };
+  render(<BodyScan />);
+  const lms = landmarks(0.2); // coverage 0.2 < FRAME_ENTER (0.65)
+  act(() => onFrame!(lms, 0));
+  act(() => onMessage!(captureCmd("v7")));
+  act(() => onFrame!(lms, 100));
+  act(() => onFrame!(lms, 4000));
+  expect(api.enrollPose).not.toHaveBeenCalled();
+});
+
+test("a second capture tap toggles off, so a held pose no longer captures", () => {
+  presence.current = { connected: true, slot: slot(occ(7, "in_progress")) };
+  render(<BodyScan />);
+  const lms = landmarks(1);
+  act(() => onFrame!(lms, 0));
+  act(() => onMessage!(captureCmd("v7"))); // arm
+  act(() => onMessage!(captureCmd("v7"))); // toggle off
+  act(() => onFrame!(lms, 100));
+  act(() => onFrame!(lms, 4000));
+  expect(api.enrollPose).not.toHaveBeenCalled();
 });
