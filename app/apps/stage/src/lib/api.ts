@@ -31,6 +31,8 @@ export const api = {
   feedPaper: (image: string) => post<{ text: string; fedAt: string }>("/api/paper/feed", { image }),
   /** Confirm-at-station arrival (spec §5): called → in_progress for the slot's occupant. */
   arrive: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/arrive", { visitorId }),
+  /** Bodyscan kiosk capture (cross-device): brain relays a station.cmd to the kiosk holding the camera. */
+  captureBodyscan: (visitorId: string) => post<{ ok: boolean }>("/api/bodyscan/capture", { visitorId }),
   checkin: (number: number, station: Station) =>
     post<{ record: VisitorProfile }>("/api/checkin", { number, station }),
   dispatch: {
