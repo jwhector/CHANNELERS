@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { DispatchState, Slot, WsServerMsg } from "@channelers/shared";
+import { STATION_LABEL } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { useNow } from "../lib/useNow";
@@ -139,7 +140,7 @@ export function Dispatch() {
                   <div className={`slot-box ${s.online ? "on" : "off"} ${s.occupant ? s.occupant.phase : ""}`}>
                     <div className="slot-head">
                       <span className={s.online ? "led on" : "led"} />
-                      <code>{s.id}</code>
+                      <code title={s.id}>{STATION_LABEL[s.station]}</code>
                     </div>
                     <div className="slot-body">
                       {s.occupant && s.occupant.phase !== "pending" ? (

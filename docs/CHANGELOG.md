@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-26 — Station labels: one shared map for board + dispatch
+
+- **What:** Lifted the human-facing station name map out of `Board.tsx` into `packages/shared` as `STATION_LABEL` (`Record<Station, string>`), and pointed the operator dispatch screen at it — the `/dispatch` slot heads now show the wayfinding label (e.g. "STATION C - BODY SCAN") instead of the raw slot id, with the id kept on `title` hover for debugging. Board imports the shared map unchanged; the labels render identically.
+- **Why:** Station display names were defined only in `Board.tsx` while every other screen showed the raw `Station` enum id, so relabeling meant hunting scattered spots. Centralizing the *labels* (not the enum id) makes "what visitors/operators read" a single-line edit, and keeps the public lobby board and the operator board speaking the same vocabulary. The internal `Station` ids are untouched — the wide-blast-radius identifiers (OSC addresses, persisted data, routes) stay as-is.
+- **Files/areas:** `packages/shared/src/schemas.ts` (new `STATION_LABEL` export, next to the `Station` enum); `apps/stage/src/routes/Board.tsx` (import shared map, drop local copy); `apps/stage/src/routes/Dispatch.tsx` (slot head uses `STATION_LABEL[s.station]`). Branch `performer-confirmed-arrivals`.
+- **Verification:** `pnpm -r typecheck` 0 errors (the `Record<Station, string>` type keeps the map exhaustive if the enum changes); stage 80/81 (the 1 fail is the pre-existing `CrtShell` WIP toggle test, untouched). The compact eligible-station chips + surplus line in `/dispatch` still show short raw ids by design (full labels would blow out the dense pool list).
+- **Docs touched:** this entry.
+
 ## 2026-06-25 — Dispatch priority queue + flow controls (bodyscan-first · altar gate · early-complete)
 
 - **What:** Made the dispatcher protect the scarce single **bodyscan** gate and gave the operator deferred-altar + flow-health controls. Approach A from the spec; **altar-ready ≡ `intakeAt && poseAt`**; the room model is **batch-altar** (the altar opens as a deferred event, so the goal is "everyone altar-ready ASAP," not feeding a continuous altar drain).

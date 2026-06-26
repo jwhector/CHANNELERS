@@ -45,6 +45,17 @@ export type PoseVector = z.infer<typeof PoseVector>;
 export const Station = z.enum(["intake", "bodyscan", "altar", "paper", "waitingroom"]);
 export type Station = z.infer<typeof Station>;
 
+/** Human-facing station names — the public wayfinding labels shared by the lobby board (`/board`)
+ *  and the operator dispatch screen (`/dispatch`). The `Station` enum value is the internal id;
+ *  this is the single place to edit what visitors and operators read. */
+export const STATION_LABEL: Record<Station, string> = {
+  intake: "STATION D - INTAKE",
+  bodyscan: "STATION C - BODY SCAN",
+  altar: "ALTAR",
+  paper: "STATION B - TYPEWRITER",
+  waitingroom: "STATION A - WAITING ROOM",
+};
+
 /** Transient dispatch location — a visitor is in exactly one place at a time (spec §3.2).
  *  Tier 1 only ever uses "waiting"/"in_progress"; "called" is Tier 3 (the dispatcher). */
 export const VisitorLocation = z.object({
