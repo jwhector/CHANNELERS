@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { StationOpsView } from "./Station";
 import type { Slot, DispatchFlag } from "@channelers/shared";
@@ -89,6 +89,24 @@ test("no Capture button when onCapture is not provided", () => {
       busyId={null} onArrive={() => {}} onRelease={() => {}} />,
   );
   expect(screen.queryByRole("button", { name: /capture pose/i })).toBeNull();
+});
+
+test("bodyscan camera picker lists reported cameras and fires onSetCamera", () => {
+  const onSetCamera = vi.fn();
+  const camSlot: Slot = {
+    id: "bodyscan-0", station: "bodyscan", online: true, kioskId: "kioskCam",
+    cameras: [{ id: "cam-a", label: "Front" }, { id: "cam-b", label: "Overhead" }],
+    activeCameraId: "cam-a",
+  };
+  render(
+    <StationOpsView
+      station="bodyscan" connected called={[]} inProgress={[]} cameraSlots={[camSlot]}
+      busyId={null} onArrive={() => {}} onRelease={() => {}} onSetCamera={onSetCamera} />,
+  );
+  expect(screen.getByRole("option", { name: "Front" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "Overhead" })).toBeInTheDocument();
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "cam-b" } });
+  expect(onSetCamera).toHaveBeenCalledWith("kioskCam", "cam-b");
 });
 
 test("a called row shows the no-show countdown when noShowMs is provided", () => {

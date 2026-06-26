@@ -59,13 +59,15 @@ function StationContainer({ station }: { station: StationName }) {
       onRelease={(id) => void run(id, () => api.dispatch.repool(id))}
       onComplete={(id) => void run(id, () => api.dispatch.complete(id))}
       onCapture={station === "bodyscan" ? (id) => void run(id, () => api.captureBodyscan(id)) : undefined}
+      cameraSlots={station === "bodyscan" ? slots.filter((s) => s.online && s.cameras && s.cameras.length > 0) : undefined}
+      onSetCamera={station === "bodyscan" ? (kioskId, deviceId) => void api.setBodyscanCamera(kioskId, deviceId) : undefined}
     />
   );
 }
 
 /** Presentational — admit list + in-progress status. */
 export function StationOpsView({
-  station, connected, called, inProgress, dwellMs, noShowMs, now, busyId, onArrive, onRelease, onComplete, onCapture,
+  station, connected, called, inProgress, dwellMs, noShowMs, now, busyId, onArrive, onRelease, onComplete, onCapture, cameraSlots, onSetCamera,
 }: {
   station: StationName;
   connected: boolean;
@@ -80,6 +82,10 @@ export function StationOpsView({
   onComplete?: (visitorId: string) => void;
   /** Provided only for bodyscan: relay a manual pose-capture to the kiosk. */
   onCapture?: (visitorId: string) => void;
+  /** Online bodyscan slots that reported cameras, for the remote camera picker. */
+  cameraSlots?: Slot[];
+  /** Provided only for bodyscan: switch a kiosk's camera remotely. */
+  onSetCamera?: (kioskId: string, deviceId: string) => void;
 }) {
   const nowMs = now ?? Date.now();
   return (
@@ -144,6 +150,25 @@ export function StationOpsView({
           );
         })}
       </section>
+
+      {onSetCamera && cameraSlots && cameraSlots.length > 0 && (
+        <section className="ops-group">
+          <h2>Camera</h2>
+          {cameraSlots.map((s) => (
+            <div key={s.id} className="ops-row">
+              <span className="dim">{s.id}</span>
+              <select
+                value={s.activeCameraId ?? ""}
+                onChange={(e) => s.kioskId && onSetCamera(s.kioskId, e.target.value)}
+              >
+                {s.cameras?.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label || `Camera ${c.id.slice(0, 6)}`}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </section>
+      )}
     </main>
   );
 }
