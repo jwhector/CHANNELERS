@@ -356,3 +356,38 @@ describe("paper feed", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe("bodyscan capture relay", () => {
+  // Own listening app so a real socket can observe the broadcast (see divination/choreo blocks).
+  let bApp: FastifyInstance;
+  let bPort: number;
+  beforeAll(async () => {
+    bApp = await buildApp();
+    await bApp.listen({ host: "127.0.0.1", port: 0 });
+    bPort = (bApp.server.address() as { port: number }).port;
+  });
+  afterAll(async () => { await bApp.close(); });
+
+  it("400s a capture with no visitorId", async () => {
+    const res = await bApp.inject({ method: "POST", url: "/api/bodyscan/capture", payload: {} });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("broadcasts a station.cmd capture to connected screens", async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${bPort}/ws`);
+    const got = new Promise<{ kind: string; station: string; action: string; visitorId: string }>((resolve, reject) => {
+      const timer = setTimeout(() => { ws.close(); reject(new Error("timeout waiting for station.cmd")); }, 3000);
+      ws.on("message", (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.kind === "station.cmd") { clearTimeout(timer); resolve(m); }
+      });
+      ws.on("error", reject);
+    });
+    await new Promise<void>((r) => ws.on("open", () => r()));
+    const res = await bApp.inject({ method: "POST", url: "/api/bodyscan/capture", payload: { visitorId: "v42" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+    expect(await got).toEqual({ kind: "station.cmd", station: "bodyscan", action: "capture", visitorId: "v42" });
+    ws.close();
+  });
+});

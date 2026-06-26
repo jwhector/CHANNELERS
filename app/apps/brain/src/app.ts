@@ -220,6 +220,15 @@ export async function buildApp(
     return { ok: true, altarOpen: parsed.data.open };
   });
 
+  // Cross-device capture relay: the /station performer taps Capture; the bodyscan
+  // kiosk (which holds the camera) hears this and persists the pose it currently sees.
+  app.post("/api/bodyscan/capture", async (req, reply) => {
+    const parsed = VisitorIdBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    bus.broadcast({ kind: "station.cmd", station: "bodyscan", action: "capture", visitorId: parsed.data.visitorId });
+    return { ok: true };
+  });
+
   // legacy scan + manual seeds regeneration (kept)
   app.post("/api/visitors/:id/scan", async (req, reply) => {
     const { id } = req.params as { id: string };

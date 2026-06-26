@@ -162,4 +162,6 @@ export type WsServerMsg =
   | { kind: "session.error"; sessionId?: string; visitorId?: string; message: string }
   | { kind: "roster"; sessions: SessionSummary[] }
   | { kind: "dispatch.state"; state: DispatchState }
-  | { kind: "tuning.state"; tuning: OracleTuning };
+  | { kind: "tuning.state"; tuning: OracleTuning }
+  /** One-shot operator→kiosk command relay (e.g. /station taps Capture; the bodyscan kiosk acts). */
+  | { kind: "station.cmd"; station: Station; action: "capture"; visitorId: string };
