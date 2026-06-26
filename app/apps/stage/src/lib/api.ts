@@ -1,4 +1,4 @@
-import type { SurveyResponse, VisitorProfile, PoseVector, Station, DispatchState, ChoreoConfig } from "@channelers/shared";
+import type { SurveyResponse, VisitorProfile, PoseVector, Station, DispatchState, ChoreoConfig, SlotCamera } from "@channelers/shared";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -33,6 +33,12 @@ export const api = {
   arrive: (visitorId: string) => post<{ ok: boolean }>("/api/dispatch/arrive", { visitorId }),
   /** Bodyscan kiosk capture (cross-device): brain relays a station.cmd to the kiosk holding the camera. */
   captureBodyscan: (visitorId: string) => post<{ ok: boolean }>("/api/bodyscan/capture", { visitorId }),
+  /** Bodyscan kiosk reports its available cameras (+ active id) so /station can pick one remotely. */
+  reportBodyscanCameras: (kioskId: string, cameras: SlotCamera[], activeId?: string) =>
+    post<{ ok: boolean }>("/api/bodyscan/cameras", { kioskId, cameras, activeId }),
+  /** Operator picks a camera on /station → brain relays set-camera to the targeted kiosk. */
+  setBodyscanCamera: (kioskId: string, deviceId: string) =>
+    post<{ ok: boolean }>("/api/bodyscan/camera", { kioskId, deviceId }),
   checkin: (number: number, station: Station) =>
     post<{ record: VisitorProfile }>("/api/checkin", { number, station }),
   dispatch: {
