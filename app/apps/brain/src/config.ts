@@ -72,7 +72,7 @@ export const config = {
     >,
     /** Per-visitor intro hold: a fresh registrant is ineligible for new assignment for this long
      *  after registration (replaces the old global K / warm-up). */
-    introHoldMs: Number(process.env.DISPATCH_INTRO_HOLD_MS ?? 30_000),
+    introHoldMs: Number(process.env.DISPATCH_INTRO_HOLD_MS ?? 60_000),
     /** Anti-starvation: waiting longer than this jumps the random pick. */
     maxWaitMs: Number(process.env.DISPATCH_T_MAX_MS ?? 240_000),
     /** Called-but-not-arrived past this → flagged (or auto-repooled if noShowAutoRepool). */

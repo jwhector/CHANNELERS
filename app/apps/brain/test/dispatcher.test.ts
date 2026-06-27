@@ -552,6 +552,35 @@ describe("per-visitor holds (intro wait + no-show cooldown)", () => {
     d2.stop();
   });
 
+  it("clears the no-show hold once a late visitor's arrival is confirmed, so completing the station does not strand them", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { ...KNOBS, introHoldMs: 0, noShowMs: 90_000, noShowHoldMs: 120_000, noShowAutoRepool: false } as any,
+      autoStart: false,
+    });
+    f2.hello("bodyscan", "kA", "cA");
+    f2.hello("intake", "kB", "cB"); // an onward station the completed visitor is eligible for
+    const v = store.register(NUM());
+    d2.kick(); d2.confirm(v.id); // pending → called@bodyscan
+    vi.setSystemTime(new Date("2026-06-21T00:01:31.000Z")); // > noShowMs → no-show hold armed (flagged, not repooled)
+    d2.kick();
+    const flagged = d2.snapshot().slots.find((s) => s.occupant?.visitorId === v.id)?.occupant;
+    expect(flagged?.flags?.some((fl) => fl.type === "no-show")).toBe(true); // sanity: no-show armed while still called
+
+    // The priestess admits the late visitor, who then completes the station.
+    expect(d2.arrive(v.id)).toBe(true); // called → in_progress
+    expect(d2.markComplete(v.id)).toBe(true); // poseAt stamped, slot freed, back to waiting
+
+    // They showed up, so the no-show hold must be gone — not parked in the pool.
+    const entry = d2.snapshot().queue.find((e) => e.id === v.id);
+    expect(entry?.holdReason).toBeUndefined();
+    expect(entry?.heldUntil).toBeFalsy();
+    // …and the next pass dispatches them onward instead of stranding them.
+    d2.kick();
+    expect(d2.snapshot().slots.some((s) => s.occupant?.visitorId === v.id)).toBe(true);
+    d2.stop();
+  });
+
   it("does not let anti-starvation rescue a held visitor", () => {
     const f2 = fakeBus();
     const d2 = createDispatcher(f2.bus, { knobs: { ...KNOBS, introHoldMs: 600_000, maxWaitMs: 1_000 } as any, autoStart: false });

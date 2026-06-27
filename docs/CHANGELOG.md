@@ -13,6 +13,17 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-26 — Dispatch: clear no-show hold on confirmed arrival + 1-min intro hold + rehearsal punchlist
+
+- **What:** Two dispatcher fixes from the 2026-06-26 full-run rehearsal, plus the campaign tracker for the rest of that rehearsal's backlog.
+  - **#3 no-show hold bug (the fix).** A visitor who went no-show (flagged, `noShowHoldUntil` armed) but was then **admitted late by the performer** and completed the station was still `isHeld()` afterward — stranded in the waiting pool with a "no-show" hold chip instead of being dispatched onward. Root cause: `noShowHoldUntil` was cleared **only** in `remove()`, never when presence is confirmed; `arrive()`/`checkin()` cleared the no-show *flag* (display) but not the *hold* (behavior). Fix: `arrive()` (the canonical "they showed up" transition) and the `/console` override `checkin()` now `noShowHoldUntil.delete(visitorId)`. `confirm()` deliberately does **not** clear it (they haven't arrived yet; a held visitor's hold has already expired by the time they're re-selected).
+  - **#4 intro hold → 1 minute.** `config.dispatcher.introHoldMs` default 30s → **60s** (still `DISPATCH_INTRO_HOLD_MS`-overridable) — a fresh registrant now waits a minute before first dispatch, per rehearsal direction.
+  - **Punchlist.** New `docs/rehearsal-punchlist.md` is the source of truth for the ~24-item rehearsal backlog (grouped into ~7 code-locus streams with priority/status/deps + open decisions), worked one stream per session. Operating model + handoff protocol captured there and in memory.
+- **Why:** #3 actively strands real visitors mid-show (a late arrival who completes a station can't advance). #4 is a paced-entry tweak. The punchlist organizes the backlog so context stays fresh across sessions (1M window — coherence, not capacity, is the limit).
+- **Files/areas:** `apps/brain/src/dispatcher.ts` (`arrive`, `checkin`), `apps/brain/src/config.ts` (`introHoldMs`), `apps/brain/test/dispatcher.test.ts` (+1 TDD red→green: no-show-hold-cleared-on-arrival). Branch `dispatch-noshow-introhold-fix` (cut from `friday-preshow`).
+- **Verification:** `pnpm -r typecheck` 0 errors; `pnpm --filter @channelers/brain test` **148/148** (the +1 new test fails before the fix with `holdReason: "no-show"`, passes after; the `introHoldMs` default bump broke no existing tests). Not exercised live: a real performer admitting a no-show late on the rig.
+- **Docs touched:** this entry; `ARCHITECTURE.md` (§5.x knobs table + §12 resolved-knobs note: introHoldMs 30s→60s); new `docs/rehearsal-punchlist.md`.
+
 ## 2026-06-26 — Pluribus altar-ready broadcast (/console + /dispatch)
 
 - **What:** Added a "▶ PLURIBUS BROADCAST" control to `/console` and `/dispatch` that voices, on command, the visitors who are **altar-ready** — "INCOMING BROADCAST - PREPARE FOR PLURIBUS: 3... 2... 1... USERS «numbers», YOU HAVE COMPLETED THE STATIONING PROCESS" — through the existing `/api/tts` pipeline (`speak()`, default voice, no archetype) with a per-screen output-device picker (`setSinkId`, like `/choreo`). Also switched `/dispatch`'s right column from the fully-completed (`sessionEndAt`) roster to the **altar-ready** roster. "Altar-ready" === "completed the stationing process" in the fiction: intake + bodyscan done and waiting, *before* the altar opens. The line pluralizes USER/USERS and joins numbers naturally ("3, 7, and 12"); the button is disabled when no one is altar-ready.

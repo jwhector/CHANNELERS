@@ -198,7 +198,7 @@ The dispatcher (`apps/brain/src/dispatcher.ts`, `createDispatcher(bus)`) is an i
 | Knob | Env var | Default | Meaning |
 |------|---------|---------|---------|
 | `fillPriority` | — | `[bodyscan, intake, altar, paper, waitingroom]` | Order `fill()` serves free slots — scarce gate (bodyscan) first, soaks last |
-| `introHoldMs` | `DISPATCH_INTRO_HOLD_MS` | 30 000 | Per-visitor intro hold after registration (replaces global K / warm-up) |
+| `introHoldMs` | `DISPATCH_INTRO_HOLD_MS` | 60 000 | Per-visitor intro hold after registration (replaces global K / warm-up) |
 | `maxWaitMs` | `DISPATCH_T_MAX_MS` | 240 000 | Anti-starvation threshold |
 | `noShowMs` | `DISPATCH_T_NOSHOW_MS` | 90 000 | No-show flag threshold |
 | `noShowHoldMs` | `DISPATCH_NOSHOW_HOLD_MS` | 120 000 | No-show cooldown (hold after being repooled as a no-show) |
@@ -372,7 +372,7 @@ Maintained here — **no separate questions file**. Add to this section as new q
 - **Numbering hardware** — what assigns the analog ticket number, and can it stay purely analog? Decides whether globally-unique integers hold or a day/session namespace is needed.
 - ~~**Presence capture**~~ — ✅ **RESOLVED for MVP:** waiting-room registration stays operator-keyed (`/dispatch` arrivals panel calls `POST /api/register`). `/waiting` self-serve kiosk deferred.
 - **Choreography feed routing** — dancers' in-ears, a public loudspeaker, or both? **Update (2026-06-22):** `/choreo` now **speaks** each completed cue (TTS on by default, neutral voice) and routes it through the same per-tab output picker (§7) — so the dancer-in-ear path works on the central-machine + Scarlett rig today. Loudspeaker vs in-ear is now just *where you point that output*. Related: the MVP `/choreo` view still shares one cue line across concurrent sessions — de-multiplexing waits on this decision.
-- ~~**Dispatcher knob values**~~ — ✅ **RESOLVED for MVP:** rehearsal-fast defaults set in `config.dispatcher` (introHoldMs=30s, T_max=240s, T_noshow=90s, noShowHoldMs=120s, T_stale=300s, grace=20s, tick=5s). Global K/warm-up replaced by per-visitor intro hold. All env-overridable — tune in rehearsal without a code change.
+- ~~**Dispatcher knob values**~~ — ✅ **RESOLVED for MVP:** rehearsal-fast defaults set in `config.dispatcher` (introHoldMs=60s, T_max=240s, T_noshow=90s, noShowHoldMs=120s, T_stale=300s, grace=20s, tick=5s). Global K/warm-up replaced by per-visitor intro hold. All env-overridable — tune in rehearsal without a code change.
 - ~~**Choreography agent model**~~ — ✅ **RESOLVED for MVP:** **gpt-4o** (`config.choreoModel`, env `CHOREO_MODEL`), same as the oracle; switch to `gpt-4o-mini` via env for a lower-latency second loop. (Closes the spec's "Sonnet 4.6" drift — the project runs on OpenAI.)
 - ~~**No-show automation**~~ — ✅ **RESOLVED for MVP:** no-show is flagged by default (operator decides to re-pool). `noShowAutoRepool` knob (`DISPATCH_NOSHOW_AUTOREPOOL=true`) enables automatic re-pool for a faster-paced run.
 - ~~**Scannable/displayed check-in (remove wrong-number risk)**~~ — ✅ **RESOLVED:** replaced permissive type-a-number check-in with **confirm-at-station** — the dispatcher calls `#N` to a kiosk-bound slot, the kiosk displays the number, and a **Confirm arrival** press transitions `called → in_progress` (no free-text entry). Each kiosk owns one addressable, online-gated slot (`station.hello { kioskId, slotHint? }`). Type-a-number survives only as the hidden `/console` operator override.

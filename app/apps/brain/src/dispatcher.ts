@@ -217,6 +217,7 @@ export function createDispatcher(
     slot.occupant.since = nowIso();
     store.setLocation(visitorId, { state: "in_progress", station: slot.station, since: nowIso() });
     clearFlags(visitorId);
+    noShowHoldUntil.delete(visitorId); // they showed up — void the no-show cooldown so the next station isn't blocked
     broadcastState();
     return true;
   }
@@ -290,6 +291,7 @@ export function createDispatcher(
     freeSlotOf(record.id); // drop any existing slot pin → no split state
     store.setLocation(record.id, { state: "in_progress", station, since: nowIso() });
     clearFlags(record.id);
+    noShowHoldUntil.delete(record.id); // operator confirmed presence — void any no-show cooldown
     const slot = slotsOf(station).find((s) => isOnline(s) && !s.occupant);
     if (slot) slot.occupant = { visitorId: record.id, number: record.number, phase: "in_progress", since: nowIso() };
     broadcastState();
