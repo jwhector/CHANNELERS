@@ -11,17 +11,17 @@ import { useReleaseToGate } from "../lib/useReleaseToGate";
 import { useDevices } from "../lib/devices";
 import { DevicePicker } from "../components/DevicePicker";
 
-export function Altar() {
+export function Altar({ showCamera = true }: { showCamera?: boolean } = {}) {
   const { connected, slot } = useStationPresence("altar");
   const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
 
   useReleaseToGate(visitor, slot, false, () => setVisitor(null));
 
   if (!visitor) return <CalledGate station="altar" title="Altar" connected={connected} slot={slot} confirmedBy="performer" onArrived={setVisitor} />;
-  return <Gate visitor={visitor} connected={connected} />;
+  return <Gate visitor={visitor} connected={connected} showCamera={showCamera} />;
 }
 
-function Gate({ visitor, connected }: { visitor: VisitorProfile; connected: boolean }) {
+export function Gate({ visitor, connected, showCamera = true }: { visitor: VisitorProfile; connected: boolean; showCamera?: boolean }) {
   const template = (visitor.poseTemplate as PoseVector | undefined) ?? null;
   const [stillness] = useState(0.05);
   const [matchThresh] = useState(0.9);
@@ -32,6 +32,7 @@ function Gate({ visitor, connected }: { visitor: VisitorProfile; connected: bool
   const [similarity, setSimilarity] = useState(0);
   const [holdProgress, setHoldProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [camOpen, setCamOpen] = useState(false);
   const cam = useDevices("videoinput", "cam.altar", "cam");
 
   const verifiedRef = useRef(verified);
@@ -91,37 +92,49 @@ function Gate({ visitor, connected }: { visitor: VisitorProfile; connected: bool
       {error && <p className="error">{error}</p>}
 
       <h3>1 · Validate your shape</h3>
-      {!template && <p className="dim">No pose on file — use the manual override, or send them back to /bodyscan.</p>}
-      <div className="posestage">
-        <video ref={videoRef} playsInline muted />
-        <canvas ref={canvasRef} />
-        {verified && <div className="poseflash">✓ VERIFIED</div>}
-      </div>
-      {!verified && (
+      {verified ? (
+        <p className="poseflash">✓ VERIFIED</p>
+      ) : (
         <div className="controls">
-          {status !== "running" ? (
-            <button className="submit" onClick={start} disabled={status === "loading" || !template}>
-              {status === "loading" ? "loading model…" : "Start camera"}
-            </button>
-          ) : (
-            <div className="posebars">
-              <Bar label="similarity" value={similarity} text={`${(similarity * 100).toFixed(0)}%`} good={similarity >= matchThresh} />
-              <Bar label="verify hold" value={holdProgress} text={`${(holdProgress * 100).toFixed(0)}%`} good={holdProgress >= 1} />
-            </div>
+          <button className="submit" onClick={() => void markVerified()}>Unlock (override)</button>
+          {showCamera && (
+            <>
+              <button className="choice" onClick={() => setCamOpen((o) => !o)}>
+                {camOpen ? "hide camera" : "verify by camera"}
+              </button>
+              {camOpen && (
+                <>
+                  {!template && <p className="dim">No pose on file — send them back to /bodyscan.</p>}
+                  <div className="posestage">
+                    <video ref={videoRef} playsInline muted />
+                    <canvas ref={canvasRef} />
+                  </div>
+                  {status !== "running" ? (
+                    <button className="submit" onClick={start} disabled={status === "loading" || !template}>
+                      {status === "loading" ? "loading model…" : "Start camera"}
+                    </button>
+                  ) : (
+                    <div className="posebars">
+                      <Bar label="similarity" value={similarity} text={`${(similarity * 100).toFixed(0)}%`} good={similarity >= matchThresh} />
+                      <Bar label="verify hold" value={holdProgress} text={`${(holdProgress * 100).toFixed(0)}%`} good={holdProgress >= 1} />
+                    </div>
+                  )}
+                  <DevicePicker
+                    kind="videoinput"
+                    label="camera"
+                    devices={cam.devices}
+                    value={cam.deviceId}
+                    onChange={cam.setDeviceId}
+                    needsPermission={cam.needsPermission}
+                    onEnableLabels={cam.enableLabels}
+                  />
+                  {camError && <p className="error">camera/model error: {camError}</p>}
+                </>
+              )}
+            </>
           )}
-          <button className="end" onClick={() => void markVerified()}>Manual unlock (override)</button>
-          <DevicePicker
-            kind="videoinput"
-            label="camera"
-            devices={cam.devices}
-            value={cam.deviceId}
-            onChange={cam.setDeviceId}
-            needsPermission={cam.needsPermission}
-            onEnableLabels={cam.enableLabels}
-          />
         </div>
       )}
-      {camError && <p className="error">camera/model error: {camError}</p>}
 
       <h3>2 · Choose the oracle</h3>
       <div className="choices oracle-choices">
