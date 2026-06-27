@@ -5,6 +5,8 @@ import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { useNow } from "../lib/useNow";
 import { remainingSec, fmtClock } from "../lib/dispatchTiming";
+import { readyNumbers } from "../lib/pluribus";
+import { PluribusBroadcast } from "../components/PluribusBroadcast";
 
 const elapsed = (since: string) =>
   `${Math.max(0, Math.round((Date.now() - Date.parse(since)) / 1000))}s`;
@@ -41,7 +43,7 @@ export function FlowStrip({
   );
 }
 
-/** Lobby-operator board (spec §6): waiting pool · slots · completed. No-scroll 3-zone. */
+/** Lobby-operator board (spec §6): waiting pool · slots · altar-ready. No-scroll 3-zone. */
 export function Dispatch() {
   const [state, setState] = useState<DispatchState | null>(null);
   const [arrival, setArrival] = useState("");
@@ -95,6 +97,8 @@ export function Dispatch() {
         bodyscanBlocked={state.bodyscanBlocked}
         onToggleAltar={(open) => void api.dispatch.altar(open)}
       />
+
+      <PluribusBroadcast numbers={readyNumbers(state.altarReadyList)} storageKey="out.dispatch" />
 
       <div className="zones">
         {/* LEFT — waiting pool */}
@@ -170,14 +174,14 @@ export function Dispatch() {
           </div>
         </section>
 
-        {/* RIGHT — completed */}
-        <section className="zone completed">
-          <h3>Completed ({state.completed.length})</h3>
+        {/* RIGHT — altar-ready */}
+        <section className="zone ready">
+          <h3>Altar-ready ({state.altarReadyList.length})</h3>
           <ul className="pool-list">
-            {state.completed.map((v) => (
+            {state.altarReadyList.map((v) => (
               <li key={v.id} className="pool-item" title={v.name || "(no name)"}>
                 <strong>#{v.number}</strong>
-                <span className="dim">done</span>
+                <span className="dim">ready</span>
               </li>
             ))}
           </ul>
