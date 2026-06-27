@@ -1,7 +1,8 @@
 import { config } from "./config";
 import { store, type VisitorRecord } from "./store";
+import { isAltarReady } from "@channelers/shared";
 import type {
-  Station, DispatchState, Slot, SlotOccupant, SlotCamera, DispatchDone, DispatchQueueEntry, DispatchFlag,
+  Station, DispatchState, Slot, SlotOccupant, SlotCamera, DispatchDone, DispatchReady, DispatchQueueEntry, DispatchFlag,
   WsServerMsg, WsClientMsg,
 } from "@channelers/shared";
 
@@ -415,15 +416,19 @@ export function createDispatcher(
       .filter((v) => !!v.sessionEndAt)
       .map((v) => ({ id: v.id, number: v.number, name: v.survey?.name, at: v.sessionEndAt as string }));
   }
+  function altarReadyEntries(): DispatchReady[] {
+    return store.list()
+      .filter(isAltarReady)
+      .map((v) => ({ id: v.id, number: v.number, name: v.survey?.name }))
+      .sort((a, b) => a.number - b.number);
+  }
   function flowHealth(): {
     altarReady: number;
     bodyscanIdle: boolean;
     bodyscanBlocked: DispatchState["bodyscanBlocked"];
   } {
     const list = store.list();
-    const altarReady = list.filter(
-      (v) => v.location.state === "waiting" && v.intakeAt && v.poseAt && !v.sessionEndAt,
-    ).length;
+    const altarReady = list.filter(isAltarReady).length;
     const bodyscanIdle = slotsOf("bodyscan").some((s) => isOnline(s) && !s.occupant);
     let bodyscanBlocked: DispatchState["bodyscanBlocked"] = "none";
     if (bodyscanIdle) {
@@ -454,6 +459,7 @@ export function createDispatcher(
       slots: slotList,
       queue: queueEntries(),
       completed: completedEntries(),
+      altarReadyList: altarReadyEntries(),
       surplus: [...surplus.values()],
       stationsOnline,
       timedDwellMs,

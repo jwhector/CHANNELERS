@@ -93,6 +93,15 @@ export const VisitorProfile = z.object({
 });
 export type VisitorProfile = z.infer<typeof VisitorProfile>;
 
+/**
+ * "Altar-ready": cleared the pre-altar stations (intake + bodyscan) and waiting in the pool,
+ * not yet through divination. The dispatcher's altar-ready count + list and the Pluribus
+ * "completed the stationing process" broadcast all key off this single predicate.
+ */
+export function isAltarReady(v: VisitorProfile): boolean {
+  return v.location.state === "waiting" && !!v.intakeAt && !!v.poseAt && !v.sessionEndAt;
+}
+
 /** ── Generated seeds (intake → AI transform output) ── */
 
 export const MusicSeed = z.object({

@@ -113,6 +113,9 @@ export type Slot = {
 /** A visitor who finished the whole ritual (sessionEndAt set). */
 export type DispatchDone = { id: string; number: number; name?: string; at: string };
 
+/** An altar-ready visitor (intake + bodyscan done, waiting) — divination prerequisites met. */
+export type DispatchReady = { id: string; number: number; name?: string };
+
 export type DispatchState = {
   /** All slots across all stations, length = sum of configured counts. */
   slots: Slot[];
@@ -132,6 +135,8 @@ export type DispatchState = {
   altarOpen: boolean;
   /** Waiting visitors who are altar-ready (intakeAt && poseAt && !sessionEndAt) — the operator's buffer gauge. */
   altarReady: number;
+  /** Altar-ready visitors — the /dispatch right-column roster + the Pluribus broadcast list. */
+  altarReadyList: DispatchReady[];
   /** True when ≥1 bodyscan slot is online with no occupant. */
   bodyscanIdle: boolean;
   /** When bodyscan is idle, why nothing is filling it (actionable when "soaking"/"held"). */

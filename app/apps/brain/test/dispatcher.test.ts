@@ -168,6 +168,8 @@ describe("flow-health snapshot fields", () => {
     store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
     s = d.snapshot();
     expect(s.altarReady).toBe(1);
+    expect(s.altarReadyList.map((r) => r.number)).toContain(v.number);
+    expect(s.altarReadyList.find((r) => r.number === v.number)?.name).toBe("Jo");
     expect(s.bodyscanBlocked).toBe("empty"); // posed person is not a bodyscan candidate
   });
 
