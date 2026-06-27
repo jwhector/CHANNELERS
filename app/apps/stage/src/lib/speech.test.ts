@@ -38,6 +38,42 @@ test("plays the MP3 and does NOT use browser TTS when the brain returns audio", 
   expect(speakSpy).not.toHaveBeenCalled();
 });
 
+test("applies the playback rate and preserves pitch on the MP3 element", async () => {
+  let made: { playbackRate: number; preservesPitch: boolean } | undefined;
+  class FakeAudio {
+    onended: unknown = null;
+    onerror: unknown = null;
+    playbackRate = 1;
+    preservesPitch = false;
+    constructor(public src: string) {
+      made = this;
+    }
+    play = vi.fn().mockResolvedValue(undefined);
+    pause = vi.fn();
+  }
+  vi.stubGlobal("Audio", FakeAudio);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob() }));
+  await speak("slow down", { archetype: "tree", rate: 0.7 });
+  expect(made?.playbackRate).toBe(0.7);
+  expect(made?.preservesPitch).toBe(true); // natural pitch, just slower
+});
+
+test("applies the rate to the browser-TTS fallback too (no keys)", async () => {
+  let utter: { rate: number } | undefined;
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      rate = 1;
+      constructor(public text: string) {
+        utter = this;
+      }
+    },
+  );
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 204 }));
+  await speak("slow down", { rate: 0.7 });
+  expect(utter?.rate).toBe(0.7);
+});
+
 test("falls back to browser TTS when the fetch rejects", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
   await speak("hello", { archetype: "tree" });

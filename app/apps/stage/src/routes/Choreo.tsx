@@ -4,7 +4,9 @@ import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { speak, stopSpeaking } from "../lib/speech";
 import { useDevices } from "../lib/devices";
+import { usePlaybackRate, DEFAULT_PLAYBACK_RATE } from "../lib/playbackRate";
 import { DevicePicker } from "../components/DevicePicker";
+import { SpeedPicker } from "../components/SpeedPicker";
 import { initialChoreoFeed, reduceChoreoFeed, type CueLine } from "../lib/choreoFeed";
 
 /**
@@ -14,6 +16,7 @@ import { initialChoreoFeed, reduceChoreoFeed, type CueLine } from "../lib/choreo
 export function ChoreoDisplay({
   cue, log, reactToOracle, connected, onToggle, speakCues, onToggleSpeak, outputPicker,
   mimicking, mimicManual, onToggleMimic, cadenceEnabled, onToggleCadence, everyN, onChangeEveryN,
+  rate, onChangeRate,
 }: {
   cue: string;
   log: CueLine[];
@@ -30,6 +33,8 @@ export function ChoreoDisplay({
   onToggleCadence?: (next: boolean) => void;
   everyN?: number;
   onChangeEveryN?: (next: number) => void;
+  rate?: number;
+  onChangeRate?: (next: number) => void;
 }) {
   return (
     <main className="void choreo">
@@ -72,6 +77,7 @@ export function ChoreoDisplay({
               turns
             </span>
           )}
+          {onChangeRate && <SpeedPicker value={rate ?? DEFAULT_PLAYBACK_RATE} onChange={onChangeRate} />}
           {outputPicker}
         </div>
       </header>
@@ -100,6 +106,9 @@ export function Choreo() {
   outRef.current = out.deviceId;
   const speakRef = useRef(speakCues);
   speakRef.current = speakCues;
+  const { rate, setRate } = usePlaybackRate("rate.choreo");
+  const rateRef = useRef(rate);
+  rateRef.current = rate;
 
   const { connected } = useBrainSocket((m: WsServerMsg) => {
     const next = reduceChoreoFeed(feed.current, m);
@@ -111,7 +120,7 @@ export function Choreo() {
     // The focused session voices a cue (neutral) or a mimic line (persona voice via archetype);
     // speak() itself preempts any in-flight clip.
     if (next.speak && speakRef.current)
-      void speak(next.speak.text, { sinkId: outRef.current, archetype: next.speak.archetype });
+      void speak(next.speak.text, { sinkId: outRef.current, archetype: next.speak.archetype, rate: rateRef.current });
   });
 
   useEffect(() => {
@@ -158,6 +167,8 @@ export function Choreo() {
       onToggleCadence={(v) => update({ mimicCadenceEnabled: v })}
       everyN={cfg.mimicEveryNTurns}
       onChangeEveryN={(n) => update({ mimicEveryNTurns: n })}
+      rate={rate}
+      onChangeRate={setRate}
     />
   );
 }

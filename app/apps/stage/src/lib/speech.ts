@@ -15,9 +15,10 @@ export function stopSpeaking(): void {
 }
 
 /** Browser speechSynthesis — the offline fallback when the brain has no ElevenLabs key. */
-function speakViaBrowser(text: string): void {
+function speakViaBrowser(text: string, rate?: number): void {
   if (!("speechSynthesis" in window)) return;
   const u = new SpeechSynthesisUtterance(text);
+  if (rate !== undefined) u.rate = rate; // utterance rate ≈ <audio> playbackRate (1 = normal, lower = slower)
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(u);
 }
@@ -32,7 +33,7 @@ type SpeakResult = { via: "element" | "speechSynthesis" };
  */
 export async function speak(
   text: string,
-  opts: { archetype?: string; sinkId?: string } = {},
+  opts: { archetype?: string; sinkId?: string; rate?: number } = {},
 ): Promise<SpeakResult> {
   if (!text.trim()) return { via: "element" };
   stopSpeaking();
@@ -50,6 +51,11 @@ export async function speak(
       if (superseded()) return { via: "element" };
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url) as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+      // Slow the oracle to ritual pace without warping it: preserve pitch, drop only the rate.
+      if (opts.rate !== undefined) {
+        audio.preservesPitch = true;
+        audio.playbackRate = opts.rate;
+      }
       current = audio;
       const done = () => URL.revokeObjectURL(url);
       audio.onended = done;
@@ -73,7 +79,7 @@ export async function speak(
     /* network/playback failed — fall through to browser TTS */
   }
   if (superseded()) return { via: "speechSynthesis" };
-  speakViaBrowser(text);
+  speakViaBrowser(text, opts.rate);
   return { via: "speechSynthesis" };
 }
 

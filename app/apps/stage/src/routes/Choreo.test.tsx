@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { ChoreoDisplay } from "./Choreo";
@@ -48,4 +48,16 @@ test("toggling 'mimic oracle' fires onToggleMimic with the new value", async () 
   );
   await userEvent.click(screen.getByRole("checkbox", { name: /mimic oracle/i }));
   expect(onToggleMimic).toHaveBeenCalledWith(true);
+});
+
+test("adjusting the speed slider fires onChangeRate with the new rate", () => {
+  const onChangeRate = vi.fn();
+  render(
+    <ChoreoDisplay cue="" log={[]} reactToOracle connected
+      speakCues onToggleSpeak={() => {}} onToggle={() => {}}
+      rate={0.7} onChangeRate={onChangeRate} />,
+  );
+  expect(screen.getByText(/0\.70×/)).toBeInTheDocument();
+  fireEvent.change(screen.getByRole("slider"), { target: { value: "0.85" } });
+  expect(onChangeRate).toHaveBeenCalledWith(0.85);
 });
