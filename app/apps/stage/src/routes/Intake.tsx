@@ -60,11 +60,7 @@ export function Intake() {
   if (done) {
     return (
       <CrtShell statusLabel={status}>
-        <div className="crt-processed">
-          <p className="crt-eyebrow">● processed</p>
-          <SegmentNumber value={visitor.number} />
-          <p className="crt-sub">proceed to the physical challenge when called</p>
-        </div>
+        <ExitScreen />
       </CrtShell>
     );
   }
@@ -121,5 +117,20 @@ export function Intake() {
         </div>
       </div>
     </CrtShell>
+  );
+}
+
+/**
+ * Post-submit screen (#9): the terminal sends the visitor onward. No number —
+ * just a large thematic directive to vacate the kiosk for the next arrival.
+ */
+export function ExitScreen() {
+  return (
+    <div className="crt-processed">
+      <p className="crt-exit">
+        step away from the terminal
+        <span className="crt-exit-note">await your summons</span>
+      </p>
+    </div>
   );
 }

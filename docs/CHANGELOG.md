@@ -13,6 +13,16 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-26 — Intake legibility batch: post-submit exit directive + bigger form (rehearsal punchlist Stream C, #9/#7)
+
+- **What:** Two `/intake` CRT-skin changes from the rehearsal.
+  - **#9 — post-intake exit screen.** The post-submit ("processed") state no longer shows the visitor's seven-segment number or the old "proceed to the physical challenge" subline. It now renders a single large, thematic, amber-lit directive — **"step away from the terminal" / "await your summons"** — that directs the visitor out of the kiosk so the next arrival can use it. Extracted as an exported presentational `ExitScreen` (mirrors the `Altar`/`Gate` test-seam pattern) and TDD-covered: asserts the directive renders and **no `role="img"` (SegmentNumber) appears**.
+  - **#7 — larger intake form.** The Windows-9x survey dialog (`.win`) was sized for a desktop; on the CRT across the room it read small. Added a base `font-size: clamp(15px, 2vmin, 19px)` on `.win` (scales the `font: inherit` fields/textarea/SUBMIT button) and bumped the hardcoded `12px` on labels/chips/subject to viewport-scaled clamps. No layout/width changes — `.win-body` already scrolls (`max-height:70vh; overflow:auto`).
+- **Why:** Rehearsal notes: visitors lingered at the kiosk after submitting (the screen re-showed their number and read like a "keep waiting here" receipt) and the form was hard to read at distance. The exit screen's job is to *move people on*; per the operator's steer it shows **instruction only, no number, large thematic font**. Deferred sibling items #8 (Rachel's new form content — still awaited) and #10 (CRT resolution/overscan) for a later session.
+- **Files/areas:** `apps/stage/src/routes/Intake.tsx` (`ExitScreen` export; `done` branch), `apps/stage/src/routes/Intake.test.tsx` (new), `apps/stage/src/styles/crt.css` (`.crt-exit`/`.crt-exit-note`; `.win` base size + `.win-field-row label`/`.win-chip`/`.win-subject` bumps). Stage suite **101/101**; `pnpm -r typecheck` clean.
+- **Verification:** TDD red→green on the `ExitScreen` test; full stage suite 101/101; typecheck 0 errors. **Not** verified live on the CRT rig — #7 is a CSS-only legibility bump (font sizes aren't asserted in jsdom); eyeball on a real monitor when convenient.
+- **Docs touched:** this entry; `docs/rehearsal-punchlist.md` (#9/#7 → 🟢, Session 4 log + Next-up).
+
 ## 2026-06-26 — Channeling consolidation: `/perform` one-device console (rehearsal punchlist Stream E, #19/#20/#21)
 
 - **What:** A new **`/perform`** route puts the three performer surfaces on one device as tabs — **altar · channel · choreo** — by **reusing the existing components unchanged**. All three regions stay mounted; inactive tabs use the HTML `hidden` attribute (`display:none`), so each child keeps its own WebSocket, claimed divination session, and audio across tab switches — choreo ear-audio keeps playing while the performer is on another tab. The shell is a small presentational `PerformShell` (tab state + `hidden` toggling) wrapping `<Altar showCamera={false}>`, `<Channel>`, `<Choreo>`.
