@@ -10,6 +10,7 @@ import {
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { altarReadyNumbers } from "../lib/pluribus";
+import { usePlaybackRate } from "../lib/playbackRate";
 import { PluribusBroadcast } from "../components/PluribusBroadcast";
 import { AltarGate } from "../components/AltarGate";
 
@@ -72,6 +73,8 @@ export function Console() {
     done: visitors.filter((v) => v.sessionEndAt).length,
   };
   const ready = altarReadyNumbers(visitors);
+  // Broadcast TTS playback speed (per-tab), paralleling rate.choreo / rate.channel.
+  const { rate, setRate } = usePlaybackRate("rate.console");
 
   return (
     <main className="void console master">
@@ -107,7 +110,7 @@ export function Console() {
       <AltarGate open={dispatch?.altarOpen ?? false} onToggle={(open) => void api.dispatch.altar(open)} />
 
       <h3>Broadcast</h3>
-      <PluribusBroadcast numbers={ready} storageKey="out.console" />
+      <PluribusBroadcast numbers={ready} storageKey="out.console" rate={rate} onChangeRate={setRate} />
 
       {/* ── Panel 1: visitors + controls ── */}
       <h3>Visitors ({visitors.length})</h3>

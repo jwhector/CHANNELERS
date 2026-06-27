@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-27 — speed dial on the `/console` Pluribus broadcast
+
+- **What:** The Pluribus altar-ready broadcast on `/console` gains a **speed dial** — the same `SpeedPicker` slider already on `/choreo` and `/channel`. The chosen ×N is threaded into `speak()` (`<audio>.playbackRate`, pitch preserved) so the operator can slow the "completed the stationing process" announcement to ritual pace. Like the other screens, the route owns the rate via `usePlaybackRate("rate.console")` (per-tab localStorage, default **0.70×**, parallel to `rate.choreo`/`rate.channel`) and passes it down; the dial only appears when rate is wired, so the shared `PluribusBroadcast` stays backward-compatible.
+- **Why:** Requested — the broadcast previously called `speak()` with no `rate`, so it played at the synth's default pace with no operator control, unlike every other TTS surface. Reusing `SpeedPicker`/`usePlaybackRate` keeps the control identical to what performers already know on `/choreo` and `/channel`.
+- **Files/areas:** `apps/stage/src/components/PluribusBroadcast.tsx` (optional `rate`/`onChangeRate` props → render `SpeedPicker`, thread `rate` into `speak()`); `apps/stage/src/routes/Console.tsx` (`usePlaybackRate("rate.console")`, wires it in); `apps/stage/src/components/PluribusBroadcast.test.tsx` (new — component test). No new CSS (reuses `.speed-picker`). Branch `friday-preshow`.
+- **Verification:** TDD red→green on the new component test (dial renders, rate threads into `speak()`, drag fires `onChangeRate`, absent when unwired). Stage suite **120** tests pass; `pnpm -r typecheck` clean. **Not run here:** the live `/console` broadcast against a real output device.
+- **Docs touched:** this entry + `app/CLAUDE.md` (`/console` route line notes the speed dial).
+
 ## 2026-06-27 — Altar gate + Pluribus broadcast move from `/dispatch` to `/console`; `/console` becomes a `/perform` tab
 
 - **What:** Pulled the two altar-readiness operator controls off the lobby `/dispatch` board so it reads cleaner. The **altar OPEN/CLOSED gate** (was the first button in `FlowStrip`) and the **Pluribus altar-ready broadcast** (was rendered just under the flow strip) now live only on the `/console` master overseer. The Pluribus control already existed on `/console` (storageKey `out.console`); this just deletes the `/dispatch` copy (`out.dispatch`). The altar gate moves via a new tiny `AltarGate` component, wired on `/console` to `api.dispatch.altar`. `/dispatch`'s `FlowStrip` keeps the **altar-ready count + bodyscan idle/blocked** health readout — only the gate button and broadcast left. Separately, added `/console` as a fourth **tab in `/perform`** (`altar · channel · choreo · console`), mounted-and-hidden like the others so its socket/2s poll survives tab switches.
