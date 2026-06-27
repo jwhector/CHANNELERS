@@ -13,6 +13,15 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-26 — Bodyscan: repeat-to-confirm enrollment + aura render (rehearsal punchlist Stream F, #11/#13)
+
+- **What:** Two changes to the `/bodyscan` front display.
+  - **#11 — repeat your shape to affirm it.** `BodyScanCamera` is now an `enroll → confirm` state machine. The operator's single **Capture** tap arms the existing 3.5s framed-stillness hold, which now **captures pose A without saving it**. The kiosk then asks the visitor to repeat it: they must first **break** the pose (similarity to A drops below `BREAK_THRESH` 0.7) — a deliberate-act gate added per the operator — then **re-form and hold** it for `CONFIRM_SEC` 1.5s at `MATCH_THRESH` ≥ 0.9. This confirm loop is the altar's verify loop ([Altar.tsx](../app/apps/stage/src/routes/Altar.tsx)) pointed at pose A instead of a server template (`poseSimilarity` from [angles.ts](../app/apps/stage/src/lib/pose/angles.ts)). Only on confirm does `api.enrollPose(visitorId, poseA)` fire — so the server contract, `poseAt` stamp, and slot-freeing are all unchanged; the call just happens later. The prompt is a legible two-step: *"hold your shape"* → *"release, then form it again"* → *"now hold the same shape."* A second Capture tap aborts back to a clean enroll. Nothing hard-blocks — the altar's `Unlock (override)` stays the safety net.
+  - **#13 — fully-stylized aura (pulled from deferred).** New `drawAura` ([poseUI.tsx](../app/apps/stage/src/components/poseUI.tsx)) replaces `drawSkeleton` on the bodyscan: it paints an **opaque void background** each frame (this is what removes the webcam — the `<video>` keeps playing to feed MediaPipe but is hidden, belt-and-suspenders `opacity:0` in `bodyscan.css`), then draws additive (`globalCompositeOperation:"lighter"`) glowing bones + a hue-swept radial-gradient **colorblob** at each visible landmark. Bodyscan-only; the altar's camera keeps the diagnostic `drawSkeleton`.
+- **Why:** Rehearsal notes #11 (make enrollment a commit-your-sign ritual *and* prove the pose is reproducible for the altar) and #13 (100% stylized, no webcam). The forced break makes the repeat a deliberate act rather than passive continuation.
+- **Files/areas:** `apps/stage` — `routes/BodyScan.tsx` (enroll→confirm machine, `drawAura` wiring), `components/poseUI.tsx` (+`drawAura`), `styles/bodyscan.css` (`video{opacity:0}`), `routes/BodyScan.test.tsx` (4 flow tests), `components/poseUI.test.tsx` (new, recording-ctx). No `apps/brain` / `packages/shared` changes. TDD; stage 108/108; `pnpm -r typecheck` clean.
+- **Docs touched:** `docs/rehearsal-punchlist.md` (#11/#13 → 🟢, Session 5, Next up), `app/CLAUDE.md` (/bodyscan route note), plan at `docs/superpowers/plans/2026-06-26-stream-f-bodyscan.md`.
+
 ## 2026-06-26 — Intake legibility batch: post-submit exit directive + bigger form (rehearsal punchlist Stream C, #9/#7)
 
 - **What:** Two `/intake` CRT-skin changes from the rehearsal.
