@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ARCHETYPES,
+  Station,
   type DispatchState,
   type SessionSummary,
   type ShowEvent,
@@ -63,16 +64,19 @@ export function Console() {
       v.sessionEndAt && "done",
     ].filter(Boolean).join(" · ") || "registered";
 
-  // Panel 2 — flow funnel counts
+  const ready = altarReadyNumbers(visitors);
+  // Panel 2 — flow funnel counts: per-station milestones → altar-ready pool → channelling → done.
+  // altarReady mirrors the Pluribus broadcast set (intake + pose done, waiting, not finished).
   const counts = {
     registered: visitors.length,
     intake: visitors.filter((v) => v.intakeAt).length,
     pose: visitors.filter((v) => v.poseAt).length,
-    oracleReady: visitors.filter((v) => v.personaAt && v.poseVerifiedAt && !v.sessionEndAt).length,
+    paper: visitors.filter((v) => v.paperAt).length,
+    offering: visitors.filter((v) => v.offeringAt).length,
+    altarReady: ready.length,
     channelling: roster.length,
     done: visitors.filter((v) => v.sessionEndAt).length,
   };
-  const ready = altarReadyNumbers(visitors);
   // Broadcast TTS playback speed (per-tab), paralleling rate.choreo / rate.channel.
   const { rate, setRate } = usePlaybackRate("rate.console");
 
@@ -172,7 +176,7 @@ export function Console() {
 /** Hidden operator safety net (spec §5): force a visitor in_progress@station via /api/checkin. */
 function ManualCheckin() {
   const [num, setNum] = useState("");
-  const [station, setStation] = useState<"intake" | "bodyscan" | "altar">("intake");
+  const [station, setStation] = useState<Station>("intake");
   const [msg, setMsg] = useState<string | null>(null);
   async function go() {
     const n = Number(num);
@@ -187,10 +191,8 @@ function ManualCheckin() {
     <div className="row">
       <input className="choice" inputMode="numeric" value={num} placeholder="#"
         onChange={(e) => setNum(e.target.value.replace(/[^0-9]/g, ""))} style={{ width: "4rem" }} />
-      <select className="choice" value={station} onChange={(e) => setStation(e.target.value as typeof station)}>
-        <option value="intake">intake</option>
-        <option value="bodyscan">bodyscan</option>
-        <option value="altar">altar</option>
+      <select className="choice" value={station} onChange={(e) => setStation(e.target.value as Station)}>
+        {Station.options.map((s) => <option key={s} value={s}>{s}</option>)}
       </select>
       <button className="choice" onClick={() => void go()}>force check-in</button>
       {msg && <span className="dim">{msg}</span>}

@@ -13,6 +13,24 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-27 — Altar-ready now requires the full station circuit (paper + time-offering gate too)
+
+- **What:** "Altar-ready" went from intake + bodyscan to **all four** pre-altar stations — intake, bodyscan, paper, and the time-offering room. New shared `clearedPreAltarStations(v)` (`intakeAt && poseAt && paperAt && offeringAt`) is the single source of truth; both `isAltarReady` (shared) and the dispatcher's altar-eligibility line route through it. `/board` ALTAR READY, the Pluribus broadcast, the `/dispatch` flow strip + right-column roster, and the altar dispatch all tighten automatically. Stations stay any-order; only the altar waits for the full set. `pnpm seed:altar` now completes paper + offering (via `POST /api/checkin` → `POST /api/dispatch/complete`) so its visitors are genuinely altar-ready.
+- **Why:** The performance flow requires a visitor to complete the whole circuit before divination. Side benefit: an altar-ready visitor has already done the soak stations, so the prior "pending-paper occupant can block altar dispatch" wrinkle is gone.
+- **Files/areas:** `packages/shared/src/{schemas,protocol}.ts`; `apps/brain/src/{dispatcher,seed-altar}.ts` (+ tests `apps/brain/test/{schema,dispatcher}.test.ts`, `apps/stage/src/lib/pluribus.test.ts`). Branch `friday-preshow`. Plan: `docs/superpowers/plans/2026-06-27-altar-ready-all-stations.md`.
+- **Verification:** TDD red→green; `pnpm --filter @channelers/brain typecheck` 0 errors; brain (162) + stage (129) suites green. Live smoke: isolated brain on :8799, `pnpm seed:altar --count 4` → `altarReady: 4`, every seeded visitor has all four milestones and is `waiting`.
+- **Docs touched:** this entry; `docs/ARCHITECTURE.md` (§5 selection eligibility + the `dispatch.state` altar-ready definition).
+
+## 2026-06-27 — `/console` redesign: panel reorder + station-set freshness
+
+- **What:** Reworked the `/console` overseer.
+  - **Panel reorder.** The operator's two live levers sit first now: **Broadcast** (Pluribus altar-ready TTS) at the top, **Altar gate** directly below it, then the **Flow** funnel + station LEDs just above the **Visitors** table (was Flow → Altar gate → Broadcast → Visitors).
+  - **Flow funnel reflects the current station set.** Added `paper` and `offering` milestone counts (`paperAt`/`offeringAt`) and an **`altarReady`** count (mirrors the Pluribus broadcast set via `altarReadyNumbers`), replacing the stale `oracleReady` tally. Funnel now reads registered → intake → pose → paper → offering → altarReady → channelling → done.
+  - **Manual override covers every station.** `ManualCheckin`'s station dropdown is generated from the shared **`Station.options`** enum instead of a hardcoded `intake|bodyscan|altar` list, so `paper` and `offering` are selectable; its state is typed `Station`.
+- **Why:** The broadcast + gate are what the console operator acts on, so they belong above the read-only monitoring. The funnel and the manual-checkin list had drifted from the live station set (the `paper` typewriter + timed `offering` room, and the altar-ready pool) added since this view was written. Driving the dropdown off the `Station` enum keeps it from drifting again — that enum + `STATION_LABEL` in `packages/shared/src/schemas.ts` is the single source of truth for stations.
+- **Files/areas:** `apps/stage/src/routes/Console.tsx`. `pnpm --filter @channelers/stage typecheck` clean.
+- **Docs touched:** this entry.
+
 ## 2026-06-27 — Time Offering room: re-add the waiting room as a timed `offering` station
 
 - **What:** Re-added the held waiting room — reframed as the **"time offering" room** — as a new `offering` station with **both** a timed auto-release and a manual early release. It's built entirely on the generic dwell machinery kept (deliberately) by #17: **listing `offering` in `config.dispatcher.timed` is the whole feature** — `isOnline` already ORs `isTimed` (always-online, kiosk-less) and `reconcile()`'s timed branch already dwell-completes it; manual **Done** (`markComplete`) releases early. **No new dispatcher logic.**

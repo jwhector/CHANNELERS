@@ -17,7 +17,11 @@ body {
   font: 16px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
-.void { max-width: 760px; margin: 0 auto; padding: 48px 20px; }
+.void { 
+  /* max-width: 760px;  */
+  margin: 0 auto; 
+  padding: 48px 100px; 
+}
 
 /* /perform — one-device tab shell (altar · channel · choreo) */
 .perform-tabs { display: flex; gap: 8px; padding: 12px 20px 0; max-width: 760px; margin: 0 auto; }
