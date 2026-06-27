@@ -92,5 +92,5 @@ Status: 🔴 todo · 🟡 in progress · 🟢 done · ⏸ blocked · ✅ shipped
 
 ## Session log / next up
 
-- **Session 1 (2026-06-26):** set up this tracker + operating-model memory; **shipped #3 (no-show hold) + #4 (intro hold → 1 min)** on branch `dispatch-noshow-introhold-fix` (brain 148/148, typecheck clean, CHANGELOG written). Branch not yet merged to `friday-preshow`.
+- **Session 1 (2026-06-26):** set up this tracker + operating-model memory; **shipped #3 (no-show hold) + #4 (intro hold → 1 min)** (brain 148/148, typecheck clean, CHANGELOG written). Merged to `friday-preshow` (fast-forward, `fcdbfa7`).
 - **Next up:** Session 2 — Stream B oracle/TTS (#22 mimic bug — needs systematic-debugging to trace `isMimicTurn` + the `/api/choreo/config` toggle path; #23 TTS speed — confirm client `playbackRate` approach first).
