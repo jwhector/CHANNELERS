@@ -13,6 +13,16 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-27 — altar admit moves onto `/altar`; `/station/altar` retired
+
+- **What:** Consolidated the altar onto a single operator surface. The presence confirmation (Confirm arrival) and the Release/repool that lived on the remote `/station/altar` ops view now render **inline on `/altar`** itself, and `altar` was dropped from the `/station` performer-station list.
+  - `CalledGate` gained a `confirmedBy="operator"` mode that, on a `called` slot, shows **Confirm arrival** (`api.arrive`) **+ Release** (`api.dispatch.repool`) instead of the old passive "wait for staff" standby. The dead `"performer"` mode (only `/altar` used it) was removed — `confirmedBy` is now `"visitor"` (intake self-confirm, default) | `"operator"` (altar admit).
+  - `/altar` passes `confirmedBy="operator"`, so the altar performer admits → approves the pose (override-primary, unchanged) → picks the oracle on one screen. `/perform`'s altar tab (`<Altar showCamera={false}>`) inherits the admit step for free.
+  - `Station.tsx`: `PERFORMER_STATIONS` is now `["bodyscan", "paper"]`; the `/station/altar` URL falls through to the station picker. Backend untouched — the dispatcher still calls visitors to the altar; `arrive`/`repool` are the same endpoints, just triggered from `/altar`.
+- **Why:** The altar is staffed by the performer who channels the oracle; a separate `/station/altar` screen to admit was an extra device/step. One surface (admit · pose · persona) matches how the altar is actually run. Pose approval already lived on `/altar`, so only presence confirmation needed to move.
+- **Files/areas:** `apps/stage/src/components/CalledGate.tsx` (+ test), `apps/stage/src/routes/Altar.tsx`, `apps/stage/src/routes/Station.tsx`. Gate: stage 127/127, `pnpm -r typecheck` clean.
+- **Docs touched:** this entry; `app/CLAUDE.md` (stage routes — altar operator-confirmed, `/station` is bodyscan/paper); `docs/ARCHITECTURE.md` §3 route map + §5.x two-confirms.
+
 ## 2026-06-27 — speed dial on the `/console` Pluribus broadcast
 
 - **What:** The Pluribus altar-ready broadcast on `/console` gains a **speed dial** — the same `SpeedPicker` slider already on `/choreo` and `/channel`. The chosen ×N is threaded into `speak()` (`<audio>.playbackRate`, pitch preserved) so the operator can slow the "completed the stationing process" announcement to ritual pace. Like the other screens, the route owns the rate via `usePlaybackRate("rate.console")` (per-tab localStorage, default **0.70×**, parallel to `rate.choreo`/`rate.channel`) and passes it down; the dial only appears when rate is wired, so the shared `PluribusBroadcast` stays backward-compatible.

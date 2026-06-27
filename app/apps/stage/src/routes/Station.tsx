@@ -6,8 +6,11 @@ import { useBrainSocket } from "../lib/useBrainSocket";
 import { useNow } from "../lib/useNow";
 import { remainingSec, fmtClock, noShowDeadline } from "../lib/dispatchTiming";
 
-/** Stations a performer admits arrivals for. Intake self-confirms; it is not here. */
-const PERFORMER_STATIONS: StationName[] = ["bodyscan", "altar", "paper"];
+/**
+ * Stations a performer admits arrivals for from this screen. Intake self-confirms;
+ * altar admits on its own /altar surface (operator-confirmed there) — neither is here.
+ */
+const PERFORMER_STATIONS: StationName[] = ["bodyscan", "paper"];
 
 /** Route entry: bare /station shows a picker; /station/:station opens that station's view. */
 export function Station() {

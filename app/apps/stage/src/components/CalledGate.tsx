@@ -23,8 +23,8 @@ export function CalledGate({
   onArrived: (visitor: VisitorProfile) => void;
   /** "crt" renders shell-less CRT content meant to live inside Intake's <CrtShell>. */
   skin?: "crt" | "default";
-  /** "performer" hides the self-confirm button; a station guide admits the visitor. */
-  confirmedBy?: "visitor" | "performer";
+  /** "operator" turns this into the on-station admit surface: Confirm arrival + Release. */
+  confirmedBy?: "visitor" | "operator";
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +43,14 @@ export function CalledGate({
     if (!occ) return;
     setBusy(true); setError(null);
     try { await api.arrive(occ.visitorId); }
+    catch (e) { setError(String(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function releaseArrival() {
+    if (!occ) return;
+    setBusy(true); setError(null);
+    try { await api.dispatch.repool(occ.visitorId); }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   }
@@ -91,15 +99,18 @@ export function CalledGate({
       {slot && !occ && <p className="dim">Slot {slot.id} ready. Waiting to be called…</p>}
       {occ && occ.phase !== "in_progress" && occ.phase !=="pending" && (
         <section className="called">
-          <p className="dim">{confirmedBy === "performer" ? "You've been called" : "Now calling"}</p>
+          <p className="dim">{confirmedBy === "operator" ? "Called — awaiting arrival" : "Now calling"}</p>
           <div className="called-number">#{occ.number}</div>
-          {confirmedBy === "performer" ? (
-            <p className="dim">Please proceed to the station — wait for staff to admit you.</p>
-          ) : (
+          <div className="controls">
             <button className="submit" disabled={busy} onClick={() => void confirmArrival()}>
               {busy ? "…" : "Confirm arrival"}
             </button>
-          )}
+            {confirmedBy === "operator" && (
+              <button className="ghost" disabled={busy} onClick={() => void releaseArrival()}>
+                Release
+              </button>
+            )}
+          </div>
         </section>
       )}
       {error && <p className="error">{error}</p>}

@@ -1,9 +1,13 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { CalledGate } from "./CalledGate";
+import { api } from "../lib/api";
 import type { Slot, SlotOccupant } from "@channelers/shared";
 
-vi.mock("../lib/api", () => ({ api: { arrive: vi.fn(), getByNumber: vi.fn() } }));
+vi.mock("../lib/api", () => ({
+  api: { arrive: vi.fn(), getByNumber: vi.fn(), dispatch: { repool: vi.fn() } },
+}));
 
 const slot = (occupant?: SlotOccupant): Slot => ({
   id: "intake-0",
@@ -36,14 +40,16 @@ test("default skin still shows the title and Confirm arrival", () => {
   expect(screen.getByRole("button", { name: /confirm arrival/i })).toBeInTheDocument();
 });
 
-test("performer mode: called shows a wait-for-staff standby, no confirm button", () => {
+test("operator mode: called shows Confirm arrival + Release, firing arrive/repool", async () => {
   render(
     <CalledGate
-      station="bodyscan" title="Body Scan" connected confirmedBy="performer"
+      station="altar" title="Altar" connected confirmedBy="operator"
       slot={slot(called(12))} onArrived={() => {}}
     />,
   );
   expect(screen.getByText("#12")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /confirm arrival/i })).toBeNull();
-  expect(screen.getByText(/wait for staff/i)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: /confirm arrival/i }));
+  expect(api.arrive).toHaveBeenCalledWith("v1");
+  await userEvent.click(screen.getByRole("button", { name: /release/i }));
+  expect(api.dispatch.repool).toHaveBeenCalledWith("v1");
 });

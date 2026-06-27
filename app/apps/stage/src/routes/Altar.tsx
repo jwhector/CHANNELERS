@@ -17,7 +17,7 @@ export function Altar({ showCamera = true }: { showCamera?: boolean } = {}) {
 
   useReleaseToGate(visitor, slot, false, () => setVisitor(null));
 
-  if (!visitor) return <CalledGate station="altar" title="Altar" connected={connected} slot={slot} confirmedBy="performer" onArrived={setVisitor} />;
+  if (!visitor) return <CalledGate station="altar" title="Altar" connected={connected} slot={slot} confirmedBy="operator" onArrived={setVisitor} />;
   return <Gate visitor={visitor} connected={connected} showCamera={showCamera} />;
 }
 
