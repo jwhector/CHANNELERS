@@ -4,7 +4,7 @@ import { usePoseLandmarker } from "../lib/pose/usePoseLandmarker";
 import { bodyCoverage, isBodyFramed, landmarksToAngles, motionMetric, poseSimilarity, type PoseVector } from "../lib/pose/angles";
 import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
-import { drawSkeleton } from "../components/poseUI";
+import { drawAura } from "../components/poseUI";
 import { useStationPresence } from "../lib/useStationPresence";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { useDevices } from "../lib/devices";
@@ -167,7 +167,7 @@ function BodyScanCamera({
     if (canvas && video && video.videoWidth && canvas.width !== video.videoWidth) {
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
     }
-    drawSkeleton(canvasRef.current, lms);
+    drawAura(canvasRef.current, lms);
     if (!lms) {
       prevVecRef.current = null; holdStartRef.current = null; updateFramed(0);
       if (armedRef.current) setHoldProgress(0);
