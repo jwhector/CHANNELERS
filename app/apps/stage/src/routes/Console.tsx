@@ -116,7 +116,7 @@ export function Console() {
               <span className="dim">{archLabel(v.archetype)}</span>
               <span className="dim">{milestone(v)}</span>
               <span className="dim">{v.location.state}{v.location.station ? `@${v.location.station}` : ""} · {dwell(v.location.since)}</span>
-              {!v.poseVerifiedAt && <button className="choice" onClick={() => void api.verifyPose(v.id).then(refresh)}>unlock</button>}
+              {!v.poseVerifiedAt && <button className="choice" onClick={() => void api.verifyPose(v.id).then(refresh)}>unlock (override)</button>}
               <select
                 className="choice"
                 value={v.archetype ?? ""}
