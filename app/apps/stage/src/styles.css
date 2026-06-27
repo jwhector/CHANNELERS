@@ -18,6 +18,10 @@ body {
 }
 
 .void { max-width: 760px; margin: 0 auto; padding: 48px 20px; }
+
+/* /perform — one-device tab shell (altar · channel · choreo) */
+.perform-tabs { display: flex; gap: 8px; padding: 12px 20px 0; max-width: 760px; margin: 0 auto; }
+.perform-tabs .choice { text-transform: capitalize; }
 h1 { font-weight: 600; letter-spacing: 0.02em; }
 h3 { margin-top: 32px; }
 .dim { color: var(--dim); }
@@ -76,6 +80,12 @@ header { display: flex; align-items: center; gap: 14px; }
 .choreo-head .head-controls .toggle { margin-left: 0; }
 .choreo-head .head-controls .period { white-space: nowrap; }
 .turns-input { width: 3.25em; }
+
+/* Oracle TTS speed slider (in /choreo + /channel headers). */
+.speed-picker { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); white-space: nowrap; }
+.speed-picker label { display: flex; align-items: center; gap: 6px; }
+.speed-picker input[type="range"] { width: 5.5em; }
+.speed-readout { font-variant-numeric: tabular-nums; min-width: 3.2em; }
 
 .visitors { list-style: none; padding: 0; }
 .visitors .row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
