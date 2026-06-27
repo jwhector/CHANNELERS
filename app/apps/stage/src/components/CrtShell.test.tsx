@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test } from "vitest";
 import { CrtShell } from "./CrtShell";
 
@@ -14,8 +13,7 @@ test("renders children and defaults FX on", () => {
   expect(document.querySelector(".crt")!.getAttribute("data-crt-fx")).toBe("on");
 });
 
-test("toggle button flips the FX attribute", async () => {
-  render(<CrtShell><p>x</p></CrtShell>);
-  await userEvent.click(screen.getByRole("button", { name: /crt/i }));
-  expect(document.querySelector(".crt")!.getAttribute("data-crt-fx")).toBe("off");
-});
+// The CRT FX toggle button is currently commented out in CrtShell (bezel
+// cleanup, commit "Board changes"). The toggle behaviour itself is covered by
+// useCrtFx.test.ts ("toggle flips and persists"). If the button is reinstated,
+// re-add a test that clicks it and asserts data-crt-fx flips to "off".
