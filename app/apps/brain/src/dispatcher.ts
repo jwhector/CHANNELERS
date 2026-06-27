@@ -68,8 +68,10 @@ export function createDispatcher(
   const nowIso = () => new Date().toISOString();
   const ageMs = (iso: string) => Date.now() - Date.parse(iso);
 
-  // A timed group station (e.g. `paper`): kiosk-less, always-online slots, completed by a dwell
-  // timer from Confirm-call instead of a task milestone (spec 2026-06-22).
+  // A kiosk-less group station (e.g. `paper`): always-online slots with no hardware binding.
+  // A group station also listed in `timed` auto-completes on its dwell; otherwise it exits only
+  // by manual Done (markComplete). (rehearsal #17)
+  const isGroup = (s: Station): boolean => (knobs.groupStations ?? []).includes(s);
   const isTimed = (s: Station): boolean => !!knobs.timed?.[s];
   const dwellMs = (s: Station): number => knobs.timed?.[s]?.dwellMs ?? Infinity;
 
@@ -83,7 +85,7 @@ export function createDispatcher(
   }
 
   const slotsOf = (station: Station) => [...slots.values()].filter((s) => s.station === station);
-  const isOnline = (s: SlotState) => isTimed(s.station) || !!s.connId;
+  const isOnline = (s: SlotState) => isGroup(s.station) || isTimed(s.station) || !!s.connId;
   const occupiedVisitorIds = () =>
     new Set([...slots.values()].flatMap((s) => (s.occupant ? [s.occupant.visitorId] : [])));
   const slotOfVisitor = (visitorId: string) =>
@@ -356,6 +358,10 @@ export function createDispatcher(
         }
         continue;
       }
+
+      // ── in_progress: kiosk-less group station with no dwell (paper) ──
+      // Manual checkout only — exits via markComplete (Done). No auto-complete, no stale reap. (#17)
+      if (isGroup(slot.station)) continue;
 
       // ── kiosk in_progress: external milestone completes; stale reaps a hung occupant. ──
       if (completionMilestoneSet(v, slot.station)) {

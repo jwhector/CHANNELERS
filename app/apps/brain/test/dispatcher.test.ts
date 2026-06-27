@@ -177,7 +177,7 @@ describe("flow-health snapshot fields", () => {
     const f2 = fakeBus();
     const d2 = createDispatcher(f2.bus, {
       knobs: { slots: { intake: 0, bodyscan: 1, altar: 0, paper: 1 },
-               timed: { paper: { dwellMs: 300_000 } }, introHoldMs: 0 } as any,
+               groupStations: ["paper"], introHoldMs: 0 } as any,
       autoStart: false,
     });
     f2.hello("bodyscan", "kb", "cb");        // bodyscan idle
@@ -348,13 +348,13 @@ describe("snapshot surfaces occupant flags + noShowMs", () => {
   });
 });
 
-describe("paper: timed group station", () => {
+describe("paper: manual-checkout group station", () => {
   const P_KNOBS = {
     slots: { intake: 0, bodyscan: 0, altar: 0, paper: 2 },
-    timed: { paper: { dwellMs: 300_000 } },
-    // Timed stations now share the kiosk lifecycle: called → arrive → dwell.
+    // Kiosk-less group station with NO dwell: exits only via manual Done (markComplete). (#17)
     // noShowAutoRepool ON so a called-but-never-arrived paper occupant is repooled
     // at noShowMs(90s) rather than left hanging.
+    groupStations: ["paper"],
     introHoldMs: 0, tickMs: 5_000, noShowAutoRepool: true,
   };
   let pf: ReturnType<typeof fakeBus>;
@@ -379,7 +379,7 @@ describe("paper: timed group station", () => {
     expect(q?.eligible).toContain("paper");
   });
 
-  it("confirm calls a paper occupant; arrival starts the dwell", () => {
+  it("confirm → arrive moves a paper occupant to in_progress", () => {
     const v = store.register(771002);
     pd.kick(); // intro hold 0 → fill
     const pending = pd.snapshot().slots.find((x) => x.station === "paper" && x.occupant);
@@ -391,71 +391,42 @@ describe("paper: timed group station", () => {
     expect(pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
   });
 
-  it("completes a paper occupant dwellMs after ARRIVAL: stamps paperAt, frees, repools", () => {
+  it("does NOT auto-complete an in-progress paper occupant on a timer (manual only)", () => {
     const v = store.register(772001);
     pd.kick();
     pd.confirm(v.id);
-    pd.arrive(v.id); // dwell starts at arrival
-    vi.advanceTimersByTime(300_000 + 1_000);
-    pd.kick(); // reconcile
-    expect(store.get(v.id)?.paperAt).toBeTruthy();
-    expect(store.get(v.id)?.location.state).toBe("waiting");
-    expect(pd.snapshot().slots.some((x) => x.occupant?.visitorId === v.id)).toBe(false);
-  });
-
-  it("does not complete before dwellMs after arrival", () => {
-    const v = store.register(772002);
-    pd.kick();
-    pd.confirm(v.id);
     pd.arrive(v.id);
-    vi.advanceTimersByTime(120_000); // < dwell
-    pd.kick();
+    vi.advanceTimersByTime(600_000); // 10 min — well past any old dwell
+    pd.kick(); // reconcile
     expect(store.get(v.id)?.paperAt).toBeUndefined();
     expect(pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
   });
 
-  it("applies the no-show timer to a called timed occupant that never arrives", () => {
+  it("markComplete (Done) stamps paperAt and frees the slot", () => {
+    const v = store.register(772004);
+    pd.kick();
+    pd.confirm(v.id);
+    pd.arrive(v.id);
+    expect(pd.markComplete(v.id)).toBe(true);
+    expect(store.get(v.id)?.paperAt).toBeTruthy();
+    expect(pd.snapshot().slots.some((x) => x.occupant?.visitorId === v.id)).toBe(false);
+  });
+
+  it("still applies the no-show timer to a called-but-never-arrived paper occupant", () => {
     const v = store.register(772003);
     pd.kick();
     pd.confirm(v.id); // called, NOT arrived
-    vi.advanceTimersByTime(90_000 + 1_000); // > noShowMs, dwell never started
+    vi.advanceTimersByTime(90_000 + 1_000); // > noShowMs
     pd.kick();
     expect(store.get(v.id)?.paperAt).toBeUndefined(); // no false completion
     expect(store.get(v.id)?.location.state).toBe("waiting"); // repooled by no-show (noShowAutoRepool)
-    // the original called occupant was reaped; re-dispatch may re-pin it as a fresh pending,
-    // but it must never have progressed past called.
     const occ = pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant;
     expect(occ?.phase).not.toBe("in_progress");
     expect(occ?.phase).not.toBe("called");
   });
 
-  it("a called timed occupant past the dwell is NOT completed if it never arrived (no false paperAt)", () => {
-    const f2 = fakeBus();
-    const d2 = createDispatcher(f2.bus, {
-      knobs: { ...P_KNOBS, noShowAutoRepool: false, noShowMs: 600_000 } as any,
-      autoStart: false,
-    });
-    const v = store.register(772010);
-    d2.kick();
-    d2.confirm(v.id); // called, never arrived
-    vi.advanceTimersByTime(300_000 + 1_000); // past dwell, but < noShowMs
-    d2.kick();
-    expect(store.get(v.id)?.paperAt).toBeUndefined(); // dwell does NOT run for an absent occupant
-    expect(d2.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("called");
-    d2.stop();
-  });
-
-  it("markComplete stamps paperAt for a paper occupant", () => {
-    const v = store.register(772004);
-    pd.kick();
-    pd.confirm(v.id);
-    expect(pd.markComplete(v.id)).toBe(true);
-    expect(store.get(v.id)?.paperAt).toBeTruthy();
-  });
-
-  it("exposes the paper dwell in the snapshot for the operator countdown", () => {
-    expect(pd.snapshot().timedDwellMs?.paper).toBe(300_000);
-    expect(pd.snapshot().timedDwellMs?.intake).toBeUndefined();
+  it("does not list paper in timedDwellMs (it is a manual group station)", () => {
+    expect(pd.snapshot().timedDwellMs?.paper).toBeUndefined();
   });
 });
 

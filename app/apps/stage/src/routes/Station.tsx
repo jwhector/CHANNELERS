@@ -57,7 +57,12 @@ function StationContainer({ station }: { station: StationName }) {
       busyId={busyId}
       onArrive={(id) => void run(id, () => api.arrive(id))}
       onRelease={(id) => void run(id, () => api.dispatch.repool(id))}
-      onComplete={(id) => void run(id, () => api.dispatch.complete(id))}
+      // Manual checkout (Done): paper (always — its only exit) and any timed station (early-complete).
+      onComplete={
+        station === "paper" || state?.timedDwellMs?.[station] !== undefined
+          ? (id) => void run(id, () => api.dispatch.complete(id))
+          : undefined
+      }
       onCapture={station === "bodyscan" ? (id) => void run(id, () => api.captureBodyscan(id)) : undefined}
       cameraSlots={station === "bodyscan" ? slots.filter((s) => s.online && s.cameras && s.cameras.length > 0) : undefined}
       onSetCamera={station === "bodyscan" ? (kioskId, deviceId) => void api.setBodyscanCamera(kioskId, deviceId) : undefined}
@@ -134,10 +139,10 @@ export function StationOpsView({
                   Capture pose
                 </button>
               )}
-              {dwellMs !== undefined && (
+              {onComplete && (
                 <>
                   <button className="submit" disabled={busyId === o.visitorId}
-                    onClick={() => onComplete?.(o.visitorId)}>
+                    onClick={() => onComplete(o.visitorId)}>
                     Done
                   </button>
                   <button className="ghost" disabled={busyId === o.visitorId}

@@ -34,7 +34,7 @@ test("shows a no-show warning when the occupant is flagged", () => {
   expect(screen.getByText(/no-show/i)).toBeInTheDocument();
 });
 
-test("a timed in-progress occupant shows Done and fires onComplete", () => {
+test("a paper in-progress occupant shows Done and fires onComplete", () => {
   const onComplete = vi.fn();
   const slot: Slot = {
     id: "paper-0", station: "paper", online: true,
@@ -43,14 +43,13 @@ test("a timed in-progress occupant shows Done and fires onComplete", () => {
   render(
     <StationOpsView
       station="paper" connected called={[]} inProgress={[slot]}
-      dwellMs={300_000} busyId={null}
-      onArrive={() => {}} onRelease={() => {}} onComplete={onComplete} />,
+      busyId={null} onArrive={() => {}} onRelease={() => {}} onComplete={onComplete} />,
   );
   screen.getByRole("button", { name: /done/i }).click();
   expect(onComplete).toHaveBeenCalledWith("v9");
 });
 
-test("a non-timed in-progress occupant shows no Done button", () => {
+test("an in-progress occupant with no onComplete shows no Done button", () => {
   const slot: Slot = {
     id: "bodyscan-0", station: "bodyscan", online: true,
     occupant: { visitorId: "v1", number: 1, phase: "in_progress", since: "" },
@@ -58,7 +57,7 @@ test("a non-timed in-progress occupant shows no Done button", () => {
   render(
     <StationOpsView
       station="bodyscan" connected called={[]} inProgress={[slot]}
-      busyId={null} onArrive={() => {}} onRelease={() => {}} onComplete={() => {}} />,
+      busyId={null} onArrive={() => {}} onRelease={() => {}} />,
   );
   expect(screen.queryByRole("button", { name: /done/i })).toBeNull();
 });
