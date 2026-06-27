@@ -64,6 +64,19 @@ header { display: flex; align-items: center; gap: 14px; }
 .led.on { background: #3cff7a; }
 .toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); margin-left: auto; }
 
+/* /choreo control panel: title left, controls wrap on the right (no horizontal overflow). */
+.choreo-head { flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.choreo-head .head-title { display: flex; align-items: center; gap: 12px; }
+.choreo-head .head-controls {
+  margin-left: auto;
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 8px 16px;
+}
+/* Cancel the global per-toggle auto-push so the controls sit in an even row. */
+.choreo-head .head-controls .toggle { margin-left: 0; }
+.choreo-head .head-controls .period { white-space: nowrap; }
+.turns-input { width: 3.25em; }
+
 .visitors { list-style: none; padding: 0; }
 .visitors .row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .visitors code { color: var(--dim); }
@@ -80,6 +93,14 @@ pre {
 }
 .caret { color: var(--accent); animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
+
+/* /choreo: shown while the dancers are channelling the oracle's voice (mimic mode). */
+.mimic-banner {
+  margin: 16px 0 -4px; padding: 8px 14px; border-radius: 8px;
+  background: var(--accent); color: #0b0e12;
+  font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  animation: blink 1.4s steps(2) infinite;
+}
 
 .transcript { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
 .bubble { display: flex; }
@@ -181,3 +202,19 @@ pre {
 .as-val { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
 .as-check { display: flex; align-items: center; gap: 6px; padding: 3px 0; color: var(--ink); cursor: pointer; }
 .altered-state h4 .as-check { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--dim); font-weight: 400; }
+
+/* /station — per-station performer arrival-confirm view */
+.stationops .ops-group { margin: 1.5rem 0; }
+.stationops .ops-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; }
+.stationops .ops-row.warn { color: #f5a; }
+.stationops .ops-num { font-variant-numeric: tabular-nums; font-size: 1.25rem; min-width: 4ch; }
+.stationops .ops-flag { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.stationops .ghost { background: transparent; border: 1px solid currentColor; opacity: 0.7; }
+.stationops select { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
+.pool-flag.hold { border-color: var(--dim); color: var(--dim); }
+
+/* /dispatch — operator flow strip */
+.flow-strip { display: flex; gap: 1rem; align-items: center; padding: 0.4rem 0; }
+.flow-strip .ghost { background: transparent; border: 1px solid currentColor; opacity: 0.7; }
+.flow-strip .flow-stat { font-size: 0.85rem; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.flow-strip .flow-stat.warn { color: #e8a33d; opacity: 1; font-weight: 600; }

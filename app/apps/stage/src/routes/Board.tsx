@@ -1,19 +1,23 @@
 import { useEffect, useState } from "react";
 import type { DispatchState, WsServerMsg } from "@channelers/shared";
+import { STATION_LABEL } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
+import "../styles/board.css";
 
-const STATION_LABEL: Record<string, string> = {
-  intake: "INTAKE",
-  bodyscan: "BODY SCAN",
-  altar: "ALTAR",
-};
+type Tone = "now" | "at" | "wait" | "done";
 
-/** Public lobby display — the called visitors, big. Updates live off dispatch.state. */
+/** One roster line: a visitor number and where they are. */
+type Row = { id: string; number: number; loc: string; tone: Tone };
+
+const pad3 = (n: number) => String(n).padStart(3, "0");
+
+/** Public lobby roster — every visitor number and their current station, as one
+ *  bare terminal. `called` = NOW SERVING (highlighted). Lives off dispatch.state. */
 export function Board() {
   const [state, setState] = useState<DispatchState | null>(null);
 
-  const { connected } = useBrainSocket((m: WsServerMsg) => {
+  useBrainSocket((m: WsServerMsg) => {
     if (m.kind === "dispatch.state") setState(m.state);
   });
 
@@ -21,27 +25,46 @@ export function Board() {
     void api.dispatch.state().then(setState).catch(() => {});
   }, []);
 
-  // Derive the call list from slots: a visitor in the `called` phase sits at its slot's station.
-  const board = (state?.slots ?? [])
-    .filter((s) => s.occupant?.phase === "called")
-    .map((s) => ({ id: s.occupant!.visitorId, number: s.occupant!.number, station: s.station }));
+  const fromSlots: Row[] = (state?.slots ?? [])
+    .filter((s) => s.occupant)
+    .map((s) => {
+      const o = s.occupant!;
+      const loc = STATION_LABEL[s.station];
+      return { id: o.visitorId, number: o.number, loc, tone: o.phase === "called" ? "now" : "at" };
+    });
+
+  const fromQueue: Row[] = (state?.queue ?? []).map((q) => ({
+    id: q.id,
+    number: q.number,
+    loc: q.heldUntil ?? q.holdReason ? "ON HOLD" : "WAITING",
+    tone: "wait",
+  }));
+
+  const fromDone: Row[] = (state?.completed ?? []).map((c) => ({
+    id: c.id,
+    number: c.number,
+    loc: "DONE",
+    tone: "done",
+  }));
+
+  const rows = [...fromSlots, ...fromQueue, ...fromDone].sort((a, b) => a.number - b.number);
 
   return (
-    <main className="void board">
-      <header>
-        <h1>NOW SERVING</h1>
-        <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
-      </header>
-      {board.length === 0 && <p className="dim">Please wait to be called.</p>}
-      <ul className="board-calls">
-        {board.map((c) => (
-          <li key={c.id} className="board-call">
-            <span className="board-number">#{c.number}</span>
-            <span className="board-arrow">→</span>
-            <span className="board-station">{STATION_LABEL[c.station] ?? c.station}</span>
-          </li>
-        ))}
-      </ul>
+    <main className="depboard">
+      <div className="bd-term">
+        {rows.length === 0 ? (
+          <p className="bd-empty">awaiting records</p>
+        ) : (
+          <div className="bd-rows">
+            {rows.map((r) => (
+              <div key={r.id} className={`bd-row ${r.tone}`}>
+                <span className="bd-num">{pad3(r.number)}</span>
+                <span className="bd-loc">{r.loc}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </main>
   );
 }

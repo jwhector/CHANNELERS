@@ -9,6 +9,8 @@ import {
 } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
+import { altarReadyNumbers } from "../lib/pluribus";
+import { PluribusBroadcast } from "../components/PluribusBroadcast";
 
 const dwell = (since?: string) =>
   since ? `${Math.max(0, Math.round((Date.now() - Date.parse(since)) / 1000))}s` : "—";
@@ -68,6 +70,7 @@ export function Console() {
     channelling: roster.length,
     done: visitors.filter((v) => v.sessionEndAt).length,
   };
+  const ready = altarReadyNumbers(visitors);
 
   return (
     <main className="void console master">
@@ -98,6 +101,9 @@ export function Console() {
           ))}
         </ul>
       )}
+
+      <h3>Broadcast</h3>
+      <PluribusBroadcast numbers={ready} storageKey="out.console" />
 
       {/* ── Panel 1: visitors + controls ── */}
       <h3>Visitors ({visitors.length})</h3>

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../src/app";
 import type { FastifyInstance } from "fastify";
+import { DEFAULT_CHOREO_CONFIG } from "@channelers/shared";
 import WebSocket from "ws";
 
 let app: FastifyInstance;
@@ -230,13 +231,14 @@ describe("choreo first-pass + config", () => {
     expect(score.length).toBeGreaterThan(0);
   });
 
-  it("GET/POST /api/choreo/config round-trips the flag", async () => {
-    const set = await app.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: false } });
-    expect(set.json().reactToOracle).toBe(false);
+  it("GET/POST /api/choreo/config round-trips the full config", async () => {
+    const payload = { reactToOracle: false, mimicManual: true, mimicCadenceEnabled: true, mimicEveryNTurns: 5 };
+    const set = await app.inject({ method: "POST", url: "/api/choreo/config", payload });
+    expect(set.json()).toMatchObject(payload);
     const get = await app.inject({ method: "GET", url: "/api/choreo/config" });
-    expect(get.json().reactToOracle).toBe(false);
+    expect(get.json()).toMatchObject(payload);
     // restore default so later tests see the spec-default behavior
-    await app.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
+    await app.inject({ method: "POST", url: "/api/choreo/config", payload: { ...DEFAULT_CHOREO_CONFIG } });
   });
 });
 
@@ -296,6 +298,44 @@ describe("choreo fan-out (both timings)", () => {
     expect(seen.has("choreo.done")).toBe(true);
     await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { reactToOracle: true } });
   });
+
+  /** Say one line and resolve once the turn settles (oracle.done + the choreo.mimic payload). */
+  function sayAndCollectMimic(visitorId: string): Promise<{ kinds: Set<string>; mimic: any }> {
+    return new Promise((resolve, reject) => {
+      const sock = new WebSocket(`ws://127.0.0.1:${cPort}/ws`);
+      const seen = new Set<string>();
+      let mimic: any = null;
+      let sid = "";
+      const timer = setTimeout(() => { sock.close(); resolve({ kinds: seen, mimic }); }, 4000);
+      sock.on("open", () => sock.send(JSON.stringify({ kind: "session.start", visitorId })));
+      sock.on("message", (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.kind === "session.started" && m.visitorId === visitorId) {
+          sid = m.sessionId;
+          sock.send(JSON.stringify({ kind: "session.say", sessionId: sid, text: "where do I go" }));
+        }
+        if (m.sessionId && m.sessionId === sid) {
+          seen.add(m.kind);
+          if (m.kind === "choreo.mimic") mimic = m;
+        }
+        if (seen.has("oracle.done") && mimic) { clearTimeout(timer); sock.close(); resolve({ kinds: seen, mimic }); }
+      });
+      sock.on("error", (e) => { clearTimeout(timer); reject(e); });
+    });
+  }
+
+  it("manual mimic suppresses cues and emits choreo.mimic with the oracle line + archetype", async () => {
+    await cApp.inject({ method: "POST", url: "/api/choreo/config",
+      payload: { ...DEFAULT_CHOREO_CONFIG, mimicManual: true } });
+    const { kinds, mimic } = await sayAndCollectMimic(await oracleReady(9403));
+    expect(kinds.has("oracle.done")).toBe(true);
+    expect(kinds.has("choreo.mimic")).toBe(true);
+    expect(kinds.has("choreo.delta")).toBe(false); // choreographer suppressed
+    expect(kinds.has("choreo.done")).toBe(false);
+    expect(mimic.archetype).toBe("tree");
+    expect(typeof mimic.text).toBe("string");
+    await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { ...DEFAULT_CHOREO_CONFIG } });
+  });
 });
 
 describe("paper feed", () => {
@@ -314,5 +354,71 @@ describe("paper feed", () => {
   it("400s a feed with no image", async () => {
     const res = await app.inject({ method: "POST", url: "/api/paper/feed", payload: {} });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe("bodyscan capture relay", () => {
+  // Own listening app so a real socket can observe the broadcast (see divination/choreo blocks).
+  let bApp: FastifyInstance;
+  let bPort: number;
+  beforeAll(async () => {
+    bApp = await buildApp();
+    await bApp.listen({ host: "127.0.0.1", port: 0 });
+    bPort = (bApp.server.address() as { port: number }).port;
+  });
+  afterAll(async () => { await bApp.close(); });
+
+  it("400s a capture with no visitorId", async () => {
+    const res = await bApp.inject({ method: "POST", url: "/api/bodyscan/capture", payload: {} });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("broadcasts a station.cmd capture to connected screens", async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${bPort}/ws`);
+    const got = new Promise<{ kind: string; station: string; action: string; visitorId: string }>((resolve, reject) => {
+      const timer = setTimeout(() => { ws.close(); reject(new Error("timeout waiting for station.cmd")); }, 3000);
+      ws.on("message", (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.kind === "station.cmd") { clearTimeout(timer); resolve(m); }
+      });
+      ws.on("error", reject);
+    });
+    await new Promise<void>((r) => ws.on("open", () => r()));
+    const res = await bApp.inject({ method: "POST", url: "/api/bodyscan/capture", payload: { visitorId: "v42" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+    expect(await got).toEqual({ kind: "station.cmd", station: "bodyscan", action: "capture", visitorId: "v42" });
+    ws.close();
+  });
+
+  it("400s a camera report with no kioskId", async () => {
+    const res = await bApp.inject({ method: "POST", url: "/api/bodyscan/cameras", payload: { cameras: [] } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("accepts a camera report", async () => {
+    const res = await bApp.inject({
+      method: "POST", url: "/api/bodyscan/cameras",
+      payload: { kioskId: "kioskX", cameras: [{ id: "cam-a", label: "Front" }], activeId: "cam-a" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+  });
+
+  it("broadcasts a station.cmd set-camera to connected screens", async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${bPort}/ws`);
+    const got = new Promise<{ kind: string; station: string; action: string; kioskId: string; deviceId: string }>((resolve, reject) => {
+      const timer = setTimeout(() => { ws.close(); reject(new Error("timeout waiting for set-camera")); }, 3000);
+      ws.on("message", (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.kind === "station.cmd" && m.action === "set-camera") { clearTimeout(timer); resolve(m); }
+      });
+      ws.on("error", reject);
+    });
+    await new Promise<void>((r) => ws.on("open", () => r()));
+    const res = await bApp.inject({ method: "POST", url: "/api/bodyscan/camera", payload: { kioskId: "kioskX", deviceId: "cam-b" } });
+    expect(res.statusCode).toBe(200);
+    expect(await got).toEqual({ kind: "station.cmd", station: "bodyscan", action: "set-camera", kioskId: "kioskX", deviceId: "cam-b" });
+    ws.close();
   });
 });

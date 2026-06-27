@@ -29,7 +29,7 @@ function fakeBus() {
 
 // Counts chosen to exercise multi-slot + singletons; engine must derive everything from these.
 const SLOTS = { intake: 3, bodyscan: 2, altar: 1 } as const;
-const KNOBS = { slots: SLOTS, K: 1, warmupMs: 0, graceMs: 20_000, tickMs: 5_000 };
+const KNOBS = { slots: SLOTS, introHoldMs: 0, graceMs: 20_000, tickMs: 5_000 };
 
 let f: ReturnType<typeof fakeBus>;
 let d: ReturnType<typeof createDispatcher>;
@@ -49,7 +49,7 @@ describe("slot derivation from config counts", () => {
       ["altar-0", "bodyscan-0", "bodyscan-1", "intake-0", "intake-1", "intake-2"],
     );
     expect(s.slots.every((x) => x.online === false && !x.kioskId)).toBe(true);
-    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false, paper: false });
+    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false, paper: false, waitingroom: false });
   });
 });
 
@@ -81,6 +81,14 @@ describe("kiosk binding", () => {
     expect(d.snapshot().slots.find((x) => x.id === again)!.online).toBe(true);
   });
 
+  it("attaches reported cameras (and the active id) to the kiosk's slot", () => {
+    f.hello("bodyscan", "kioskCam", "connCam");
+    d.setCameras("kioskCam", [{ id: "cam-a", label: "Front" }, { id: "cam-b", label: "Overhead" }], "cam-a");
+    const slot = d.snapshot().slots.find((x) => x.kioskId === "kioskCam");
+    expect(slot?.cameras).toEqual([{ id: "cam-a", label: "Front" }, { id: "cam-b", label: "Overhead" }]);
+    expect(slot?.activeCameraId).toBe("cam-a");
+  });
+
   it("flags a surplus screen when no slot is free (altar has 1)", () => {
     f.hello("altar", "kioskD", "connD");
     f.hello("altar", "kioskE", "connE"); // no free altar slot
@@ -105,6 +113,97 @@ describe("socket-drop → slot offline after grace", () => {
 });
 
 const NUM = () => 500000 + Math.floor(Math.random() * 400000);
+
+describe("fill priority: scarce gate first", () => {
+  it("pins a single waiting visitor to bodyscan, not intake", () => {
+    f.hello("intake", "ki", "ci");    // intake-0 online
+    f.hello("bodyscan", "kb", "cb");  // bodyscan-0 online
+    const v = store.register(NUM());
+    d.kick();
+    const slot = d.snapshot().slots.find((s) => s.occupant?.visitorId === v.id);
+    expect(slot?.station).toBe("bodyscan");
+  });
+
+  it("with two waiting, bodyscan and intake each take one", () => {
+    f.hello("intake", "ki", "ci");
+    f.hello("bodyscan", "kb", "cb");
+    store.register(NUM());
+    store.register(NUM());
+    d.kick();
+    const stations = d.snapshot().slots
+      .filter((s) => s.occupant).map((s) => s.station).sort();
+    expect(stations).toEqual(["bodyscan", "intake"]);
+  });
+});
+
+describe("altar gate", () => {
+  it("does not dispatch to a closed altar; setAltarOpen opens it", () => {
+    f.hello("altar", "ka", "ca"); // altar-0 online
+    const v = store.register(NUM());
+    store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] }); // intakeAt
+    store.setPoseTemplate(v.id, { angles: [0], weights: [1] });          // poseAt
+    store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
+
+    d.kick();
+    expect(d.snapshot().altarOpen).toBe(false);
+    expect(d.snapshot().slots.find((s) => s.station === "altar")?.occupant).toBeUndefined();
+
+    d.setAltarOpen(true);
+    expect(d.snapshot().altarOpen).toBe(true);
+    expect(d.snapshot().slots.find((s) => s.station === "altar")?.occupant?.visitorId).toBe(v.id);
+  });
+});
+
+describe("flow-health snapshot fields", () => {
+  it("counts altar-ready waiting visitors and reports bodyscan empty when no one needs a scan", () => {
+    f.hello("bodyscan", "kb", "cb"); // online + idle
+    let s = d.snapshot();
+    expect(s.bodyscanIdle).toBe(true);
+    expect(s.bodyscanBlocked).toBe("empty");
+    expect(s.altarReady).toBe(0);
+
+    const v = store.register(NUM());
+    store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] });
+    store.setPoseTemplate(v.id, { angles: [0], weights: [1] }); // posed → altar-ready
+    store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
+    s = d.snapshot();
+    expect(s.altarReady).toBe(1);
+    expect(s.altarReadyList.map((r) => r.number)).toContain(v.number);
+    expect(s.altarReadyList.find((r) => r.number === v.number)?.name).toBe("Jo");
+    expect(s.bodyscanBlocked).toBe("empty"); // posed person is not a bodyscan candidate
+  });
+
+  it("reports 'soaking' when the only unposed person is in a timed station while bodyscan is idle", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { slots: { intake: 0, bodyscan: 1, altar: 0, paper: 0, waitingroom: 1 },
+               timed: { waitingroom: { dwellMs: 300_000 } }, introHoldMs: 0 } as any,
+      autoStart: false,
+    });
+    f2.hello("bodyscan", "kb", "cb");        // bodyscan idle
+    const v = store.register(NUM());
+    d2.checkin(v.number, "waitingroom");     // unposed v forced in_progress @ waitingroom
+    const s = d2.snapshot();
+    expect(s.bodyscanIdle).toBe(true);
+    expect(s.bodyscanBlocked).toBe("soaking");
+    d2.stop();
+  });
+
+  it("reports 'held' when the only unposed candidate is on an intro hold", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { slots: { intake: 0, bodyscan: 1, altar: 0, paper: 0, waitingroom: 0 },
+               introHoldMs: 600_000 } as any,
+      autoStart: false,
+    });
+    f2.hello("bodyscan", "kb", "cb");
+    store.register(NUM()); // fresh, unposed, held by the 10-min intro hold
+    const s = d2.snapshot();
+    expect(s.bodyscanIdle).toBe(true);
+    expect(s.bodyscanBlocked).toBe("held");
+    d2.stop();
+  });
+});
 
 describe("pinned dispatch only fills free ONLINE slots", () => {
   it("does not dispatch when no slot is online", () => {
@@ -164,6 +263,20 @@ describe("recovery", () => {
     d2.stop();
   });
 
+  it("autoArrive advances a called occupant to in_progress", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { ...KNOBS, autoConfirm: true, autoArrive: true } as any,
+      autoStart: false,
+    });
+    f2.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); // fill → pending → (autoConfirm in fill) → called
+    d2.kick(); // reconcile → autoArrive → in_progress
+    expect(store.get(v.id)?.location.state).toBe("in_progress");
+    d2.stop();
+  });
+
   it("flags a no-show by default", () => {
     const d2 = createDispatcher(f.bus, { knobs: { ...KNOBS, noShowMs: 90_000 }, autoStart: false });
     f.hello("intake", "kA", "cA");
@@ -216,13 +329,33 @@ describe("operator backstops", () => {
   });
 });
 
+describe("snapshot surfaces occupant flags + noShowMs", () => {
+  it("exposes a no-show flag on a called occupant and the noShowMs threshold", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { ...KNOBS, noShowMs: 90_000, noShowAutoRepool: false } as any,
+      autoStart: false,
+    });
+    f2.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); d2.confirm(v.id); // called
+    vi.setSystemTime(new Date("2026-06-21T00:02:00.000Z")); // > noShowMs
+    d2.kick();
+    const occ = d2.snapshot().slots.find((s) => s.occupant?.visitorId === v.id)?.occupant;
+    expect(occ?.flags?.some((fl) => fl.type === "no-show")).toBe(true);
+    expect(d2.snapshot().noShowMs).toBe(90_000);
+    d2.stop();
+  });
+});
+
 describe("paper: timed group station", () => {
   const P_KNOBS = {
     slots: { intake: 0, bodyscan: 0, altar: 0, paper: 2 },
     timed: { paper: { dwellMs: 300_000 } },
-    // noShowAutoRepool ON proves the timed branch fully bypasses no-show: without it a paper
-    // occupant would be reaped at noShowMs(90s), well before the 300s dwell.
-    K: 1, warmupMs: 0, tickMs: 5_000, noShowAutoRepool: true,
+    // Timed stations now share the kiosk lifecycle: called → arrive → dwell.
+    // noShowAutoRepool ON so a called-but-never-arrived paper occupant is repooled
+    // at noShowMs(90s) rather than left hanging.
+    introHoldMs: 0, tickMs: 5_000, noShowAutoRepool: true,
   };
   let pf: ReturnType<typeof fakeBus>;
   let pd: ReturnType<typeof createDispatcher>;
@@ -246,21 +379,23 @@ describe("paper: timed group station", () => {
     expect(q?.eligible).toContain("paper");
   });
 
-  it("dispatches a waiting visitor into a paper slot (no kiosk), confirm starts the dwell", () => {
+  it("confirm calls a paper occupant; arrival starts the dwell", () => {
     const v = store.register(771002);
-    pd.kick(); // warmup K=1 met → fill
+    pd.kick(); // intro hold 0 → fill
     const pending = pd.snapshot().slots.find((x) => x.station === "paper" && x.occupant);
     expect(pending?.occupant?.phase).toBe("pending");
     expect(pd.confirm(v.id)).toBe(true);
-    const called = pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id);
-    expect(called?.occupant?.phase).toBe("called");
     expect(store.get(v.id)?.location).toMatchObject({ state: "called", station: "paper" });
+    expect(pd.arrive(v.id)).toBe(true);
+    expect(store.get(v.id)?.location).toMatchObject({ state: "in_progress", station: "paper" });
+    expect(pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
   });
 
-  it("completes a paper occupant after dwellMs: stamps paperAt, frees the slot, repools", () => {
+  it("completes a paper occupant dwellMs after ARRIVAL: stamps paperAt, frees, repools", () => {
     const v = store.register(772001);
     pd.kick();
-    pd.confirm(v.id); // called → dwell starts from now
+    pd.confirm(v.id);
+    pd.arrive(v.id); // dwell starts at arrival
     vi.advanceTimersByTime(300_000 + 1_000);
     pd.kick(); // reconcile
     expect(store.get(v.id)?.paperAt).toBeTruthy();
@@ -268,26 +403,46 @@ describe("paper: timed group station", () => {
     expect(pd.snapshot().slots.some((x) => x.occupant?.visitorId === v.id)).toBe(false);
   });
 
-  it("does not complete before dwellMs", () => {
+  it("does not complete before dwellMs after arrival", () => {
     const v = store.register(772002);
     pd.kick();
     pd.confirm(v.id);
+    pd.arrive(v.id);
     vi.advanceTimersByTime(120_000); // < dwell
     pd.kick();
     expect(store.get(v.id)?.paperAt).toBeUndefined();
-    expect(pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("called");
+    expect(pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
   });
 
-  it("never applies the no-show timer to a timed station", () => {
+  it("applies the no-show timer to a called timed occupant that never arrives", () => {
     const v = store.register(772003);
     pd.kick();
-    pd.confirm(v.id);
-    vi.advanceTimersByTime(100_000); // > noShowMs(90s) but < dwell(300s)
+    pd.confirm(v.id); // called, NOT arrived
+    vi.advanceTimersByTime(90_000 + 1_000); // > noShowMs, dwell never started
     pd.kick();
+    expect(store.get(v.id)?.paperAt).toBeUndefined(); // no false completion
+    expect(store.get(v.id)?.location.state).toBe("waiting"); // repooled by no-show (noShowAutoRepool)
+    // the original called occupant was reaped; re-dispatch may re-pin it as a fresh pending,
+    // but it must never have progressed past called.
     const occ = pd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant;
-    expect(occ?.phase).toBe("called"); // still there, not reaped, not flagged
-    const q = pd.snapshot().queue.find((e) => e.number === 772003);
-    expect(q).toBeUndefined(); // not back in the waiting pool
+    expect(occ?.phase).not.toBe("in_progress");
+    expect(occ?.phase).not.toBe("called");
+  });
+
+  it("a called timed occupant past the dwell is NOT completed if it never arrived (no false paperAt)", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { ...P_KNOBS, noShowAutoRepool: false, noShowMs: 600_000 } as any,
+      autoStart: false,
+    });
+    const v = store.register(772010);
+    d2.kick();
+    d2.confirm(v.id); // called, never arrived
+    vi.advanceTimersByTime(300_000 + 1_000); // past dwell, but < noShowMs
+    d2.kick();
+    expect(store.get(v.id)?.paperAt).toBeUndefined(); // dwell does NOT run for an absent occupant
+    expect(d2.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("called");
+    d2.stop();
   });
 
   it("markComplete stamps paperAt for a paper occupant", () => {
@@ -301,5 +456,110 @@ describe("paper: timed group station", () => {
   it("exposes the paper dwell in the snapshot for the operator countdown", () => {
     expect(pd.snapshot().timedDwellMs?.paper).toBe(300_000);
     expect(pd.snapshot().timedDwellMs?.intake).toBeUndefined();
+  });
+});
+
+describe("waitingroom: timed group station (10 slots, 5-min dwell)", () => {
+  const W_KNOBS = {
+    slots: { intake: 0, bodyscan: 0, altar: 0, paper: 0, waitingroom: 10 },
+    timed: { waitingroom: { dwellMs: 300_000 } },
+    introHoldMs: 0, tickMs: 5_000, noShowAutoRepool: true,
+  };
+  let wf: ReturnType<typeof fakeBus>;
+  let wd: ReturnType<typeof createDispatcher>;
+  beforeEach(() => {
+    wf = fakeBus();
+    wd = createDispatcher(wf.bus, { knobs: W_KNOBS as any, autoStart: false });
+  });
+  afterEach(() => wd.stop());
+
+  it("derives 10 waitingroom slots that are always online without any kiosk", () => {
+    const s = wd.snapshot();
+    const room = s.slots.filter((x) => x.station === "waitingroom");
+    expect(room.length).toBe(10);
+    expect(room.every((x) => x.online === true && !x.kioskId)).toBe(true);
+    expect(s.stationsOnline.waitingroom).toBe(true);
+  });
+
+  it("a fresh waiting visitor is eligible for waitingroom", () => {
+    store.register(881001);
+    const q = wd.snapshot().queue.find((e) => e.number === 881001);
+    expect(q?.eligible).toContain("waitingroom");
+  });
+
+  it("completes a waitingroom occupant 5 min after ARRIVAL: stamps waitingRoomAt, frees, repools", () => {
+    const v = store.register(882001);
+    wd.kick();
+    wd.confirm(v.id);
+    wd.arrive(v.id); // hourglass starts at confirmed arrival
+    vi.advanceTimersByTime(300_000 + 1_000);
+    wd.kick(); // reconcile
+    expect(store.get(v.id)?.waitingRoomAt).toBeTruthy();
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    expect(wd.snapshot().slots.some((x) => x.occupant?.visitorId === v.id)).toBe(false);
+  });
+
+  it("does not complete before the dwell elapses", () => {
+    const v = store.register(882002);
+    wd.kick();
+    wd.confirm(v.id);
+    wd.arrive(v.id);
+    vi.advanceTimersByTime(120_000); // < dwell
+    wd.kick();
+    expect(store.get(v.id)?.waitingRoomAt).toBeUndefined();
+    expect(wd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
+  });
+
+  it("exposes the waitingroom dwell in the snapshot for the operator countdown", () => {
+    expect(wd.snapshot().timedDwellMs?.waitingroom).toBe(300_000);
+  });
+});
+
+describe("per-visitor holds (intro wait + no-show cooldown)", () => {
+  it("holds a fresh visitor out of dispatch until introHoldMs elapses, surfaced in the queue", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, { knobs: { ...KNOBS, introHoldMs: 60_000 } as any, autoStart: false });
+    f2.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); // within the intro hold → no dispatch
+    expect(d2.snapshot().slots.every((s) => !s.occupant)).toBe(true);
+    const held = d2.snapshot().queue.find((e) => e.id === v.id);
+    expect(held?.holdReason).toBe("intro");
+    expect(held?.heldUntil).toBeTruthy();
+    vi.setSystemTime(new Date("2026-06-21T00:01:01.000Z")); // > 60s after createdAt
+    d2.kick();
+    expect(d2.snapshot().slots.some((s) => s.occupant?.visitorId === v.id)).toBe(true);
+    d2.stop();
+  });
+
+  it("holds a no-show number for noShowHoldMs, then frees it", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, {
+      knobs: { ...KNOBS, introHoldMs: 0, noShowMs: 90_000, noShowHoldMs: 120_000, noShowAutoRepool: true } as any,
+      autoStart: false,
+    });
+    f2.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    d2.kick(); d2.confirm(v.id); // called
+    vi.setSystemTime(new Date("2026-06-21T00:01:31.000Z")); // > noShowMs → no-show repool + hold
+    d2.kick();
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    expect(d2.snapshot().slots.some((s) => s.occupant?.visitorId === v.id)).toBe(false); // held, not re-dispatched
+    expect(d2.snapshot().queue.find((e) => e.id === v.id)?.holdReason).toBe("no-show");
+    vi.setSystemTime(new Date("2026-06-21T00:03:40.000Z")); // > 00:01:31 + 120s
+    d2.kick();
+    expect(d2.snapshot().slots.some((s) => s.occupant?.visitorId === v.id)).toBe(true);
+    d2.stop();
+  });
+
+  it("does not let anti-starvation rescue a held visitor", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, { knobs: { ...KNOBS, introHoldMs: 600_000, maxWaitMs: 1_000 } as any, autoStart: false });
+    f2.hello("intake", "kA", "cA");
+    const v = store.register(NUM());
+    vi.setSystemTime(new Date("2026-06-21T00:00:05.000Z")); // waited 5s > maxWaitMs 1s
+    d2.kick();
+    expect(d2.snapshot().slots.every((s) => !s.occupant)).toBe(true); // still intro-held
+    d2.stop();
   });
 });

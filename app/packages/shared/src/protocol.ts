@@ -31,6 +31,26 @@ export const WsClientMsg = z.discriminatedUnion("kind", [
 ]);
 export type WsClientMsg = z.infer<typeof WsClientMsg>;
 
+/** Live choreographer config — flippable at /api/choreo/config (apps/brain/src/choreo.ts). */
+export const ChoreoConfig = z.object({
+  /** Per-turn cue reacts to utterance + oracle reply (true) or the utterance alone (false). */
+  reactToOracle: z.boolean(),
+  /** Sustained "dancers mimic the oracle" override — every turn is a mimic turn while on. */
+  mimicManual: z.boolean(),
+  /** When on, the brain auto-makes every Nth oracle turn a mimic turn. */
+  mimicCadenceEnabled: z.boolean(),
+  /** Cadence period (turns): mimic fires when turnNumber % mimicEveryNTurns === 0. */
+  mimicEveryNTurns: z.number().int().min(1),
+});
+export type ChoreoConfig = z.infer<typeof ChoreoConfig>;
+
+export const DEFAULT_CHOREO_CONFIG: ChoreoConfig = {
+  reactToOracle: true,
+  mimicManual: false,
+  mimicCadenceEnabled: false,
+  mimicEveryNTurns: 3,
+};
+
 /** A summary of one active session for the roster broadcast. */
 export type SessionSummary = {
   sessionId: string;
@@ -59,6 +79,9 @@ export type DispatchQueueEntry = {
   eligible: Station[];
   waitingSince: string;
   flags: DispatchFlag[];
+  /** Epoch-ISO until which this visitor is held out of new assignment (intro wait or no-show cooldown). */
+  heldUntil?: string;
+  holdReason?: "intro" | "no-show";
 };
 
 /** One occupant pinned to a slot. `phase` is the slot-level occupancy stage. */
@@ -67,7 +90,12 @@ export type SlotOccupant = {
   number: number;
   phase: "pending" | "called" | "in_progress";
   since: string;
+  /** Review flags carried by this occupant (e.g. a no-show on a called participant). */
+  flags?: DispatchFlag[];
 };
+
+/** A camera the kiosk bound to a slot can offer (reported by the kiosk; id may be label-less until permission). */
+export type SlotCamera = { id: string; label: string };
 
 /** An addressable station slot, optionally bound to a kiosk screen (spec §3.2). */
 export type Slot = {
@@ -76,10 +104,17 @@ export type Slot = {
   kioskId?: string;      // present ⇒ a screen claimed this slot
   online: boolean;       // kiosk bound AND its socket connected
   occupant?: SlotOccupant;
+  /** Cameras the bound kiosk reported (bodyscan), so an operator screen can pick one remotely. */
+  cameras?: SlotCamera[];
+  /** The kiosk's currently-selected camera id. */
+  activeCameraId?: string;
 };
 
 /** A visitor who finished the whole ritual (sessionEndAt set). */
 export type DispatchDone = { id: string; number: number; name?: string; at: string };
+
+/** An altar-ready visitor (intake + bodyscan done, waiting) — divination prerequisites met. */
+export type DispatchReady = { id: string; number: number; name?: string };
 
 export type DispatchState = {
   /** All slots across all stations, length = sum of configured counts. */
@@ -94,8 +129,18 @@ export type DispatchState = {
   stationsOnline: Record<Station, boolean>;
   /** Dwell (ms) per timed group station, so the operator board can show a remaining-time countdown. */
   timedDwellMs?: Partial<Record<Station, number>>;
-  /** False during the warm-up window (spec §9 of the Tier 3 spec). */
-  warmedUp: boolean;
+  /** Called-but-not-arrived threshold (ms), so a station view can flag a likely no-show. */
+  noShowMs?: number;
+  /** Operator gate: when false, no new visitor is dispatched to the altar (in-progress readings continue). */
+  altarOpen: boolean;
+  /** Waiting visitors who are altar-ready (intakeAt && poseAt && !sessionEndAt) — the operator's buffer gauge. */
+  altarReady: number;
+  /** Altar-ready visitors — the /dispatch right-column roster + the Pluribus broadcast list. */
+  altarReadyList: DispatchReady[];
+  /** True when ≥1 bodyscan slot is online with no occupant. */
+  bodyscanIdle: boolean;
+  /** When bodyscan is idle, why nothing is filling it (actionable when "soaking"/"held"). */
+  bodyscanBlocked: "none" | "soaking" | "held" | "empty";
 };
 
 /** Server → client messages. The server constructs these, so a plain union is enough. */
@@ -124,8 +169,13 @@ export type WsServerMsg =
   | { kind: "oracle.done"; sessionId: string; text: string }
   | { kind: "choreo.delta"; sessionId: string; text: string }
   | { kind: "choreo.done"; sessionId: string; text: string }
+  | { kind: "choreo.mimic"; sessionId: string; text: string; archetype: string }
   | { kind: "session.ended"; sessionId: string }
   | { kind: "session.error"; sessionId?: string; visitorId?: string; message: string }
   | { kind: "roster"; sessions: SessionSummary[] }
   | { kind: "dispatch.state"; state: DispatchState }
-  | { kind: "tuning.state"; tuning: OracleTuning };
+  | { kind: "tuning.state"; tuning: OracleTuning }
+  /** One-shot operator→kiosk command relay (e.g. /station taps Capture; the bodyscan kiosk acts). */
+  | { kind: "station.cmd"; station: Station; action: "capture"; visitorId: string }
+  /** Operator→kiosk: switch the bodyscan kiosk's camera (targeted by kioskId). */
+  | { kind: "station.cmd"; station: Station; action: "set-camera"; kioskId: string; deviceId: string };

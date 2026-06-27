@@ -1,18 +1,22 @@
 import { buildChoreoFirstPassPrompt, buildChoreoTurnPrompt } from "@channelers/oracles";
-import type { ChoreoScore, SurveyResponse } from "@channelers/shared";
+import type { ChoreoConfig, ChoreoScore, SurveyResponse } from "@channelers/shared";
 import { config } from "./config";
 import type { VisitorRecord } from "./store";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // ── live, in-memory config (flippable at /api/choreo/config, no restart) ──
-let reactToOracle = config.choreo.reactToOracle;
-export function getChoreoConfig(): { reactToOracle: boolean } {
-  return { reactToOracle };
+let cfg: ChoreoConfig = { ...config.choreo };
+export function getChoreoConfig(): ChoreoConfig {
+  return cfg;
 }
-export function setChoreoConfig(next: { reactToOracle: boolean }): { reactToOracle: boolean } {
-  reactToOracle = next.reactToOracle;
-  return getChoreoConfig();
+export function setChoreoConfig(next: ChoreoConfig): ChoreoConfig {
+  cfg = next;
+  return cfg;
+}
+/** Pure: is the oracle reply numbered `turnNumber` (1-based) a mimic turn? */
+export function isMimicTurn(c: ChoreoConfig, turnNumber: number): boolean {
+  return c.mimicManual || (c.mimicCadenceEnabled && turnNumber % c.mimicEveryNTurns === 0);
 }
 
 // ── deterministic offline content (mirrors transform.stubSeeds / divination.fallbackLine) ──

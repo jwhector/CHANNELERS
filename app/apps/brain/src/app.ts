@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import staticPlugin from "@fastify/static";
-import { SurveyResponse, ScanResult, PoseVector, Station, type ShowEvent } from "@channelers/shared";
+import { SurveyResponse, ScanResult, PoseVector, Station, ChoreoConfig, type ShowEvent } from "@channelers/shared";
 import { z } from "zod";
 import { store } from "./store";
 import { Bus } from "./bus";
@@ -72,9 +72,8 @@ export async function buildApp(
 
   // ── choreography: live timing toggle (reactToOracle), §8 ──
   app.get("/api/choreo/config", async () => getChoreoConfig());
-  const ChoreoConfigBody = z.object({ reactToOracle: z.boolean() });
   app.post("/api/choreo/config", async (req, reply) => {
-    const parsed = ChoreoConfigBody.safeParse(req.body);
+    const parsed = ChoreoConfig.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     return setChoreoConfig(parsed.data);
   });
@@ -212,6 +211,44 @@ export async function buildApp(
     const parsed = VisitorIdBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     return { ok: dispatcher.remove(parsed.data.visitorId) };
+  });
+  const AltarBody = z.object({ open: z.boolean() });
+  app.post("/api/dispatch/altar", async (req, reply) => {
+    const parsed = AltarBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    dispatcher.setAltarOpen(parsed.data.open);
+    return { ok: true, altarOpen: parsed.data.open };
+  });
+
+  // Cross-device capture relay: the /station performer taps Capture; the bodyscan
+  // kiosk (which holds the camera) hears this and persists the pose it currently sees.
+  app.post("/api/bodyscan/capture", async (req, reply) => {
+    const parsed = VisitorIdBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    bus.broadcast({ kind: "station.cmd", station: "bodyscan", action: "capture", visitorId: parsed.data.visitorId });
+    return { ok: true };
+  });
+
+  // The bodyscan kiosk reports its available cameras so an operator screen can pick one remotely.
+  const CamerasBody = z.object({
+    kioskId: z.string(),
+    cameras: z.array(z.object({ id: z.string(), label: z.string() })),
+    activeId: z.string().optional(),
+  });
+  app.post("/api/bodyscan/cameras", async (req, reply) => {
+    const parsed = CamerasBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    dispatcher.setCameras(parsed.data.kioskId, parsed.data.cameras, parsed.data.activeId);
+    return { ok: true };
+  });
+
+  // Operator picks a camera on /station → relay a set-camera command to the targeted kiosk.
+  const SetCameraBody = z.object({ kioskId: z.string(), deviceId: z.string() });
+  app.post("/api/bodyscan/camera", async (req, reply) => {
+    const parsed = SetCameraBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    bus.broadcast({ kind: "station.cmd", station: "bodyscan", action: "set-camera", kioskId: parsed.data.kioskId, deviceId: parsed.data.deviceId });
+    return { ok: true };
   });
 
   // legacy scan + manual seeds regeneration (kept)

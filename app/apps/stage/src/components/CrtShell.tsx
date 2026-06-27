@@ -22,8 +22,8 @@ export function CrtShell({
       <div className="crt-safe">{children}</div>
       <div className="crt-curve" aria-hidden />
       <div className="crt-bezel">
-        <span className="crt-led" aria-hidden /> {statusLabel}
-        <button
+        {/* <span className="crt-led" aria-hidden /> {statusLabel} */}
+        {/* <button
           type="button"
           className="crt-fx-toggle"
           aria-pressed={fx}
@@ -31,7 +31,7 @@ export function CrtShell({
           title="Toggle CRT effects"
         >
           CRT
-        </button>
+        </button> */}
       </div>
     </div>
   );

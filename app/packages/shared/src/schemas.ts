@@ -41,9 +41,20 @@ export const PoseVector = z.object({
 });
 export type PoseVector = z.infer<typeof PoseVector>;
 
-/** The dispatchable stations (spec §4). `paper` is a timed group station (spec 2026-06-22). */
-export const Station = z.enum(["intake", "bodyscan", "altar", "paper"]);
+/** The dispatchable stations (spec §4). `paper` and `waitingroom` are timed group stations. */
+export const Station = z.enum(["intake", "bodyscan", "altar", "paper", "waitingroom"]);
 export type Station = z.infer<typeof Station>;
+
+/** Human-facing station names — the public wayfinding labels shared by the lobby board (`/board`)
+ *  and the operator dispatch screen (`/dispatch`). The `Station` enum value is the internal id;
+ *  this is the single place to edit what visitors and operators read. */
+export const STATION_LABEL: Record<Station, string> = {
+  intake: "STATION D - INTAKE",
+  bodyscan: "STATION C - BODY SCAN",
+  altar: "ALTAR",
+  paper: "STATION B - TYPEWRITER",
+  waitingroom: "STATION A - WAITING ROOM",
+};
 
 /** Transient dispatch location — a visitor is in exactly one place at a time (spec §3.2).
  *  Tier 1 only ever uses "waiting"/"in_progress"; "called" is Tier 3 (the dispatcher). */
@@ -75,10 +86,21 @@ export const VisitorProfile = z.object({
   poseVerifiedAt: z.string().optional(),
   /** Timed group station: stamped on dwell-timer expiry at the paper station (spec 2026-06-22). */
   paperAt: z.string().optional(),
+  /** Timed group station: stamped on dwell-timer expiry at the waiting room (5-min hold). */
+  waitingRoomAt: z.string().optional(),
   sessionStartAt: z.string().optional(),
   sessionEndAt: z.string().optional(),
 });
 export type VisitorProfile = z.infer<typeof VisitorProfile>;
+
+/**
+ * "Altar-ready": cleared the pre-altar stations (intake + bodyscan) and waiting in the pool,
+ * not yet through divination. The dispatcher's altar-ready count + list and the Pluribus
+ * "completed the stationing process" broadcast all key off this single predicate.
+ */
+export function isAltarReady(v: VisitorProfile): boolean {
+  return v.location.state === "waiting" && !!v.intakeAt && !!v.poseAt && !v.sessionEndAt;
+}
 
 /** ── Generated seeds (intake → AI transform output) ── */
 

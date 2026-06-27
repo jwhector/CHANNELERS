@@ -1,17 +1,54 @@
 import { useEffect, useState } from "react";
 import type { DispatchState, Slot, WsServerMsg } from "@channelers/shared";
+import { STATION_LABEL } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
+import { useNow } from "../lib/useNow";
+import { remainingSec, fmtClock } from "../lib/dispatchTiming";
+import { readyNumbers } from "../lib/pluribus";
+import { PluribusBroadcast } from "../components/PluribusBroadcast";
 
 const elapsed = (since: string) =>
   `${Math.max(0, Math.round((Date.now() - Date.parse(since)) / 1000))}s`;
 
-/** Lobby-operator board (spec §6): waiting pool · slots · completed. No-scroll 3-zone. */
+const BLOCKED_MSG: Record<"none" | "soaking" | "held" | "empty", string> = {
+  none: "",
+  soaking: "candidates soaking",
+  held: "candidates on hold",
+  empty: "no one needs a scan",
+};
+
+/** Operator flow strip: altar gate toggle + altar-ready buffer + bodyscan idle/blocked health. */
+export function FlowStrip({
+  altarOpen, altarReady, bodyscanIdle, bodyscanBlocked, onToggleAltar,
+}: {
+  altarOpen: boolean;
+  altarReady: number;
+  bodyscanIdle: boolean;
+  bodyscanBlocked: "none" | "soaking" | "held" | "empty";
+  onToggleAltar: (open: boolean) => void;
+}) {
+  const warn = bodyscanIdle && bodyscanBlocked !== "none";
+  return (
+    <div className="flow-strip">
+      <button className={altarOpen ? "submit" : "ghost"} onClick={() => onToggleAltar(!altarOpen)}>
+        Altar: {altarOpen ? "OPEN" : "CLOSED"}
+      </button>
+      <span className="flow-stat">altar-ready {altarReady}</span>
+      <span className={`flow-stat${warn ? " warn" : ""}`}>
+        bodyscan {bodyscanIdle ? "idle" : "busy"}
+        {warn ? ` · ${BLOCKED_MSG[bodyscanBlocked]}` : ""}
+      </span>
+    </div>
+  );
+}
+
+/** Lobby-operator board (spec §6): waiting pool · slots · altar-ready. No-scroll 3-zone. */
 export function Dispatch() {
   const [state, setState] = useState<DispatchState | null>(null);
   const [arrival, setArrival] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [, tick] = useState(0);
+  const now = useNow();
 
   const { connected } = useBrainSocket((m: WsServerMsg) => {
     if (m.kind === "dispatch.state") setState(m.state);
@@ -19,8 +56,6 @@ export function Dispatch() {
 
   useEffect(() => {
     void api.dispatch.state().then(setState).catch(() => {});
-    const t = setInterval(() => tick((n) => n + 1), 1000); // refresh elapsed clocks
-    return () => clearInterval(t);
   }, []);
 
   async function register() {
@@ -42,7 +77,6 @@ export function Dispatch() {
       <header>
         <h1>Dispatch</h1>
         <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
-        {!state.warmedUp && <span className="dim">warming up…</span>}
         <span className="arrivals">
           <input
             inputMode="numeric" value={arrival} placeholder="add #"
@@ -56,6 +90,15 @@ export function Dispatch() {
       {state.surplus.length > 0 && (
         <p className="error">Surplus screens: {state.surplus.map((s) => `${s.station}/${s.kioskId.slice(0, 6)}`).join(", ")}</p>
       )}
+      <FlowStrip
+        altarOpen={state.altarOpen}
+        altarReady={state.altarReady}
+        bodyscanIdle={state.bodyscanIdle}
+        bodyscanBlocked={state.bodyscanBlocked}
+        onToggleAltar={(open) => void api.dispatch.altar(open)}
+      />
+
+      <PluribusBroadcast numbers={readyNumbers(state.altarReadyList)} storageKey="out.dispatch" />
 
       <div className="zones">
         {/* LEFT — waiting pool */}
@@ -72,6 +115,10 @@ export function Dispatch() {
                 <div className="pool-item-meta">
                   {v.eligible.map((s) => <span key={s} className="pool-chip">{s}</span>)}
                   {v.flags.length > 0 && <span className="pool-flag">{v.flags.map((f) => f.type).join(" ")}</span>}
+                  {v.heldUntil && (() => {
+                    const sec = remainingSec(Date.parse(v.heldUntil), now);
+                    return sec > 0 ? <span className="pool-flag hold">on hold · {v.holdReason} {fmtClock(sec)}</span> : null;
+                  })()}
                 </div>
               </li>
             ))}
@@ -97,7 +144,7 @@ export function Dispatch() {
                   <div className={`slot-box ${s.online ? "on" : "off"} ${s.occupant ? s.occupant.phase : ""}`}>
                     <div className="slot-head">
                       <span className={s.online ? "led on" : "led"} />
-                      <code>{s.id}</code>
+                      <code title={s.id}>{STATION_LABEL[s.station]}</code>
                     </div>
                     <div className="slot-body">
                       {s.occupant && s.occupant.phase !== "pending" ? (
@@ -127,14 +174,14 @@ export function Dispatch() {
           </div>
         </section>
 
-        {/* RIGHT — completed */}
-        <section className="zone completed">
-          <h3>Completed ({state.completed.length})</h3>
+        {/* RIGHT — altar-ready */}
+        <section className="zone ready">
+          <h3>Altar-ready ({state.altarReadyList.length})</h3>
           <ul className="pool-list">
-            {state.completed.map((v) => (
+            {state.altarReadyList.map((v) => (
               <li key={v.id} className="pool-item" title={v.name || "(no name)"}>
                 <strong>#{v.number}</strong>
-                <span className="dim">done</span>
+                <span className="dim">ready</span>
               </li>
             ))}
           </ul>

@@ -1,11 +1,12 @@
 import { config } from "./config";
 import { store, type VisitorRecord } from "./store";
+import { isAltarReady } from "@channelers/shared";
 import type {
-  Station, DispatchState, Slot, SlotOccupant, DispatchDone, DispatchQueueEntry, DispatchFlag,
+  Station, DispatchState, Slot, SlotOccupant, SlotCamera, DispatchDone, DispatchReady, DispatchQueueEntry, DispatchFlag,
   WsServerMsg, WsClientMsg,
 } from "@channelers/shared";
 
-const STATION_ORDER: Station[] = ["intake", "bodyscan", "altar", "paper"];
+const STATION_ORDER: Station[] = ["intake", "bodyscan", "altar", "paper", "waitingroom"];
 
 export interface DispatcherBus {
   broadcast(msg: WsServerMsg): void;
@@ -28,12 +29,14 @@ type SlotState = {
 export interface Dispatcher {
   confirm(visitorId: string): boolean;
   arrive(visitorId: string): boolean;
+  setAltarOpen(open: boolean): void;
   assign(visitorId: string, slotId: string): boolean;
   repool(visitorId: string): boolean;
   markComplete(visitorId: string): boolean;
   remove(visitorId: string): boolean;
   checkin(num: number, station: Station): { record: VisitorRecord };
   clearFlags(visitorId: string): void;
+  setCameras(kioskId: string, cameras: SlotCamera[], activeId?: string): void;
   snapshot(): DispatchState;
   kick(): void;
   stop(): void;
@@ -56,8 +59,11 @@ export function createDispatcher(
   }
 
   const flags = new Map<string, DispatchFlag[]>();
+  const noShowHoldUntil = new Map<string, number>(); // visitorId → epoch ms a no-show is held until
   const surplus = new Map<string, { station: Station; kioskId: string }>(); // connId → {station, kioskId} (connected screen with no free slot)
+  const cameras = new Map<string, { cameras: SlotCamera[]; activeId?: string }>(); // kioskId → reported cameras (bodyscan)
   const offlineTimers = new Map<string, ReturnType<typeof setTimeout>>(); // slotId → grace timer
+  let altarOpen = false; // operator gate; altar stays closed until /dispatch opens it
 
   const nowIso = () => new Date().toISOString();
   const ageMs = (iso: string) => Date.now() - Date.parse(iso);
@@ -89,8 +95,9 @@ export function createDispatcher(
     const out: Station[] = [];
     if (!v.intakeAt) out.push("intake");
     if (!v.poseAt) out.push("bodyscan");
-    if (v.intakeAt && v.poseAt && !v.sessionEndAt) out.push("altar");
+    if (altarOpen && v.intakeAt && v.poseAt && !v.sessionEndAt) out.push("altar");
     if (!v.paperAt) out.push("paper"); // non-gating, ungated timed station (spec 2026-06-22)
+    if (!v.waitingRoomAt) out.push("waitingroom"); // non-gating timed station (5-min hourglass hold)
     return out;
   }
 
@@ -150,11 +157,21 @@ export function createDispatcher(
     broadcastState();
   }
 
+  // ── per-visitor hold: intro wait (createdAt) + no-show cooldown (map) ──
+  function holdOf(v: VisitorRecord): { untilMs: number; reason: "intro" | "no-show" } | null {
+    const intro = Date.parse(v.createdAt) + knobs.introHoldMs;
+    const noShow = noShowHoldUntil.get(v.id) ?? 0;
+    const untilMs = Math.max(intro, noShow);
+    if (untilMs <= Date.now()) return null;
+    return { untilMs, reason: noShow >= intro ? "no-show" : "intro" };
+  }
+  const isHeld = (v: VisitorRecord): boolean => holdOf(v) !== null;
+
   // ── selection (anti-starvation over random; excludes occupied + non-waiting) ──
   function select(station: Station): VisitorRecord | undefined {
     const occupied = occupiedVisitorIds();
     const eligible = store.list().filter(
-      (v) => !occupied.has(v.id) && eligibleStations(v).includes(station),
+      (v) => !occupied.has(v.id) && !isHeld(v) && eligibleStations(v).includes(station),
     );
     if (eligible.length === 0) return undefined;
     const starving = eligible.filter((v) => ageMs(v.location.since) > knobs.maxWaitMs);
@@ -167,8 +184,13 @@ export function createDispatcher(
   }
 
   function fill(): void {
-    if (!warmedUp()) return;
-    for (const slot of slots.values()) {
+    const order = knobs.fillPriority ?? STATION_ORDER;
+    const rank = (st: Station) => {
+      const i = order.indexOf(st);
+      return i === -1 ? order.length : i;
+    };
+    const ordered = [...slots.values()].sort((a, b) => rank(a.station) - rank(b.station));
+    for (const slot of ordered) {
       if (!isOnline(slot) || slot.occupant) continue;
       const pick = select(slot.station);
       if (!pick) continue;
@@ -197,6 +219,11 @@ export function createDispatcher(
     clearFlags(visitorId);
     broadcastState();
     return true;
+  }
+
+  function setAltarOpen(open: boolean): void {
+    altarOpen = open;
+    kick(); // re-fill so a ready visitor is dispatched the moment the altar opens
   }
 
   function assign(visitorId: string, slotId: string): boolean {
@@ -245,6 +272,7 @@ export function createDispatcher(
     const ok = store.remove(visitorId);
     if (ok) {
       flags.delete(visitorId);
+      noShowHoldUntil.delete(visitorId);
       broadcastState();
     }
     return ok;
@@ -268,10 +296,11 @@ export function createDispatcher(
     return { record };
   }
 
-  function milestoneField(station: Station): "intakeAt" | "poseAt" | "paperAt" | "sessionEndAt" {
+  function milestoneField(station: Station): "intakeAt" | "poseAt" | "paperAt" | "waitingRoomAt" | "sessionEndAt" {
     if (station === "intake") return "intakeAt";
     if (station === "bodyscan") return "poseAt";
     if (station === "paper") return "paperAt";
+    if (station === "waitingroom") return "waitingRoomAt";
     return "sessionEndAt"; // altar held through the reading
   }
 
@@ -279,6 +308,7 @@ export function createDispatcher(
     if (station === "intake") return !!v.intakeAt;
     if (station === "bodyscan") return !!v.poseAt;
     if (station === "paper") return !!v.paperAt;
+    if (station === "waitingroom") return !!v.waitingRoomAt;
     return !!v.sessionEndAt; // altar held through the reading
   }
 
@@ -298,34 +328,53 @@ export function createDispatcher(
       if (!occ) continue;
       const v = store.get(occ.visitorId);
       if (!v) { slot.occupant = undefined; continue; }
+
+      // ── called: awaiting arrival. No-show now applies to EVERY station, timed
+      //    included — a person called but never confirmed-arrived must not complete. ──
+      if (occ.phase === "called") {
+        if (ageMs(occ.since) > knobs.noShowMs) {
+          const cur = noShowHoldUntil.get(v.id) ?? 0;
+          if (cur <= Date.now()) noShowHoldUntil.set(v.id, Date.now() + knobs.noShowHoldMs);
+          if (knobs.noShowAutoRepool) reapOccupant(slot, "no-show");
+          else addFlag(v.id, { type: "no-show", since: nowIso() });
+        }
+        continue;
+      }
+
+      // ── in_progress ──
       if (isTimed(slot.station)) {
-        // Timer-from-call: a confirmed (called) occupant completes once the dwell elapses.
-        // No auto-arrive (stays `called` so /board shows it); no no-show / stale for timed stations.
-        if (occ.phase === "called" && ageMs(occ.since) > dwellMs(slot.station)) {
+        // Dwell measured from ARRIVAL (occ.since was reset by arrive()); it completes the visit.
+        const dwell = dwellMs(slot.station);
+        if (ageMs(occ.since) > dwell) {
           store.stampMilestone(occ.visitorId, milestoneField(slot.station));
           slot.occupant = undefined;
           store.setLocation(occ.visitorId, { state: "waiting", since: nowIso() });
           clearFlags(occ.visitorId);
-        }
-        continue; // skip the kiosk-station in_progress/called handling below
-      }
-      if (occ.phase === "in_progress") {
-        if (completionMilestoneSet(v, slot.station)) {
-          slot.occupant = undefined;
-          store.setLocation(v.id, { state: "waiting", since: nowIso() });
-        } else if (ageMs(occ.since) > knobs.staleMs) {
+        } else if (!Number.isFinite(dwell) && ageMs(occ.since) > knobs.staleMs) {
+          // Backstop only when a timed station has NO finite dwell to complete it
+          // (misconfiguration). A finite dwell always completes first and is never preempted.
           reapOccupant(slot, "stale");
         }
-      } else if (occ.phase === "called") {
-        if (ageMs(occ.since) > knobs.noShowMs) {
-          if (knobs.noShowAutoRepool) reapOccupant(slot, "no-show");
-          else addFlag(v.id, { type: "no-show", since: nowIso() });
-        }
+        continue;
+      }
+
+      // ── kiosk in_progress: external milestone completes; stale reaps a hung occupant. ──
+      if (completionMilestoneSet(v, slot.station)) {
+        slot.occupant = undefined;
+        store.setLocation(v.id, { state: "waiting", since: nowIso() });
+      } else if (ageMs(occ.since) > knobs.staleMs) {
+        reapOccupant(slot, "stale");
       }
     }
+
     if (knobs.autoConfirm) {
       for (const slot of slots.values()) {
         if (slot.occupant?.phase === "pending") confirm(slot.occupant.visitorId);
+      }
+    }
+    if (knobs.autoArrive) {
+      for (const slot of slots.values()) {
+        if (slot.occupant?.phase === "called") arrive(slot.occupant.visitorId);
       }
     }
   }
@@ -338,23 +387,63 @@ export function createDispatcher(
 
   // ── snapshot ──
   function toSlot(s: SlotState): Slot {
-    return { id: s.id, station: s.station, kioskId: s.kioskId, online: isOnline(s), occupant: s.occupant };
+    const occupant = s.occupant
+      ? { ...s.occupant, flags: flags.get(s.occupant.visitorId) }
+      : undefined;
+    const cam = s.kioskId ? cameras.get(s.kioskId) : undefined;
+    return {
+      id: s.id, station: s.station, kioskId: s.kioskId, online: isOnline(s), occupant,
+      cameras: cam?.cameras, activeCameraId: cam?.activeId,
+    };
   }
   function queueEntries(): DispatchQueueEntry[] {
     const occupied = occupiedVisitorIds();
     return store.list()
       .filter((v) => !occupied.has(v.id) && eligibleStations(v).length > 0)
-      .map((v) => ({
-        id: v.id, number: v.number, name: v.survey?.name,
-        eligible: eligibleStations(v), waitingSince: v.location.since,
-        flags: flags.get(v.id) ?? [],
-      }));
+      .map((v) => {
+        const hold = holdOf(v);
+        return {
+          id: v.id, number: v.number, name: v.survey?.name,
+          eligible: eligibleStations(v), waitingSince: v.location.since,
+          flags: flags.get(v.id) ?? [],
+          heldUntil: hold ? new Date(hold.untilMs).toISOString() : undefined,
+          holdReason: hold?.reason,
+        };
+      });
   }
   function completedEntries(): DispatchDone[] {
     return store.list()
       .filter((v) => !!v.sessionEndAt)
       .map((v) => ({ id: v.id, number: v.number, name: v.survey?.name, at: v.sessionEndAt as string }));
   }
+  function altarReadyEntries(): DispatchReady[] {
+    return store.list()
+      .filter(isAltarReady)
+      .map((v) => ({ id: v.id, number: v.number, name: v.survey?.name }))
+      .sort((a, b) => a.number - b.number);
+  }
+  function flowHealth(): {
+    altarReady: number;
+    bodyscanIdle: boolean;
+    bodyscanBlocked: DispatchState["bodyscanBlocked"];
+  } {
+    const list = store.list();
+    const altarReady = list.filter(isAltarReady).length;
+    const bodyscanIdle = slotsOf("bodyscan").some((s) => isOnline(s) && !s.occupant);
+    let bodyscanBlocked: DispatchState["bodyscanBlocked"] = "none";
+    if (bodyscanIdle) {
+      const occupied = occupiedVisitorIds();
+      const unposed = list.filter((v) => !v.poseAt);
+      const available = unposed.some(
+        (v) => v.location.state === "waiting" && !isHeld(v) && !occupied.has(v.id),
+      );
+      const soaking = unposed.some((v) => v.location.state === "in_progress");
+      const held = unposed.some((v) => v.location.state === "waiting" && isHeld(v));
+      bodyscanBlocked = available ? "none" : soaking ? "soaking" : held ? "held" : "empty";
+    }
+    return { altarReady, bodyscanIdle, bodyscanBlocked };
+  }
+
   function snapshot(): DispatchState {
     const slotList = [...slots.values()].map(toSlot);
     const stationsOnline = {
@@ -362,6 +451,7 @@ export function createDispatcher(
       bodyscan: slotsOf("bodyscan").some(isOnline),
       altar: slotsOf("altar").some(isOnline),
       paper: slotsOf("paper").some(isOnline),
+      waitingroom: slotsOf("waitingroom").some(isOnline),
     };
     const timedDwellMs: Partial<Record<Station, number>> = {};
     for (const s of STATION_ORDER) if (isTimed(s)) timedDwellMs[s] = dwellMs(s);
@@ -369,27 +459,23 @@ export function createDispatcher(
       slots: slotList,
       queue: queueEntries(),
       completed: completedEntries(),
+      altarReadyList: altarReadyEntries(),
       surplus: [...surplus.values()],
       stationsOnline,
       timedDwellMs,
-      warmedUp: warmedUp(),
+      noShowMs: knobs.noShowMs,
+      altarOpen,
+      ...flowHealth(),
     };
   }
   function broadcastState(): void {
     bus.broadcast({ kind: "dispatch.state", state: snapshot() });
   }
 
-  // warm-up (Task 3 uses this in fill; defined here for the snapshot)
-  function warmedUp(): boolean {
-    const visitors = store.list();
-    const occupied = occupiedVisitorIds();
-    const pool = visitors.filter((v) => !occupied.has(v.id) && eligibleStations(v).length > 0);
-    if (pool.length >= knobs.K) return true;
-    const earliest = visitors.reduce<number | null>((min, v) => {
-      const t = Date.parse(v.createdAt);
-      return min === null || t < min ? t : min;
-    }, null);
-    return earliest !== null && Date.now() - earliest >= knobs.warmupMs;
+  /** A bodyscan kiosk reports its available cameras + active selection, keyed by kioskId. */
+  function setCameras(kioskId: string, list: SlotCamera[], activeId?: string): void {
+    cameras.set(kioskId, { cameras: list, activeId });
+    broadcastState();
   }
 
   // ── lifecycle ──
@@ -405,5 +491,5 @@ export function createDispatcher(
     offlineTimers.clear();
   }
 
-  return { confirm, arrive, assign, repool, markComplete, remove, checkin, clearFlags, snapshot, kick, stop };
+  return { confirm, arrive, setAltarOpen, assign, repool, markComplete, remove, checkin, clearFlags, setCameras, snapshot, kick, stop };
 }

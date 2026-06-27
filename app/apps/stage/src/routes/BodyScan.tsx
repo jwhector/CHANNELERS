@@ -1,71 +1,155 @@
-import { useCallback, useRef, useState } from "react";
-import type { VisitorProfile } from "@channelers/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { SlotOccupant, WsServerMsg } from "@channelers/shared";
 import { usePoseLandmarker } from "../lib/pose/usePoseLandmarker";
 import { bodyCoverage, isBodyFramed, landmarksToAngles, motionMetric, type PoseVector } from "../lib/pose/angles";
 import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
-import { CalledGate } from "../components/CalledGate";
-import { Bar, drawSkeleton } from "../components/poseUI";
+import { drawSkeleton } from "../components/poseUI";
 import { useStationPresence } from "../lib/useStationPresence";
-import { useReleaseToGate } from "../lib/useReleaseToGate";
+import { useBrainSocket } from "../lib/useBrainSocket";
 import { useDevices } from "../lib/devices";
-import { DevicePicker } from "../components/DevicePicker";
+import { SegmentNumber } from "../components/SegmentNumber";
+import "../styles/crt.css"; // .seg + DSEG7 font
+import "../styles/bodyscan.css";
 
-type Phase = "ready" | "record" | "saving" | "enrolled";
+type ArmRef = { current: (() => void) | null };
 
+/**
+ * The /bodyscan FRONT display — a controls-free TV in front of the visitor.
+ * Renders purely from dispatch.state (no CalledGate, no visitor fetch):
+ *   - no/ pending occupant → dim standby readout
+ *   - called occupant      → the retro number, "proceed to body scan"
+ *   - in_progress occupant → full-bleed camera + skeleton; the operator arms capture from /station
+ * Camera selection lives here (always mounted): the kiosk reports its cameras to the brain so the
+ * performer can pick one remotely on /station, and a relayed set-camera command switches it.
+ */
 export function BodyScan() {
   const { connected, slot } = useStationPresence("bodyscan");
-  const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
-  const [done, setDone] = useState(false);
+  const occ = slot?.occupant;
+  const kioskId = slot?.kioskId;
+  const cam = useDevices("videoinput", "cam.bodyscan", "cam");
+  const [savedNumber, setSavedNumber] = useState<number | null>(null);
+  const armRef = useRef<(() => void) | null>(null);
 
-  useReleaseToGate(visitor, slot, done, () => {
-    setVisitor(null);
-    setDone(false);
+  // Publish this kiosk's cameras so /station can pick one remotely (works in standby too).
+  useEffect(() => {
+    if (!kioskId || cam.devices.length === 0) return;
+    void api.reportBodyscanCameras(
+      kioskId,
+      cam.devices.map((d) => ({ id: d.deviceId, label: d.label })),
+      cam.deviceId || undefined,
+    );
+  }, [kioskId, cam.devices, cam.deviceId]);
+
+  // Relayed operator commands for this kiosk: set-camera (switch) + capture (arm the in-progress hold).
+  useBrainSocket((m: WsServerMsg) => {
+    if (m.kind !== "station.cmd" || m.station !== "bodyscan") return;
+    if (m.action === "set-camera" && m.kioskId === kioskId) cam.setDeviceId(m.deviceId);
+    else if (m.action === "capture" && occ?.phase === "in_progress" && m.visitorId === occ.visitorId) armRef.current?.();
   });
 
-  if (!visitor) return <CalledGate station="bodyscan" title="Body Scan" connected={connected} slot={slot} onArrived={setVisitor} />;
-  return <Enroll visitor={visitor} connected={connected} onEnrolled={() => setDone(true)} />;
+  useEffect(() => {
+    if (savedNumber == null) return;
+    const t = setTimeout(() => setSavedNumber(null), 3000);
+    return () => clearTimeout(t);
+  }, [savedNumber]);
+
+  if (savedNumber != null) return <BodyScanSaved number={savedNumber} />;
+  if (occ?.phase === "in_progress")
+    return (
+      <BodyScanCamera
+        visitorId={occ.visitorId}
+        number={occ.number}
+        deviceId={cam.deviceId}
+        armRef={armRef}
+        onCameraReady={cam.refresh}
+        onSaved={setSavedNumber}
+      />
+    );
+  return <BodyScanStandby occ={occ} connected={connected} />;
 }
 
-function Enroll({ visitor, connected, onEnrolled }: { visitor: VisitorProfile; connected: boolean; onEnrolled?: () => void }) {
-  const [stillness, setStillness] = useState(0.05);
-  const [recordSec, setRecordSec] = useState(3.5);
-  const [phase, setPhase] = useState<Phase>("ready");
-  const [motion, setMotion] = useState(1);
-  const [holdProgress, setHoldProgress] = useState(0);
-  const [framed, setFramed] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const cam = useDevices("videoinput", "cam.bodyscan", "cam");
+function BodyScanStandby({ occ, connected }: { occ: SlotOccupant | undefined; connected: boolean }) {
+  const called = occ && occ.phase !== "pending";
+  return (
+    <main className="bodyscan-standby">
+      <span className={`bodyscan-led ${connected ? "led on" : "led"}`} title={connected ? "live" : "offline"} />
+      {called ? (
+        <>
+          <p className="bodyscan-eyebrow">now serving</p>
+          <SegmentNumber value={occ.number} glitch />
+          <p className="bodyscan-eyebrow">proceed to body scan</p>
+        </>
+      ) : (
+        <>
+          <SegmentNumber value={0} className="seg-dim" />
+          <p className="bodyscan-eyebrow">awaiting designation</p>
+        </>
+      )}
+    </main>
+  );
+}
 
-  const phaseRef = useRef<Phase>("ready");
+const RECORD_SEC = 3.5; // hold-still duration before the pose is saved
+const STILLNESS = 0.05; // max per-frame motion (radians) that still counts as "held"
+
+function BodyScanCamera({
+  visitorId,
+  number,
+  deviceId,
+  armRef,
+  onCameraReady,
+  onSaved,
+}: {
+  visitorId: string;
+  number: number;
+  deviceId: string;
+  armRef: ArmRef;
+  onCameraReady?: () => void;
+  onSaved: (n: number) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const prevVecRef = useRef<PoseVector | null>(null);
   const holdStartRef = useRef<number | null>(null);
   const framedRef = useRef(false);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const armedRef = useRef(false);
+  const savingRef = useRef(false);
+  const readyRef = useRef(false);
+  const [framed, setFramed] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const [holdProgress, setHoldProgress] = useState(0);
 
-  // Hysteretic framing flag, mirrored into state for render. Threading the
-  // previous value through isBodyFramed keeps the "step into frame" warning from
-  // strobing when coverage sits at the boundary.
   const updateFramed = (coverage: number) => {
     const next = isBodyFramed(coverage, framedRef.current);
     if (next !== framedRef.current) { framedRef.current = next; setFramed(next); }
     return next;
   };
 
-  const setPhaseBoth = (p: Phase) => { phaseRef.current = p; setPhase(p); };
+  // Toggle the armed (hold-watching) state and reset any hold in progress.
+  const toggleArmed = useCallback(() => {
+    const v = !armedRef.current;
+    armedRef.current = v;
+    setArmed(v);
+    holdStartRef.current = null;
+    setHoldProgress(0);
+    if (v) savingRef.current = false;
+  }, []);
 
-  async function persist(vec: PoseVector) {
-    setPhaseBoth("saving");
+  const persist = useCallback(async (vec: PoseVector) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    armedRef.current = false; setArmed(false);
     try {
-      await api.enrollPose(visitor.id, vec);
-      setPhaseBoth("enrolled");
-      onEnrolled?.();
-    } catch (e) {
-      setError(String(e));
-      setPhaseBoth("ready");
+      await api.enrollPose(visitorId, vec);
+      onSaved(number); // dispatcher frees the slot on poseAt; the parent shows the flash
+    } catch {
+      savingRef.current = false; // let the operator re-arm and retry
     }
-  }
+  }, [visitorId, number, onSaved]);
 
+  // The operator arms capture from /station (relayed via the parent's armRef); only then does the
+  // kiosk run the stillness-hold — which advances ONLY while the body is framed AND held still, and
+  // saves at the top. So a capture is impossible without a valid, in-frame pose.
   const onFrame = useCallback((lms: Landmark[] | null, tMs: number) => {
     const canvas = canvasRef.current;
     const video = canvas?.previousElementSibling as HTMLVideoElement | null;
@@ -73,104 +157,66 @@ function Enroll({ visitor, connected, onEnrolled }: { visitor: VisitorProfile; c
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
     }
     drawSkeleton(canvasRef.current, lms);
-    if (!lms) { holdStartRef.current = null; prevVecRef.current = null; setMotion(1); updateFramed(0); return; }
-
+    if (!lms) {
+      prevVecRef.current = null; holdStartRef.current = null; updateFramed(0);
+      if (armedRef.current) setHoldProgress(0);
+      return;
+    }
     const vec = landmarksToAngles(lms);
     const framedNow = updateFramed(bodyCoverage(vec));
-    const m = prevVecRef.current ? motionMetric(prevVecRef.current, vec) : 1;
+    const motion = prevVecRef.current ? motionMetric(prevVecRef.current, vec) : 1;
     prevVecRef.current = vec;
-    setMotion(m);
 
-    if (phaseRef.current !== "record") return;
-    const still = m < stillness && framedNow;
+    if (!armedRef.current) return;
+    const still = motion < STILLNESS && framedNow;
     if (!still) { holdStartRef.current = null; setHoldProgress(0); return; }
     if (holdStartRef.current == null) holdStartRef.current = tMs;
-    const prog = Math.min(1, (tMs - holdStartRef.current) / (recordSec * 1000));
+    const prog = Math.min(1, (tMs - holdStartRef.current) / (RECORD_SEC * 1000));
     setHoldProgress(prog);
     if (prog >= 1) { holdStartRef.current = null; void persist(vec); }
-  }, [stillness, recordSec]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [persist]);
 
-  const { videoRef, status, error: camError, start } = usePoseLandmarker(onFrame, cam.deviceId);
+  const { videoRef, status, error, start } = usePoseLandmarker(onFrame, deviceId);
 
-  const prompt = {
-    ready: "Press start, then invent a shape only you will remember.",
-    record: "Strike your shape — and hold it.",
-    saving: "Saving your shape…",
-    enrolled: "Your shape is saved. Return to the waiting room until you are called.",
-  }[phase];
+  // No Start button on a controls-free display — auto-start once the model is idle.
+  useEffect(() => { if (status === "idle") void start(); }, [status, start]);
 
-  // The hold only counts while the whole body is framed, so warn the visitor the
-  // moment they're cut off — but only while we're actually looking (ready/record).
-  const showFrameHint = status === "running" && !framed && (phase === "ready" || phase === "record");
+  // Expose the arm-toggle to the parent's relay; once the camera is live, refresh the parent's
+  // device list so its now-permitted camera labels reach the operator's picker.
+  useEffect(() => {
+    armRef.current = toggleArmed;
+    return () => { armRef.current = null; };
+  }, [armRef, toggleArmed]);
+  useEffect(() => {
+    if (status === "running" && !readyRef.current) { readyRef.current = true; onCameraReady?.(); }
+  }, [status, onCameraReady]);
+
+  const showFrameHint = status === "running" && !framed;
 
   return (
-    <main className="void">
-      <header>
-        <h1>Body Scan</h1>
-        <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
-      </header>
-      <p className="dim">Number {visitor.number} · invent and hold a shape — it becomes your key.</p>
-
-      <div className={`posestage${showFrameHint ? " unframed" : ""}`}>
-        <video ref={videoRef} playsInline muted />
-        <canvas ref={canvasRef} />
-        {showFrameHint && (
-          <div className="framehint">Step back so your whole body — head to toe — is in frame.</div>
-        )}
-        {phase === "enrolled" && <div className="poseflash">✓ SAVED</div>}
-      </div>
-
-      <p style={{ fontSize: 20, minHeight: 28 }}>{prompt}</p>
-
-      <div className="controls">
-        {status !== "running" ? (
-          <button className="submit" onClick={start} disabled={status === "loading"}>
-            {status === "loading" ? "loading model…" : "Start camera"}
-          </button>
-        ) : phase === "ready" || phase === "enrolled" ? (
-          <button className="submit" onClick={() => setPhaseBoth("record")}>
-            {phase === "enrolled" ? "Re-record shape" : "Record shape"}
-          </button>
-        ) : null}
-        <DevicePicker
-          kind="videoinput"
-          label="camera"
-          devices={cam.devices}
-          value={cam.deviceId}
-          onChange={cam.setDeviceId}
-          needsPermission={cam.needsPermission}
-          onEnableLabels={cam.enableLabels}
-        />
-      </div>
-      {(error || camError) && <p className="error">{error ?? `camera/model error: ${camError}`}</p>}
-
-      {status === "running" && (
-        <>
-          <div className="posebars">
-            <Bar label="motion" value={1 - Math.min(1, motion / 0.3)} text={motion.toFixed(3)} good={motion < stillness} />
-            <Bar label="record hold" value={holdProgress} text={`${(holdProgress * 100).toFixed(0)}%`} good={holdProgress >= 1} />
+    <div className="bodyscan-cam">
+      <video ref={videoRef} playsInline muted />
+      <canvas ref={canvasRef} />
+      {showFrameHint && <div className="framehint">Step back so your whole body is in frame.</div>}
+      {armed && !showFrameHint && (
+        <div className="bodyscan-hold">
+          <p className="bodyscan-hold-label">hold your shape</p>
+          <div className="bodyscan-hold-track">
+            <div className="bodyscan-hold-fill" style={{ width: `${Math.round(holdProgress * 100)}%` }} />
           </div>
-          <details>
-            <summary className="dim">tuning</summary>
-            <div className="tuners">
-              <Tuner label="stillness (rad)" min={0.01} max={0.2} step={0.005} value={stillness} onChange={setStillness} />
-              <Tuner label="record hold (s)" min={1} max={6} step={0.5} value={recordSec} onChange={setRecordSec} />
-            </div>
-          </details>
-        </>
+        </div>
       )}
-    </main>
+      {error && <div className="framehint">camera unavailable — {error}</div>}
+    </div>
   );
 }
 
-function Tuner({ label, min, max, step, value, onChange }: {
-  label: string; min: number; max: number; step: number; value: number; onChange: (v: number) => void;
-}) {
+function BodyScanSaved({ number }: { number: number }) {
   return (
-    <div className="tuner">
-      <span>{label}</span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-      <span className="val">{value.toFixed(3)}</span>
-    </div>
+    <main className="bodyscan-saved">
+      <SegmentNumber value={number} />
+      <p className="bodyscan-eyebrow">✓ saved</p>
+      <p className="bodyscan-eyebrow">proceed to the waiting room</p>
+    </main>
   );
 }

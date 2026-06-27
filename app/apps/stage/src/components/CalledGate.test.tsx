@@ -35,3 +35,15 @@ test("default skin still shows the title and Confirm arrival", () => {
   expect(screen.getByRole("heading", { name: "Intake" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /confirm arrival/i })).toBeInTheDocument();
 });
+
+test("performer mode: called shows a wait-for-staff standby, no confirm button", () => {
+  render(
+    <CalledGate
+      station="bodyscan" title="Body Scan" connected confirmedBy="performer"
+      slot={slot(called(12))} onArrived={() => {}}
+    />,
+  );
+  expect(screen.getByText("#12")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /confirm arrival/i })).toBeNull();
+  expect(screen.getByText(/wait for staff/i)).toBeInTheDocument();
+});

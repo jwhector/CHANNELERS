@@ -3,6 +3,8 @@ import { initialChoreoFeed, reduceChoreoFeed } from "./choreoFeed";
 
 const delta = (sessionId: string, text: string) => ({ kind: "choreo.delta" as const, sessionId, text });
 const done = (sessionId: string, text: string) => ({ kind: "choreo.done" as const, sessionId, text });
+const mimic = (sessionId: string, text: string, archetype: string) =>
+  ({ kind: "choreo.mimic" as const, sessionId, text, archetype });
 
 /** Fold a sequence of messages, returning the final state. */
 function play(msgs: Array<ReturnType<typeof delta> | ReturnType<typeof done>>) {
@@ -51,6 +53,19 @@ test("once the focused session completes, a waiting session takes over the cue",
   ]);
   expect(s.cue).toBe("Collapse inward.");
   expect(s.active).toBe("b");
+});
+
+test("a mimic shows the oracle line, flags mimicking, and voices it in the persona voice", () => {
+  const s = reduceChoreoFeed(initialChoreoFeed, mimic("a", "The forms are processing.", "tree"));
+  expect(s.cue).toBe("The forms are processing.");
+  expect(s.mimicking).toBe(true);
+  expect(s.speak).toEqual({ sessionId: "a", text: "The forms are processing.", archetype: "tree" });
+});
+
+test("a cue after a mimic clears the mimicking flag", () => {
+  const s = [mimic("a", "x", "tree"), done("a", "Lower your gaze.")].reduce(reduceChoreoFeed, initialChoreoFeed);
+  expect(s.mimicking).toBe(false);
+  expect(s.cue).toBe("Lower your gaze.");
 });
 
 test("the log keeps newest-first and is capped at 30", () => {
