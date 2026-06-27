@@ -2,22 +2,21 @@
  * Dev seed: fabricate several ALTAR-ready visitors so you can test the altar gate
  * (/console), the Pluribus "completed the stationing process" broadcast, the /board
  * ALTAR READY label, and the dispatcher's altar-ready count + list — without walking
- * a crowd through the intake + body-scan kiosks.
+ * a crowd through the whole station circuit.
  *
  * Each fake visitor drives the SAME public endpoints a real one would, in order:
- *   register → intake (survey) → pose (body-scan template)
- * which stamps `intakeAt` + `poseAt` and leaves the visitor `waiting` with no
- * `sessionEndAt` — exactly the predicate the system keys "altar-ready" off of
- * (shared `isAltarReady`: `waiting && intakeAt && poseAt && !sessionEndAt`).
+ *   register → intake (survey) → pose (body-scan) → paper (Done) → offering (Done)
+ * which stamps all four pre-altar milestones (intakeAt, poseAt, paperAt, offeringAt)
+ * and leaves the visitor `waiting` with no `sessionEndAt` — exactly the predicate the
+ * system keys "altar-ready" off of (shared `isAltarReady` / `clearedPreAltarStations`).
+ *
+ * Paper + offering are completed through the operator-override path (`POST /api/checkin`
+ * → `POST /api/dispatch/complete`), so no new brain routes. Because every station is
+ * done, an altar-ready seed is no longer eligible for any soak station — it just waits.
  *
  * Deliberately NO persona/verify: the archetype is chosen AT the altar, so an
  * altar-ready visitor has none yet. (For an oracle-ready visitor that /channel can
  * list, use `seed.ts` / `pnpm seed` instead.)
- *
- * Note: a fresh registrant is held out of dispatch for ~`introHoldMs` (60s default).
- * After that an idle altar-ready visitor may be picked as a *pending* paper occupant,
- * but with autoConfirm off (dev default) their location stays `waiting`, so they
- * remain altar-ready. Open the altar from /console to dispatch them onward.
  *
  * No new brain routes, no kiosk flow. The brain must already be running.
  *
@@ -33,7 +32,7 @@
  */
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { VisitorProfile } from "@channelers/shared";
+import type { Station, VisitorProfile } from "@channelers/shared";
 import {
   flags,
   makeClient,
@@ -48,14 +47,24 @@ const DEFAULT_COUNT = 3;
 
 const BASE = resolveBase(flags(process.argv.slice(2)));
 const client = makeClient(BASE);
-const { post } = client;
+const { get, post } = client;
 
-/** Drive one visitor through register → intake → pose, leaving them altar-ready. */
+/** Drive a station to completion via the operator-override path: force the visitor
+ *  in_progress at the station, then Done (markComplete stamps its milestone, repools). */
+async function completeStation(number: number, visitorId: string, station: Station): Promise<void> {
+  await post("/api/checkin", { number, station });
+  await post("/api/dispatch/complete", { visitorId });
+}
+
+/** Drive one visitor through every pre-altar station, leaving them altar-ready. */
 async function seedOne(number: number, name: string): Promise<VisitorProfile> {
   const registered = await post<VisitorProfile>("/api/register", { number });
   const id = registered.id;
   await post<VisitorProfile>(`/api/visitors/${id}/intake`, { survey: sampleSurvey(name) }); // → intakeAt
-  return post<VisitorProfile>(`/api/visitors/${id}/pose`, { template: samplePose() }); // → poseAt
+  await post<VisitorProfile>(`/api/visitors/${id}/pose`, { template: samplePose() });        // → poseAt
+  await completeStation(number, id, "paper");                                                 // → paperAt
+  await completeStation(number, id, "offering");                                              // → offeringAt
+  return get<VisitorProfile>(`/api/visitors/by-number/${number}`);                            // final, all four stamped
 }
 
 async function main() {
@@ -75,7 +84,7 @@ async function main() {
   const numbers = made.map((v) => `#${v.number}`).join(", ");
   console.log(
     `[seed:altar] ${made.length} altar-ready visitor(s): ${numbers}\n` +
-      `             each cleared intake + body-scan and is waiting in the pool.\n` +
+      `             each cleared every pre-altar station (intake, body-scan, paper, offering) and is waiting.\n` +
       `             open /console to open the altar (and Pluribus-broadcast); /board shows them ALTAR READY.`,
   );
 }
