@@ -57,7 +57,7 @@ export const config = {
   },
   dispatcher: {
     /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper`/`waitingroom` are timed group capacities. */
-    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 4, waitingroom: 10 } as Record<
+    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 3, waitingroom: 10 } as Record<
       "intake" | "bodyscan" | "altar" | "paper" | "waitingroom", number
     >,
     /** Order fill() serves free slots in — scarce single gate (bodyscan) first, soaks last.

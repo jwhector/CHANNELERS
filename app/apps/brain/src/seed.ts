@@ -13,15 +13,21 @@
  *   pnpm --filter @channelers/brain seed:visitor
  *   pnpm --filter @channelers/brain seed:visitor --name "Mara" --archetype drugged_ai
  *   pnpm --filter @channelers/brain seed:visitor --number 9042
- * 
+ *
  * OR
- * 
+ *
  *  pnpm seed
+ *
+ * Targets localhost by default; point at a remote deploy with `--base <url>` or
+ * `SEED_BASE` (flag wins) — e.g. seed the Fly app straight from your laptop:
+ *
+ *   pnpm seed --base https://channelers.fly.dev
+ *   SEED_BASE=https://channelers.fly.dev pnpm seed --name "Mara"
  */
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { ARCHETYPES, type SurveyResponse, type VisitorProfile } from "@channelers/shared";
 import { config } from "./config";
-
-const BASE = `http://${config.host}:${config.port}`;
 
 /** Tiny `--flag value` / `--flag=value` parser over argv. */
 function flags(argv: string[]): Record<string, string> {
@@ -38,6 +44,22 @@ function flags(argv: string[]): Record<string, string> {
   }
   return out;
 }
+
+/**
+ * Which brain the seed drives. Precedence: `--base <url>` flag › `SEED_BASE` env ›
+ * the local dev brain (`config.host:port`). Lets one invocation seed a remote deploy
+ * while a plain `pnpm seed` still hits localhost — backwards-compatible. Trailing
+ * slashes are trimmed so `${BASE}${path}` never doubles up.
+ */
+export function resolveBase(
+  f: Record<string, string>,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const raw = f.base ?? env.SEED_BASE ?? `http://${config.host}:${config.port}`;
+  return raw.replace(/\/+$/, "");
+}
+
+const BASE = resolveBase(flags(process.argv.slice(2)));
 
 async function req<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -105,12 +127,22 @@ async function main() {
   );
 }
 
-main().catch((err) => {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) {
-    console.error(`[seed] could not reach the brain at ${BASE} — is it running? (pnpm dev)`);
-  } else {
-    console.error(`[seed] ${msg}`);
-  }
-  process.exit(1);
-});
+/** True only when run as the CLI entry (`tsx src/seed.ts`), false when imported by tests
+ *  — so importing for `resolveBase` never fires the live HTTP run or its `process.exit`. */
+function isEntrypoint(): boolean {
+  const arg = process.argv[1];
+  if (!arg) return false;
+  return realpathSync(arg) === realpathSync(fileURLToPath(import.meta.url));
+}
+
+if (isEntrypoint()) {
+  main().catch((err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) {
+      console.error(`[seed] could not reach the brain at ${BASE} — is it running? (pnpm dev)`);
+    } else {
+      console.error(`[seed] ${msg}`);
+    }
+    process.exit(1);
+  });
+}

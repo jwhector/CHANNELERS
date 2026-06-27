@@ -49,6 +49,24 @@ BRIDGE_DIAL_URL=wss://<your-app>.fly.dev/agent BRIDGE_TOKEN=<same ABLETON_AGENT_
   pnpm --filter ableton-osc-bridge serve
 ```
 
+## Seed a test visitor on the remote
+
+The dev seed (`apps/brain/src/seed.ts`) just drives the public endpoints
+(`register → intake → persona → verify`), so you can point it at the deploy from your
+laptop — no SSH, no DB. Override the target with `--base` (or `SEED_BASE`); omit it and
+you still hit localhost (backwards-compatible):
+
+```bash
+pnpm seed --base https://<your-app>.fly.dev                     # oracle-ready dummy #9000+
+pnpm seed --base https://<your-app>.fly.dev --name "Mara" --archetype drugged_ai
+SEED_BASE=https://<your-app>.fly.dev pnpm seed --number 9042    # env form (flag wins if both)
+```
+
+It then shows up under "Available visitors" on `/channel`. (You can also run it *inside*
+the machine — `fly ssh console -C "/bin/sh -lc 'cd /app && pnpm seed'"` — which targets
+the container's own loopback.) Seeded visitors live in the in-memory store until the next
+redeploy/crash, same as real ones.
+
 ## Operating caveats (read before show day)
 
 - **State is volatile.** A redeploy or crash wipes all visitors/sessions. **Do not

@@ -27,7 +27,7 @@ export function Intake() {
 
   useReleaseToGate(visitor, slot, done, resetKiosk);
 
-  const status = connected ? "INTAKE · LIVE" : "INTAKE · NO SIGNAL";
+  const status = connected ? "" : "";
 
   if (!visitor) {
     return (
