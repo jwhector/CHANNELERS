@@ -56,20 +56,15 @@ export const config = {
     agentPath: process.env.ABLETON_AGENT_PATH ?? "/agent",
   },
   dispatcher: {
-    /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper`/`waitingroom` are timed group capacities. */
-    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 3, waitingroom: 10 } as Record<
-      "intake" | "bodyscan" | "altar" | "paper" | "waitingroom", number
-    >,
+    /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper` is a kiosk-less group capacity. */
+    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 3 } as Record<Station, number>,
     /** Order fill() serves free slots in — scarce single gate (bodyscan) first, soaks last.
      *  Keeps the one bodyscan station from losing its only candidate to the 2-wide intake. */
-    fillPriority: ["bodyscan", "intake", "altar", "paper", "waitingroom"] as Station[],
+    fillPriority: ["bodyscan", "intake", "altar", "paper"] as Station[],
     /** Timed group stations: present ⇒ kiosk-less, always-online, completed by a dwell timer (spec 2026-06-22). */
     timed: {
       paper: { dwellMs: Number(process.env.PAPER_DWELL_MS ?? 300_000) },
-      waitingroom: { dwellMs: Number(process.env.WAITINGROOM_DWELL_MS ?? 300_000) },
-    } as Partial<
-      Record<"intake" | "bodyscan" | "altar" | "paper" | "waitingroom", { dwellMs: number }>
-    >,
+    } as Partial<Record<Station, { dwellMs: number }>>,
     /** Per-visitor intro hold: a fresh registrant is ineligible for new assignment for this long
      *  after registration (replaces the old global K / warm-up). */
     introHoldMs: Number(process.env.DISPATCH_INTRO_HOLD_MS ?? 60_000),

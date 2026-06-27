@@ -49,7 +49,7 @@ describe("slot derivation from config counts", () => {
       ["altar-0", "bodyscan-0", "bodyscan-1", "intake-0", "intake-1", "intake-2"],
     );
     expect(s.slots.every((x) => x.online === false && !x.kioskId)).toBe(true);
-    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false, paper: false, waitingroom: false });
+    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false, paper: false });
   });
 });
 
@@ -173,16 +173,16 @@ describe("flow-health snapshot fields", () => {
     expect(s.bodyscanBlocked).toBe("empty"); // posed person is not a bodyscan candidate
   });
 
-  it("reports 'soaking' when the only unposed person is in a timed station while bodyscan is idle", () => {
+  it("reports 'soaking' when the only unposed person is in a group station while bodyscan is idle", () => {
     const f2 = fakeBus();
     const d2 = createDispatcher(f2.bus, {
-      knobs: { slots: { intake: 0, bodyscan: 1, altar: 0, paper: 0, waitingroom: 1 },
-               timed: { waitingroom: { dwellMs: 300_000 } }, introHoldMs: 0 } as any,
+      knobs: { slots: { intake: 0, bodyscan: 1, altar: 0, paper: 1 },
+               timed: { paper: { dwellMs: 300_000 } }, introHoldMs: 0 } as any,
       autoStart: false,
     });
     f2.hello("bodyscan", "kb", "cb");        // bodyscan idle
     const v = store.register(NUM());
-    d2.checkin(v.number, "waitingroom");     // unposed v forced in_progress @ waitingroom
+    d2.checkin(v.number, "paper");           // unposed v forced in_progress @ paper
     const s = d2.snapshot();
     expect(s.bodyscanIdle).toBe(true);
     expect(s.bodyscanBlocked).toBe("soaking");
@@ -192,7 +192,7 @@ describe("flow-health snapshot fields", () => {
   it("reports 'held' when the only unposed candidate is on an intro hold", () => {
     const f2 = fakeBus();
     const d2 = createDispatcher(f2.bus, {
-      knobs: { slots: { intake: 0, bodyscan: 1, altar: 0, paper: 0, waitingroom: 0 },
+      knobs: { slots: { intake: 0, bodyscan: 1, altar: 0, paper: 0 },
                introHoldMs: 600_000 } as any,
       autoStart: false,
     });
@@ -456,62 +456,6 @@ describe("paper: timed group station", () => {
   it("exposes the paper dwell in the snapshot for the operator countdown", () => {
     expect(pd.snapshot().timedDwellMs?.paper).toBe(300_000);
     expect(pd.snapshot().timedDwellMs?.intake).toBeUndefined();
-  });
-});
-
-describe("waitingroom: timed group station (10 slots, 5-min dwell)", () => {
-  const W_KNOBS = {
-    slots: { intake: 0, bodyscan: 0, altar: 0, paper: 0, waitingroom: 10 },
-    timed: { waitingroom: { dwellMs: 300_000 } },
-    introHoldMs: 0, tickMs: 5_000, noShowAutoRepool: true,
-  };
-  let wf: ReturnType<typeof fakeBus>;
-  let wd: ReturnType<typeof createDispatcher>;
-  beforeEach(() => {
-    wf = fakeBus();
-    wd = createDispatcher(wf.bus, { knobs: W_KNOBS as any, autoStart: false });
-  });
-  afterEach(() => wd.stop());
-
-  it("derives 10 waitingroom slots that are always online without any kiosk", () => {
-    const s = wd.snapshot();
-    const room = s.slots.filter((x) => x.station === "waitingroom");
-    expect(room.length).toBe(10);
-    expect(room.every((x) => x.online === true && !x.kioskId)).toBe(true);
-    expect(s.stationsOnline.waitingroom).toBe(true);
-  });
-
-  it("a fresh waiting visitor is eligible for waitingroom", () => {
-    store.register(881001);
-    const q = wd.snapshot().queue.find((e) => e.number === 881001);
-    expect(q?.eligible).toContain("waitingroom");
-  });
-
-  it("completes a waitingroom occupant 5 min after ARRIVAL: stamps waitingRoomAt, frees, repools", () => {
-    const v = store.register(882001);
-    wd.kick();
-    wd.confirm(v.id);
-    wd.arrive(v.id); // hourglass starts at confirmed arrival
-    vi.advanceTimersByTime(300_000 + 1_000);
-    wd.kick(); // reconcile
-    expect(store.get(v.id)?.waitingRoomAt).toBeTruthy();
-    expect(store.get(v.id)?.location.state).toBe("waiting");
-    expect(wd.snapshot().slots.some((x) => x.occupant?.visitorId === v.id)).toBe(false);
-  });
-
-  it("does not complete before the dwell elapses", () => {
-    const v = store.register(882002);
-    wd.kick();
-    wd.confirm(v.id);
-    wd.arrive(v.id);
-    vi.advanceTimersByTime(120_000); // < dwell
-    wd.kick();
-    expect(store.get(v.id)?.waitingRoomAt).toBeUndefined();
-    expect(wd.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
-  });
-
-  it("exposes the waitingroom dwell in the snapshot for the operator countdown", () => {
-    expect(wd.snapshot().timedDwellMs?.waitingroom).toBe(300_000);
   });
 });
 

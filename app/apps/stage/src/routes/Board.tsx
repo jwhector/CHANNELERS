@@ -8,9 +8,42 @@ import "../styles/board.css";
 type Tone = "now" | "at" | "wait" | "done";
 
 /** One roster line: a visitor number and where they are. */
-type Row = { id: string; number: number; loc: string; tone: Tone };
+export type Row = { id: string; number: number; loc: string; tone: Tone };
 
 const pad3 = (n: number) => String(n).padStart(3, "0");
+
+/** Pure roster derivation — every visitor and where they are. A visitor who is waiting and not at
+ *  a station is in the holding area (#24): "WAITING ROOM", or "ON HOLD" while held. */
+export function boardRows(state: DispatchState | null): Row[] {
+  const fromSlots: Row[] = (state?.slots ?? [])
+    .filter((s) => s.occupant)
+    .map((s) => {
+      const o = s.occupant!;
+      return { id: o.visitorId, number: o.number, loc: STATION_LABEL[s.station], tone: (o.phase === "called" ? "now" : "at") as Tone };
+    });
+
+  const inSlot = new Set(fromSlots.map((r) => r.id));
+  const inQueue = new Set((state?.queue ?? []).map((q) => q.id));
+
+  const fromQueue: Row[] = (state?.queue ?? []).map((q) => ({
+    id: q.id,
+    number: q.number,
+    loc: (q.heldUntil ?? q.holdReason) ? "ON HOLD" : "WAITING ROOM",
+    tone: "wait",
+  }));
+
+  // Altar-ready visitors who aren't otherwise placed (e.g. the altar is closed, so they're not
+  // eligible for any open station) are still parked in the holding area. (#24; #18 refines later.)
+  const fromReady: Row[] = (state?.altarReadyList ?? [])
+    .filter((v) => !inSlot.has(v.id) && !inQueue.has(v.id))
+    .map((v) => ({ id: v.id, number: v.number, loc: "WAITING ROOM", tone: "wait" as Tone }));
+
+  const fromDone: Row[] = (state?.completed ?? []).map((c) => ({
+    id: c.id, number: c.number, loc: "DONE", tone: "done",
+  }));
+
+  return [...fromSlots, ...fromQueue, ...fromReady, ...fromDone].sort((a, b) => a.number - b.number);
+}
 
 /** Public lobby roster — every visitor number and their current station, as one
  *  bare terminal. `called` = NOW SERVING (highlighted). Lives off dispatch.state. */
@@ -25,29 +58,7 @@ export function Board() {
     void api.dispatch.state().then(setState).catch(() => {});
   }, []);
 
-  const fromSlots: Row[] = (state?.slots ?? [])
-    .filter((s) => s.occupant)
-    .map((s) => {
-      const o = s.occupant!;
-      const loc = STATION_LABEL[s.station];
-      return { id: o.visitorId, number: o.number, loc, tone: o.phase === "called" ? "now" : "at" };
-    });
-
-  const fromQueue: Row[] = (state?.queue ?? []).map((q) => ({
-    id: q.id,
-    number: q.number,
-    loc: q.heldUntil ?? q.holdReason ? "ON HOLD" : "WAITING",
-    tone: "wait",
-  }));
-
-  const fromDone: Row[] = (state?.completed ?? []).map((c) => ({
-    id: c.id,
-    number: c.number,
-    loc: "DONE",
-    tone: "done",
-  }));
-
-  const rows = [...fromSlots, ...fromQueue, ...fromDone].sort((a, b) => a.number - b.number);
+  const rows = boardRows(state);
 
   return (
     <main className="depboard">

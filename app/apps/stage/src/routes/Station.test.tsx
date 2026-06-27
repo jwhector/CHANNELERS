@@ -37,12 +37,12 @@ test("shows a no-show warning when the occupant is flagged", () => {
 test("a timed in-progress occupant shows Done and fires onComplete", () => {
   const onComplete = vi.fn();
   const slot: Slot = {
-    id: "waitingroom-0", station: "waitingroom", online: true,
+    id: "paper-0", station: "paper", online: true,
     occupant: { visitorId: "v9", number: 9, phase: "in_progress", since: "" },
   };
   render(
     <StationOpsView
-      station="waitingroom" connected called={[]} inProgress={[slot]}
+      station="paper" connected called={[]} inProgress={[slot]}
       dwellMs={300_000} busyId={null}
       onArrive={() => {}} onRelease={() => {}} onComplete={onComplete} />,
   );

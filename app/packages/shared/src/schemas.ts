@@ -41,8 +41,8 @@ export const PoseVector = z.object({
 });
 export type PoseVector = z.infer<typeof PoseVector>;
 
-/** The dispatchable stations (spec §4). `paper` and `waitingroom` are timed group stations. */
-export const Station = z.enum(["intake", "bodyscan", "altar", "paper", "waitingroom"]);
+/** The dispatchable stations (spec §4). `paper` is a kiosk-less group station (manual checkout). */
+export const Station = z.enum(["intake", "bodyscan", "altar", "paper"]);
 export type Station = z.infer<typeof Station>;
 
 /** Human-facing station names — the public wayfinding labels shared by the lobby board (`/board`)
@@ -53,7 +53,6 @@ export const STATION_LABEL: Record<Station, string> = {
   bodyscan: "STATION C - BODY SCAN",
   altar: "ALTAR",
   paper: "STATION B - TYPEWRITER",
-  waitingroom: "STATION A - WAITING ROOM",
 };
 
 /** Transient dispatch location — a visitor is in exactly one place at a time (spec §3.2).
@@ -84,10 +83,8 @@ export const VisitorProfile = z.object({
   poseAt: z.string().optional(),
   personaAt: z.string().optional(),
   poseVerifiedAt: z.string().optional(),
-  /** Timed group station: stamped on dwell-timer expiry at the paper station (spec 2026-06-22). */
+  /** Kiosk-less group station: stamped on manual checkout (Done) at the paper station. */
   paperAt: z.string().optional(),
-  /** Timed group station: stamped on dwell-timer expiry at the waiting room (5-min hold). */
-  waitingRoomAt: z.string().optional(),
   sessionStartAt: z.string().optional(),
   sessionEndAt: z.string().optional(),
 });
