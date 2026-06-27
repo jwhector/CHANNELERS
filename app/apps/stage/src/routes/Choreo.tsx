@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DEFAULT_CHOREO_CONFIG, type ChoreoConfig, type WsServerMsg } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
-import { speak, stopSpeaking } from "../lib/speech";
+import { speak, speakSequence, stopSpeaking } from "../lib/speech";
 import { useDevices } from "../lib/devices";
 import { usePlaybackRate, DEFAULT_PLAYBACK_RATE } from "../lib/playbackRate";
 import { DevicePicker } from "../components/DevicePicker";
@@ -92,6 +92,9 @@ export function ChoreoDisplay({
   );
 }
 
+/** Quick neutral-voice warning chased after the last cue before a cadence mimic. */
+const PREPARE_TO_CHANNEL = "Prepare to channel.";
+
 /** The /choreo route: live movement-cue feed, reactToOracle timing, and in-ear TTS (on by default). */
 export function Choreo() {
   const [cue, setCue] = useState("");
@@ -118,9 +121,15 @@ export function Choreo() {
     setLog(next.log);
     setMimicking(next.mimicking);
     // The focused session voices a cue (neutral) or a mimic line (persona voice via archetype);
-    // speak() itself preempts any in-flight clip.
-    if (next.speak && speakRef.current)
-      void speak(next.speak.text, { sinkId: outRef.current, archetype: next.speak.archetype, rate: rateRef.current });
+    // speak()/speakSequence() preempt any in-flight clip. A cue flagged prepareToChannel is chased
+    // by a "prepare to channel" warning so the dancers know the next turn is theirs to channel.
+    if (next.speak && speakRef.current) {
+      const { text, archetype, prepareToChannel } = next.speak;
+      const out = { sinkId: outRef.current, rate: rateRef.current };
+      if (prepareToChannel)
+        void speakSequence([{ text, archetype }, { text: PREPARE_TO_CHANNEL }], out);
+      else void speak(text, { ...out, archetype });
+    }
   });
 
   useEffect(() => {
@@ -132,6 +141,13 @@ export function Choreo() {
     const nextCfg = { ...cfg, ...patch };
     setCfg(nextCfg);
     void api.choreo.setConfig(nextCfg);
+    // Operator turned channelling off → drop the local "mimic the voice" banner now instead of
+    // waiting for the next cue. (While manual mimic was on, the choreographer was suppressed, so no
+    // cue would otherwise arrive to clear it.) The brain stops emitting mimics from the next turn.
+    if (!nextCfg.mimicManual && !nextCfg.mimicCadenceEnabled) {
+      feed.current = { ...feed.current, mimicking: false };
+      setMimicking(false);
+    }
   }
   function toggleSpeak(next: boolean) {
     setSpeakCues(next);

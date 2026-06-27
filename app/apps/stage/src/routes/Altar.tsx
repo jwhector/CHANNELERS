@@ -88,12 +88,13 @@ export function Gate({ visitor, connected, showCamera = true }: { visitor: Visit
         <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
       </header>
       <p className="dim">Number {visitor.number} · {visitor.survey?.name ?? "—"}</p>
-      {ready && <p className="poseflash">ORACLE READY — proceed to be channelled.</p>}
+      {/* {ready && <p className="poseflash">ORACLE READY proceed to be channelled.</p>} */}
       {error && <p className="error">{error}</p>}
 
       <h3>1 · Validate your shape</h3>
       {verified ? (
-        <p className="poseflash">✓ VERIFIED</p>
+        // <p className="poseflash">✓ VERIFIED</p>
+        <></>
       ) : (
         <div className="controls">
           <button className="submit" onClick={() => void markVerified()}>Unlock (override)</button>

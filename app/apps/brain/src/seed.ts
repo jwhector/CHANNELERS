@@ -8,6 +8,9 @@
  * exactly the predicate /channel uses to list a visitor as channellable
  * (Channel.tsx: `!!v.personaAt && !!v.poseVerifiedAt && !v.sessionEndAt`).
  *
+ * For ALTAR-ready visitors (cleared intake + body-scan, waiting for the altar to
+ * open) use `seed-altar.ts` (`pnpm seed:altar`) instead.
+ *
  * No new brain routes, no kiosk flow. The brain must already be running.
  *
  *   pnpm --filter @channelers/brain seed:visitor
@@ -26,63 +29,14 @@
  */
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { ARCHETYPES, type SurveyResponse, type VisitorProfile } from "@channelers/shared";
-import { config } from "./config";
+import { ARCHETYPES, type VisitorProfile } from "@channelers/shared";
+import { flags, makeClient, nextDevNumber, resolveBase, sampleSurvey } from "./seed-lib";
 
-/** Tiny `--flag value` / `--flag=value` parser over argv. */
-function flags(argv: string[]): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (!a.startsWith("--")) continue;
-    const eq = a.indexOf("=");
-    if (eq !== -1) {
-      out[a.slice(2, eq)] = a.slice(eq + 1);
-    } else {
-      out[a.slice(2)] = argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[(i += 1)] : "true";
-    }
-  }
-  return out;
-}
-
-/**
- * Which brain the seed drives. Precedence: `--base <url>` flag › `SEED_BASE` env ›
- * the local dev brain (`config.host:port`). Lets one invocation seed a remote deploy
- * while a plain `pnpm seed` still hits localhost — backwards-compatible. Trailing
- * slashes are trimmed so `${BASE}${path}` never doubles up.
- */
-export function resolveBase(
-  f: Record<string, string>,
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  const raw = f.base ?? env.SEED_BASE ?? `http://${config.host}:${config.port}`;
-  return raw.replace(/\/+$/, "");
-}
+// Re-exported so existing importers (e.g. test/seed.test.ts) keep working.
+export { resolveBase } from "./seed-lib";
 
 const BASE = resolveBase(flags(process.argv.slice(2)));
-
-async function req<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    // Only declare a JSON body when we actually send one — a bare content-type with an
-    // empty body trips Fastify's FST_ERR_CTP_EMPTY_JSON_BODY (e.g. the bodyless /verify).
-    headers: body === undefined ? undefined : { "content-type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${path} → ${res.status} ${await res.text()}`);
-  return (await res.json()) as T;
-}
-const get = <T>(path: string) => req<T>("GET", path);
-const post = <T>(path: string, body?: unknown) => req<T>("POST", path, body);
-
-/** First free ticket number at/above 9000 — keeps dev dummies visually distinct from real ones. */
-async function nextDevNumber(): Promise<number> {
-  const visitors = await get<VisitorProfile[]>("/api/visitors");
-  const taken = new Set(visitors.map((v) => v.number));
-  let n = 9000;
-  while (taken.has(n)) n++;
-  return n;
-}
+const { get, post } = makeClient(BASE);
 
 async function main() {
   const f = flags(process.argv.slice(2));
@@ -93,25 +47,11 @@ async function main() {
     throw new Error(`unknown archetype "${archetype}" — choose one of: ${ids}`);
   }
 
-  const number = f.number ? Number(f.number) : await nextDevNumber();
+  const number = f.number ? Number(f.number) : await nextDevNumber({ get, post });
   if (!Number.isInteger(number)) throw new Error(`--number must be an integer, got "${f.number}"`);
   const name = f.name ?? "Test Visitor";
 
-  // A plausible filled-in survey (real field ids from packages/shared/src/survey.ts).
-  const survey: SurveyResponse = {
-    name,
-    freeText: {
-      tender: "Only on alternate Tuesdays, and never in writing.",
-      shoeSize: "10.5",
-      lost: "a sense of the appropriate volume for indoor voices",
-      ssn: "000-00-0000",
-    },
-    phrases: [
-      { axis: "vulnerability", choice: "Moody Sky" },
-      { axis: "tension", choice: "Hard Times" },
-      { axis: "hopefulness", choice: "Night Drive" },
-    ],
-  };
+  const survey = sampleSurvey(name);
 
   const registered = await post<VisitorProfile>("/api/register", { number });
   const id = registered.id;

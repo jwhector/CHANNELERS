@@ -56,17 +56,20 @@ export const config = {
     agentPath: process.env.ABLETON_AGENT_PATH ?? "/agent",
   },
   dispatcher: {
-    /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper` is a kiosk-less group capacity. */
-    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 3 } as Record<Station, number>,
+    /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper` (manual group) and
+     *  `offering` (timed room) are kiosk-less group capacities. */
+    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 3, offering: 5 } as Record<Station, number>,
     /** Order fill() serves free slots in — scarce single gate (bodyscan) first, soaks last.
      *  Keeps the one bodyscan station from losing its only candidate to the 2-wide intake. */
-    fillPriority: ["bodyscan", "intake", "altar", "paper"] as Station[],
+    fillPriority: ["bodyscan", "intake", "altar", "paper", "offering"] as Station[],
     /** Kiosk-less group stations: always-online slots with no hardware binding. A member also
      *  listed in `timed` auto-completes on its dwell; otherwise it exits only by manual Done (#17). */
     groupStations: ["paper"] as Station[],
-    /** Optional per-station dwell auto-complete — kept generic for a future timed station; none now.
-     *  Shape: { paper: { dwellMs: 300_000 } }. */
-    timed: {} as Partial<Record<Station, { dwellMs: number }>>,
+    /** Optional per-station dwell auto-complete. `offering` (the timed "time offering" room) uses it
+     *  for its timed release; a performer can still Done it early via markComplete. */
+    timed: {
+      offering: { dwellMs: Number(process.env.OFFERING_DWELL_MS ?? 300_000) },
+    } as Partial<Record<Station, { dwellMs: number }>>,
     /** Per-visitor intro hold: a fresh registrant is ineligible for new assignment for this long
      *  after registration (replaces the old global K / warm-up). */
     introHoldMs: Number(process.env.DISPATCH_INTRO_HOLD_MS ?? 60_000),

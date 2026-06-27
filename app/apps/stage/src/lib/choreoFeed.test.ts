@@ -68,6 +68,21 @@ test("a cue after a mimic clears the mimicking flag", () => {
   expect(s.cue).toBe("Lower your gaze.");
 });
 
+test("a done flagged prepareToChannel carries the flag onto the speak request", () => {
+  const s = reduceChoreoFeed(initialChoreoFeed, {
+    kind: "choreo.done",
+    sessionId: "a",
+    text: "Reach forward.",
+    prepareToChannel: true,
+  });
+  expect(s.speak).toEqual({ sessionId: "a", text: "Reach forward.", prepareToChannel: true });
+});
+
+test("an ordinary done does not set prepareToChannel", () => {
+  const s = play([done("a", "Lower your gaze.")]);
+  expect(s.speak?.prepareToChannel).toBeUndefined();
+});
+
 test("the log keeps newest-first and is capped at 30", () => {
   const msgs = Array.from({ length: 35 }, (_, i) => done(`s${i}`, `cue ${i}`));
   const s = play(msgs);

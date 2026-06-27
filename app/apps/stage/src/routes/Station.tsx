@@ -10,7 +10,7 @@ import { remainingSec, fmtClock, noShowDeadline } from "../lib/dispatchTiming";
  * Stations a performer admits arrivals for from this screen. Intake self-confirms;
  * altar admits on its own /altar surface (operator-confirmed there) — neither is here.
  */
-const PERFORMER_STATIONS: StationName[] = ["bodyscan", "paper"];
+const PERFORMER_STATIONS: StationName[] = ["bodyscan", "paper", "offering"];
 
 /** Route entry: bare /station shows a picker; /station/:station opens that station's view. */
 export function Station() {

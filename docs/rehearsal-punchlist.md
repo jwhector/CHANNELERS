@@ -10,6 +10,7 @@ Source of truth for the software-change backlog from the **2026-06-26 full-run r
 - The limit is *coherence*, not the 1M window — see the operating-model memory entry.
 
 ### Per-session handoff checklist
+
 1. Branch landed; `pnpm -r typecheck` clean; relevant `test` suite green.
 2. `CHANGELOG.md` entry (what / why / files-areas / docs-touched).
 3. **Reconcile `ARCHITECTURE.md` + `CLAUDE.md` route lists** if routes/architecture changed (this step gets missed — make it explicit).
@@ -24,63 +25,86 @@ Status: 🔴 todo · 🟡 in progress · 🟢 done · ⏸ blocked · ✅ shipped
 
 ## Already shipped on `friday-preshow` — verify before doing work
 
-| # | Item | Note |
-|---|------|------|
-| 2 | Station display = alias, not id | `STATION_LABEL` shipped (2026-06-26); `/dispatch` shows "STATION C - BODY SCAN". Likely **label-text tuning only** to match performers' aliases, not new code. ✅ |
-| 6 | `/station` ability to release | **Release** (repool) button already exists on `/station` rows. Confirm whether you mean releasing an **in_progress** kiosk visitor (bodyscan/altar), not just timed. ✅ |
-| 18 | ALTAR READY on board | **Done S7** — `boardRows` now labels the `altarReadyList` subset `ALTAR READY` (covers both the in-queue and altar-closed/unplaced cases); `ON HOLD` still wins for a held visitor. 🟢 |
+
+| #   | Item                            | Note                                                                                                                                                                                   |
+| --- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2   | Station display = alias, not id | `STATION_LABEL` shipped (2026-06-26); `/dispatch` shows "STATION C - BODY SCAN". Likely **label-text tuning only** to match performers' aliases, not new code. ✅                       |
+| 6   | `/station` ability to release   | **Release** (repool) button already exists on `/station` rows. Confirm whether you mean releasing an **in_progress** kiosk visitor (bodyscan/altar), not just timed. ✅                 |
+| 18  | ALTAR READY on board            | **Done S7** — `boardRows` now labels the `altarReadyList` subset `ALTAR READY` (covers both the in-queue and altar-closed/unplaced cases); `ON HOLD` still wins for a held visitor. 🟢 |
+
 
 ## Streams
 
 ### Stream A — Dispatcher logic (`apps/brain/src/dispatcher.ts`, `packages/shared/src/protocol.ts`)
-| # | Item | Pri | Status | Notes / deps |
-|---|------|-----|--------|--------------|
-| 3 | No-show hold persists after a late arrival completes the station | P0 | 🟢 | Fixed S1: `arrive()`/`checkin()` now clear `noShowHoldUntil`. TDD red→green. |
-| 4 | 1-min intro hold after number registration | P1 | 🟢 | Fixed S1: `introHoldMs` default 30s → 60s. |
-| 17 | Paper: remove auto-dwell timer, enforce manual checkout | P1 | 🟢 | Done S5: `paper` is now a `groupStation` with **no dwell** — `reconcile()` never auto-completes/stale-reaps it; only manual **Done** (`markComplete`) exits. Decoupled "always-online" from "dwell-completing"; the `timed` machinery is kept generic but configured to `{}`. TDD red→green. |
-| 24 | Waiting room → **overflow holding space**, not a station | P2 | 🟢 | Done S5: `waitingroom` fully retired (enum/label/milestone/config/dispatcher/`/station` picker). `/board` derives a `WAITING ROOM`/`ON HOLD` bucket via a new pure `boardRows()` (unions `queue` + `altarReadyList`). Decisions: pure display bucket; "anyone waiting, not in a slot"; physical hourglass retired (stage direction). |
-| 14 | Bodyscan "watch-3" viewing queue (3 assigned, 1 processes) | P3 | 🗓 | Doesn't map to one-slot model; needs design. Post-workshop. |
+
+
+| #   | Item                                                             | Pri | Status | Notes / deps                                                                                                                                                                                                                                                                                                                         |
+| --- | ---------------------------------------------------------------- | --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 3   | No-show hold persists after a late arrival completes the station | P0  | 🟢     | Fixed S1: `arrive()`/`checkin()` now clear `noShowHoldUntil`. TDD red→green.                                                                                                                                                                                                                                                         |
+| 4   | 1-min intro hold after number registration                       | P1  | 🟢     | Fixed S1: `introHoldMs` default 30s → 60s.                                                                                                                                                                                                                                                                                           |
+| 17  | Paper: remove auto-dwell timer, enforce manual checkout          | P1  | 🟢     | Done S5: `paper` is now a `groupStation` with **no dwell** — `reconcile()` never auto-completes/stale-reaps it; only manual **Done** (`markComplete`) exits. Decoupled "always-online" from "dwell-completing"; the `timed` machinery is kept generic but configured to `{}`. TDD red→green.                                         |
+| 24  | Waiting room → **overflow holding space**, not a station         | P2  | 🟢     | Done S5: `waitingroom` fully retired (enum/label/milestone/config/dispatcher/`/station` picker). `/board` derives a `WAITING ROOM`/`ON HOLD` bucket via a new pure `boardRows()` (unions `queue` + `altarReadyList`). Decisions: pure display bucket; "anyone waiting, not in a slot"; physical hourglass retired (stage direction). |
+| 14  | Bodyscan "watch-3" viewing queue (3 assigned, 1 processes)       | P3  | 🗓     | Doesn't map to one-slot model; needs design. Post-workshop.                                                                                                                                                                                                                                                                          |
+
 
 ### Stream B — Oracle / TTS (`apps/brain/src/{choreo,divination,tts}.ts`, `apps/stage/src/{routes/Choreo.tsx,lib/speech.ts}`)
-| # | Item | Pri | Status | Notes / deps |
-|---|------|-----|--------|--------------|
-| 22 | Mimic cadence broken: knobs don't toggle, once started never stops | P0 | ⏸ | **Paused S2** pending a better repro. Investigation so far: brain `isMimicTurn` reads **fresh** cfg per turn ([divination.ts:252-255](../app/apps/brain/src/divination.ts#L252)); cadence math, config round-trip, route, and client `update()` (sends the full cfg) all look correct in isolation — so the bug isn't obvious in code. The display `mimicking` banner persists *by design* while mimic is on (mimic turns emit only `choreo.mimic`, no cue to reset it) and clears on the next normal cue. Need to characterize: which knob, which surface, what exact sequence. |
-| 23 | TTS reads too fast even at slowest ElevenLabs setting | P0 | 🟢 | Done S2. Per-device client `playbackRate` knob (default 0.7, preserve pitch) on `/channel` + `/choreo`; `localStorage`-persisted. Compounds with the brain's ElevenLabs `speed: 0.7` (left as-is). New `lib/playbackRate.ts` + `components/SpeedPicker.tsx`. TDD; typecheck clean; 22/22 touched tests green. |
+
+
+| #   | Item                                                               | Pri | Status | Notes / deps                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --- | ------------------------------------------------------------------ | --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 22  | Mimic cadence broken: knobs don't toggle, once started never stops | P0  | ⏸      | **Paused S2** pending a better repro. Investigation so far: brain `isMimicTurn` reads **fresh** cfg per turn ([divination.ts:252-255](../app/apps/brain/src/divination.ts#L252)); cadence math, config round-trip, route, and client `update()` (sends the full cfg) all look correct in isolation — so the bug isn't obvious in code. The display `mimicking` banner persists *by design* while mimic is on (mimic turns emit only `choreo.mimic`, no cue to reset it) and clears on the next normal cue. Need to characterize: which knob, which surface, what exact sequence. |
+| 23  | TTS reads too fast even at slowest ElevenLabs setting              | P0  | 🟢     | Done S2. Per-device client `playbackRate` knob (default 0.7, preserve pitch) on `/channel` + `/choreo`; `localStorage`-persisted. Compounds with the brain's ElevenLabs `speed: 0.7` (left as-is). New `lib/playbackRate.ts` + `components/SpeedPicker.tsx`. TDD; typecheck clean; 22/22 touched tests green.                                                                                                                                                                                                                                                                    |
+
 
 ### Stream C — Intake (`apps/stage/src/routes/Intake.tsx`, CrtShell)
-| # | Item | Pri | Status | Notes / deps |
-|---|------|-----|--------|--------------|
-| 8 | Replace form content with Rachel's new form | P1 | ⏸ | Blocked: need Rachel's content (update `docs/intake.md` too). |
-| 9 | Post-intake exit instructions (direct user out) | P1 | 🟢 | Done S4: `done` screen is now `ExitScreen` — large thematic amber directive ("step away from the terminal" / "await your summons"), **no number** (per operator). TDD. |
-| 7 | Increase intake form font size | P1 | 🟢 | Done S4: `.win` base `clamp(15,2vmin,19)` + label/chip/subject bumps in `crt.css`. CSS-only; eyeball on CRT. |
-| 10 | Mac mini resolution doesn't fit CRT monitors | P1 | 🔴 | Investigate: viewport scaling / overscan. Software fix if possible. |
+
+
+| #   | Item                                            | Pri | Status | Notes / deps                                                                                                                                                           |
+| --- | ----------------------------------------------- | --- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8   | Replace form content with Rachel's new form     | P1  | ⏸      | Blocked: need Rachel's content (update `docs/intake.md` too).                                                                                                          |
+| 9   | Post-intake exit instructions (direct user out) | P1  | 🟢     | Done S4: `done` screen is now `ExitScreen` — large thematic amber directive ("step away from the terminal" / "await your summons"), **no number** (per operator). TDD. |
+| 7   | Increase intake form font size                  | P1  | 🟢     | Done S4: `.win` base `clamp(15,2vmin,19)` + label/chip/subject bumps in `crt.css`. CSS-only; eyeball on CRT.                                                           |
+| 10  | Mac mini resolution doesn't fit CRT monitors    | P1  | 🔴     | Investigate: viewport scaling / overscan. Software fix if possible.                                                                                                    |
+
 
 ### Stream D — Windows-XP skin (stage CSS + shared skin component)
-| # | Item | Pri | Status | Notes / deps |
-|---|------|-----|--------|--------------|
-| 1 | `/dispatch` redesign: clarity for the operator + XP style (audience sees it) | P2 | 🔴 | UX-clarity has a brainstorm component, not just visual. |
-| 5 | `/station` XP style | P2 | 🔴 | Apply shared skin. |
-| 15 | `/feed` scanning interface as Windows popup, XP style | P2 | 🔴 | Apply shared skin. |
-| — | (establish the XP skin **once**, then apply across D) | — | — | frontend-design. |
+
+
+| #   | Item                                                                         | Pri | Status | Notes / deps                                            |
+| --- | ---------------------------------------------------------------------------- | --- | ------ | ------------------------------------------------------- |
+| 1   | `/dispatch` redesign: clarity for the operator + XP style (audience sees it) | P2  | 🔴     | UX-clarity has a brainstorm component, not just visual. |
+| 5   | `/station` XP style                                                          | P2  | 🔴     | Apply shared skin.                                      |
+| 15  | `/feed` scanning interface as Windows popup, XP style                        | P2  | 🔴     | Apply shared skin.                                      |
+| —   | (establish the XP skin **once**, then apply across D)                        | —   | —      | frontend-design.                                        |
+
 
 ### Stream E — Channeling consolidation (`routes/{Channel,Choreo,Altar,Console}.tsx`)
-| # | Item | Pri | Status | Notes / deps |
-|---|------|-----|--------|--------------|
-| 19 | Centralize `/channel` + `/choreo` + `/altar` onto one device | P2 | 🟢 | Done S3: new **`/perform`** tabbed shell reuses the existing components (all mounted, inactive `hidden` → sessions/sockets/audio persist). Consolidation was *convenience, not forced* (sinks route independently). |
-| 20 | Add altar bodyscan override to `/console` (mirror `/altar`'s override) | P2 | 🟢 | Done S3 (already present): Console `unlock` = same `api.verifyPose` override; relabeled `unlock (override)` for clarity. No behavior change. |
-| 21 | Disable bodyscan confirmation at altar, default to override | P2 | 🟢 | Done S3: `Unlock (override)` is the primary altar action; camera pose-match is an opt-in `verify by camera` toggle. `/perform` altar is camera-less (`showCamera={false}`); standalone `/altar` keeps camera as fallback. |
+
+
+| #   | Item                                                                   | Pri | Status | Notes / deps                                                                                                                                                                                                              |
+| --- | ---------------------------------------------------------------------- | --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 19  | Centralize `/channel` + `/choreo` + `/altar` onto one device           | P2  | 🟢     | Done S3: new `**/perform`** tabbed shell reuses the existing components (all mounted, inactive `hidden` → sessions/sockets/audio persist). Consolidation was *convenience, not forced* (sinks route independently).       |
+| 20  | Add altar bodyscan override to `/console` (mirror `/altar`'s override) | P2  | 🟢     | Done S3 (already present): Console `unlock` = same `api.verifyPose` override; relabeled `unlock (override)` for clarity. No behavior change.                                                                              |
+| 21  | Disable bodyscan confirmation at altar, default to override            | P2  | 🟢     | Done S3: `Unlock (override)` is the primary altar action; camera pose-match is an opt-in `verify by camera` toggle. `/perform` altar is camera-less (`showCamera={false}`); standalone `/altar` keeps camera as fallback. |
+
 
 ### Stream F — Bodyscan experience (`routes/BodyScan.tsx`, pose libs)
-| # | Item | Pri | Status | Notes / deps |
-|---|------|-----|--------|--------------|
-| 11 | Ask user to repeat their shape to affirm pose memory | P2 | 🟢 | Done S5: `BodyScanCamera` is now `enroll → confirm` — first 3.5s hold captures pose A (unsaved), visitor must **break** it (sim<0.7) then re-form + hold 1.5s @≥0.9 (altar-style `poseSimilarity` loop), then `enrollPose`. Two-step prompt. Forced break per operator. No brain/server changes. TDD (4 tests). |
-| 13 | Aura/colorblob stylized skeleton; remove webcam bg; 100% stylized | P3 | 🟢 | Done S5 (pulled from deferred): new `drawAura` — opaque void bg (removes webcam) + additive-glow bones + hue-swept colorblobs; `bodyscan-cam video { opacity:0 }`. Bodyscan-only; altar keeps diagnostic `drawSkeleton`. TDD (recording-ctx). **Eyeball palette on the rig.** |
-| 12 | Change pose tracking model | P3 | 🗓 | Low priority (explicit). Localized to `usePoseLandmarker.ts` model/WASM URLs. |
+
+
+| #   | Item                                                              | Pri | Status | Notes / deps                                                                                                                                                                                                                                                                                                    |
+| --- | ----------------------------------------------------------------- | --- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 11  | Ask user to repeat their shape to affirm pose memory              | P2  | 🟢     | Done S5: `BodyScanCamera` is now `enroll → confirm` — first 3.5s hold captures pose A (unsaved), visitor must **break** it (sim<0.7) then re-form + hold 1.5s @≥0.9 (altar-style `poseSimilarity` loop), then `enrollPose`. Two-step prompt. Forced break per operator. No brain/server changes. TDD (4 tests). |
+| 13  | Aura/colorblob stylized skeleton; remove webcam bg; 100% stylized | P3  | 🟢     | Done S5 (pulled from deferred): new `drawAura` — opaque void bg (removes webcam) + additive-glow bones + hue-swept colorblobs; `bodyscan-cam video { opacity:0 }`. Bodyscan-only; altar keeps diagnostic `drawSkeleton`. TDD (recording-ctx). **Eyeball palette on the rig.**                                   |
+| 12  | Change pose tracking model                                        | P3  | 🗓     | Low priority (explicit). Localized to `usePoseLandmarker.ts` model/WASM URLs.                                                                                                                                                                                                                                   |
+
 
 ### Stream G — Board (`routes/Board.tsx`)
-| # | Item | Pri | Status | Notes / deps |
-|---|------|-----|--------|--------------|
-| 18 | Show ALTAR READY on board for completed-stations visitors | P1 | 🟢 | Done S7: `boardRows` relabels the `altarReadyList` subset `WAITING ROOM` → `ALTAR READY` (both in-queue and altar-closed/unplaced); `ON HOLD` takes precedence for a held visitor. TDD; stage 114/114. |
+
+
+| #   | Item                                                      | Pri | Status | Notes / deps                                                                                                                                                                                           |
+| --- | --------------------------------------------------------- | --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 18  | Show ALTAR READY on board for completed-stations visitors | P1  | 🟢     | Done S7: `boardRows` relabels the `altarReadyList` subset `WAITING ROOM` → `ALTAR READY` (both in-queue and altar-closed/unplaced); `ON HOLD` takes precedence for a held visitor. TDD; stage 114/114. |
+
 
 ## Open decisions (needed before the dependent stream)
 
@@ -98,5 +122,6 @@ Status: 🔴 todo · 🟡 in progress · 🟢 done · ⏸ blocked · ✅ shipped
 - **Session 1 (2026-06-26):** set up this tracker + operating-model memory; **shipped #3 (no-show hold) + #4 (intro hold → 1 min)** (brain 148/148, typecheck clean, CHANGELOG written). Merged to `friday-preshow` (fast-forward, `fcdbfa7`).
 - **Session 2 (2026-06-26):** Stream B. **Shipped #23 (TTS speed)** — per-device client `playbackRate` knob (default 0.7, preserve pitch) on `/channel` + `/choreo`, `localStorage`-persisted; TDD, typecheck clean, 22/22 touched stage tests green. **#22 (mimic) paused** at user's request pending a better characterization — investigation notes captured on the item + in Open decisions. (One unrelated pre-existing `CrtShell.test.tsx` failure noted, not from this work.)
 - **Session 4 (2026-06-26):** Stream C (partial). **Shipped #9 (post-intake exit) + #7 (form font size).** #9: post-submit screen is now an exported `ExitScreen` — large amber thematic directive, **no visitor number** (per operator), copy "step away from the terminal / await your summons"; TDD (new `Intake.test.tsx` asserts directive + no `role="img"`). #7: `.win` base font `clamp(15,2vmin,19)` + label/chip/subject clamp bumps in `crt.css` (CSS-only; not eyeballed on the CRT rig). Stage 101/101; typecheck clean; CHANGELOG written. **#8 (Rachel's form) + #10 (CRT resolution) deferred** per request.
-- **Session 3 (2026-06-26):** Stream E. **Shipped #19/#20/#21** — new **`/perform`** one-device tabbed shell (altar · channel · choreo) reusing the existing components (all mounted, inactive `hidden` so sessions/sockets/choreo-audio persist); altar now defaults to override with camera as an opt-in fallback (#21); console override button relabeled (#20 was already present). Camera dropped from the consolidated altar per the operator (won't be used this iteration). TDD (new `Altar`/`Perform` suites); stage 100/100; typecheck clean. Plan: `docs/superpowers/plans/2026-06-26-stream-e-channeling-consolidation.md`. **#8 (Stream C) skipped** — still awaiting Rachel's content.
+- **Session 3 (2026-06-26):** Stream E. **Shipped #19/#20/#21** — new `**/perform*`* one-device tabbed shell (altar · channel · choreo) reusing the existing components (all mounted, inactive `hidden` so sessions/sockets/choreo-audio persist); altar now defaults to override with camera as an opt-in fallback (#21); console override button relabeled (#20 was already present). Camera dropped from the consolidated altar per the operator (won't be used this iteration). TDD (new `Altar`/`Perform` suites); stage 100/100; typecheck clean. Plan: `docs/superpowers/plans/2026-06-26-stream-e-channeling-consolidation.md`. **#8 (Stream C) skipped** — still awaiting Rachel's content.
 - **Next up:** Stream G is closed (#18 done S7). Candidates: **#10 (CRT resolution/overscan)** + **#8 (Rachel's form, still blocked on content)** to close Stream C; **#22 (mimic)** once a repro is in hand (resume systematic-debugging from the captured notes — brain logic looked correct, so suspect a live/multi-surface or sequence-specific condition); or **Stream D (XP skin)** — establish the shared skin once, then apply across `/dispatch` (#1, has a UX-clarity brainstorm), `/station` (#5), `/feed` (#15). **Device eyeballs pending:** #18 (`/board` shows `ALTAR READY` for a bodyscan-cleared waiter — jsdom asserts the label, not the live broadcast); Stream F (#11 break→repeat flow + #13 aura palette — open `/bodyscan`, admit from `/station`, tap Capture, verify no webcam + the two-step prompt + ✓ saved); #7/#9 on the CRT rig (font sizes + exit directive are CSS, not asserted in jsdom); Stream E `/perform` (tab switching keeps choreo audio playing + a claimed channel session survives switching).
+

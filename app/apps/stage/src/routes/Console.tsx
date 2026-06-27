@@ -83,6 +83,12 @@ export function Console() {
         <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
       </header>
 
+      <h3>Broadcast</h3>
+      <PluribusBroadcast numbers={ready} storageKey="out.console" rate={rate} onChangeRate={setRate} />
+
+      <h3>Altar gate</h3>
+      <AltarGate open={dispatch?.altarOpen ?? false} onToggle={(open) => void api.dispatch.altar(open)} />
+
       {/* ── Panel 2: flow + stations ── */}
       <h3>Flow</h3>
       <ul className="funnel">
@@ -105,12 +111,6 @@ export function Console() {
           ))}
         </ul>
       )}
-
-      <h3>Altar gate</h3>
-      <AltarGate open={dispatch?.altarOpen ?? false} onToggle={(open) => void api.dispatch.altar(open)} />
-
-      <h3>Broadcast</h3>
-      <PluribusBroadcast numbers={ready} storageKey="out.console" rate={rate} onChangeRate={setRate} />
 
       {/* ── Panel 1: visitors + controls ── */}
       <h3>Visitors ({visitors.length})</h3>

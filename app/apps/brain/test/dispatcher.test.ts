@@ -49,7 +49,7 @@ describe("slot derivation from config counts", () => {
       ["altar-0", "bodyscan-0", "bodyscan-1", "intake-0", "intake-1", "intake-2"],
     );
     expect(s.slots.every((x) => x.online === false && !x.kioskId)).toBe(true);
-    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false, paper: false });
+    expect(s.stationsOnline).toEqual({ intake: false, bodyscan: false, altar: false, paper: false, offering: false });
   });
 });
 
@@ -427,6 +427,73 @@ describe("paper: manual-checkout group station", () => {
 
   it("does not list paper in timedDwellMs (it is a manual group station)", () => {
     expect(pd.snapshot().timedDwellMs?.paper).toBeUndefined();
+  });
+});
+
+describe("offering: timed 'time offering' room (dwell + manual early release)", () => {
+  const O_KNOBS = {
+    slots: { intake: 0, bodyscan: 0, altar: 0, paper: 0, offering: 2 },
+    timed: { offering: { dwellMs: 300_000 } },
+    // No-show still applies while called; auto-repool so a never-arrived occupant frees the slot.
+    introHoldMs: 0, tickMs: 5_000, noShowAutoRepool: true,
+  };
+  let of: ReturnType<typeof fakeBus>;
+  let od: ReturnType<typeof createDispatcher>;
+  beforeEach(() => { of = fakeBus(); od = createDispatcher(of.bus, { knobs: O_KNOBS as any, autoStart: false }); });
+  afterEach(() => od.stop());
+
+  it("derives offering slots that are always online without any kiosk", () => {
+    const s = od.snapshot();
+    const room = s.slots.filter((x) => x.station === "offering");
+    expect(room.map((x) => x.id).sort()).toEqual(["offering-0", "offering-1"]);
+    expect(room.every((x) => x.online === true && !x.kioskId)).toBe(true);
+    expect(s.stationsOnline.offering).toBe(true);
+  });
+
+  it("a fresh waiting visitor is eligible for offering", () => {
+    store.register(990001);
+    expect(od.snapshot().queue.find((e) => e.number === 990001)?.eligible).toContain("offering");
+  });
+
+  it("TIMED RELEASE: auto-completes dwellMs after arrival — stamps offeringAt, frees, repools", () => {
+    const v = store.register(990002);
+    od.kick(); od.confirm(v.id); od.arrive(v.id); // dwell starts at arrival
+    vi.advanceTimersByTime(300_000 + 1_000);
+    od.kick(); // reconcile
+    expect(store.get(v.id)?.offeringAt).toBeTruthy();
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+    expect(od.snapshot().slots.some((x) => x.occupant?.visitorId === v.id)).toBe(false);
+  });
+
+  it("does not complete before the dwell elapses", () => {
+    const v = store.register(990003);
+    od.kick(); od.confirm(v.id); od.arrive(v.id);
+    vi.advanceTimersByTime(120_000); // < dwell
+    od.kick();
+    expect(store.get(v.id)?.offeringAt).toBeUndefined();
+    expect(od.snapshot().slots.find((x) => x.occupant?.visitorId === v.id)?.occupant?.phase).toBe("in_progress");
+  });
+
+  it("MANUAL EARLY RELEASE: markComplete (Done) stamps offeringAt and frees before the dwell", () => {
+    const v = store.register(990004);
+    od.kick(); od.confirm(v.id); od.arrive(v.id);
+    vi.advanceTimersByTime(60_000); // well before dwell
+    expect(od.markComplete(v.id)).toBe(true);
+    expect(store.get(v.id)?.offeringAt).toBeTruthy();
+    expect(od.snapshot().slots.some((x) => x.occupant?.visitorId === v.id)).toBe(false);
+  });
+
+  it("still applies the no-show timer to a called-but-never-arrived offering occupant", () => {
+    const v = store.register(990005);
+    od.kick(); od.confirm(v.id); // called, NOT arrived
+    vi.advanceTimersByTime(90_000 + 1_000); // > noShowMs
+    od.kick();
+    expect(store.get(v.id)?.offeringAt).toBeUndefined();
+    expect(store.get(v.id)?.location.state).toBe("waiting");
+  });
+
+  it("exposes the offering dwell in timedDwellMs for the operator countdown", () => {
+    expect(od.snapshot().timedDwellMs?.offering).toBe(300_000);
   });
 });
 

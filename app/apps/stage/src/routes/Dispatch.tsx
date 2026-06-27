@@ -123,21 +123,21 @@ export function Dispatch() {
               const pend = pendingBySlot(s);
               return (
                 <div key={s.id} className="slot-wrap">
-                  {pend && (
-                    <div className="pending-call pulse">
-                      <span>#{pend.number}</span>
-                      <span className="arrow">→</span>
-                      <button className="submit" onClick={() => void api.dispatch.confirm(pend.visitorId)}>Confirm call</button>
-                      <button className="end" title="skip" onClick={() => void api.dispatch.repool(pend.visitorId)}>×</button>
-                    </div>
-                  )}
                   <div className={`slot-box ${s.online ? "on" : "off"} ${s.occupant ? s.occupant.phase : ""}`}>
                     <div className="slot-head">
                       <span className={s.online ? "led on" : "led"} />
                       <code title={s.id}>{STATION_LABEL[s.station]}</code>
                     </div>
                     <div className="slot-body">
-                      {s.occupant && s.occupant.phase !== "pending" ? (
+                      {pend ? (
+                        <>
+                          <div className="slot-number">#{pend.number}</div>
+                          <div className="slot-actions">
+                            <button className="submit" onClick={() => void api.dispatch.confirm(pend.visitorId)}>Confirm call</button>
+                            <button className="end" title="skip" onClick={() => void api.dispatch.repool(pend.visitorId)}>×</button>
+                          </div>
+                        </>
+                      ) : s.occupant && s.occupant.phase !== "pending" ? (
                         <>
                           <div className="slot-number">#{s.occupant.number}</div>
                           <div className="dim">

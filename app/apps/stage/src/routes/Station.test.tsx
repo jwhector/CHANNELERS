@@ -49,6 +49,22 @@ test("a paper in-progress occupant shows Done and fires onComplete", () => {
   expect(onComplete).toHaveBeenCalledWith("v9");
 });
 
+test("an offering in-progress occupant shows Done (manual early release)", () => {
+  const onComplete = vi.fn();
+  const slot: Slot = {
+    id: "offering-0", station: "offering", online: true,
+    occupant: { visitorId: "v7", number: 7, phase: "in_progress", since: "" },
+  };
+  render(
+    <StationOpsView
+      station="offering" connected called={[]} inProgress={[slot]}
+      dwellMs={300_000} busyId={null}
+      onArrive={() => {}} onRelease={() => {}} onComplete={onComplete} />,
+  );
+  screen.getByRole("button", { name: /done/i }).click();
+  expect(onComplete).toHaveBeenCalledWith("v7");
+});
+
 test("an in-progress occupant with no onComplete shows no Done button", () => {
   const slot: Slot = {
     id: "bodyscan-0", station: "bodyscan", online: true,

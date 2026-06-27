@@ -24,20 +24,15 @@ function speakViaBrowser(text: string, rate?: number): void {
 }
 
 type SpeakResult = { via: "element" | "speechSynthesis" };
+type ClipOpts = { archetype?: string; sinkId?: string; rate?: number };
 
 /**
- * Speak the oracle's line into the performer's earpiece. Pulls an MP3 from the brain
- * (/api/tts; ElevenLabs or OpenAI voice); on 204 (no keys) or any error, falls back to
- * browser TTS. Pass `sinkId` to route the MP3 to a chosen output device (setSinkId);
- * the speechSynthesis fallback cannot be routed, hence the `via` in the result.
+ * Fetch one clip's MP3 and start it on the chosen sink, returning the playing <audio> (so a
+ * caller can await its end) — or null when it fell back to browser TTS / had no audio / was
+ * superseded. `mine` is the generation captured by the caller; a newer speak()/stopSpeaking()
+ * moves the generation past it and this clip bails out, so cues never talk over each other.
  */
-export async function speak(
-  text: string,
-  opts: { archetype?: string; sinkId?: string; rate?: number } = {},
-): Promise<SpeakResult> {
-  if (!text.trim()) return { via: "element" };
-  stopSpeaking();
-  const mine = generation; // claimed after the bump above; a newer call moves generation past it
+async function startClip(text: string, opts: ClipOpts, mine: number): Promise<HTMLAudioElement | null> {
   const superseded = () => mine !== generation;
   try {
     const res = await fetch("/api/tts", {
@@ -45,10 +40,10 @@ export async function speak(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text, archetype: opts.archetype ?? "" }),
     });
-    if (superseded()) return { via: "element" };
+    if (superseded()) return null;
     if (res.ok && res.status !== 204) {
       const blob = await res.blob();
-      if (superseded()) return { via: "element" };
+      if (superseded()) return null;
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url) as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
       // Slow the oracle to ritual pace without warping it: preserve pitch, drop only the rate.
@@ -69,18 +64,67 @@ export async function speak(
         if (superseded()) {
           audio.pause();
           done();
-          return { via: "element" };
+          return null;
         }
       }
       await audio.play();
-      return { via: "element" };
+      return audio;
     }
   } catch {
     /* network/playback failed — fall through to browser TTS */
   }
-  if (superseded()) return { via: "speechSynthesis" };
+  if (superseded()) return null;
   speakViaBrowser(text, opts.rate);
-  return { via: "speechSynthesis" };
+  return null;
+}
+
+/** Resolve once the clip finishes — or sooner if a newer call preempts it (pause/superseded). */
+function whenClipEnds(audio: HTMLAudioElement, superseded: () => boolean): Promise<void> {
+  if (audio.ended || superseded()) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const finish = () => resolve();
+    audio.addEventListener("ended", finish, { once: true });
+    audio.addEventListener("error", finish, { once: true });
+    audio.addEventListener("pause", finish, { once: true }); // stopSpeaking() preempted us
+  });
+}
+
+/**
+ * Speak the oracle's line into the performer's earpiece. Pulls an MP3 from the brain
+ * (/api/tts; ElevenLabs or OpenAI voice); on 204 (no keys) or any error, falls back to
+ * browser TTS. Pass `sinkId` to route the MP3 to a chosen output device (setSinkId);
+ * the speechSynthesis fallback cannot be routed, hence the `via` in the result.
+ */
+export async function speak(text: string, opts: ClipOpts = {}): Promise<SpeakResult> {
+  if (!text.trim()) return { via: "element" };
+  stopSpeaking();
+  const mine = generation; // claimed after the bump above; a newer call moves generation past it
+  const audio = await startClip(text, opts, mine);
+  return { via: audio ? "element" : "speechSynthesis" };
+}
+
+/**
+ * Voice several clips on one device back-to-back, each starting only after the previous ends —
+ * so e.g. a "prepare to channel" warning lands AFTER the movement cue rather than cutting it off.
+ * The whole sequence is preemptible: a later speak()/speakSequence()/stopSpeaking() bumps the
+ * generation and abandons whatever clips remain.
+ */
+export async function speakSequence(
+  clips: Array<{ text: string; archetype?: string }>,
+  opts: { sinkId?: string; rate?: number } = {},
+): Promise<void> {
+  const items = clips.filter((c) => c.text.trim());
+  if (!items.length) return;
+  stopSpeaking();
+  const mine = generation;
+  const superseded = () => mine !== generation;
+  for (const clip of items) {
+    if (superseded()) return;
+    const audio = await startClip(clip.text, { ...opts, archetype: clip.archetype }, mine);
+    if (superseded()) return;
+    // No element → browser-TTS fallback (no-keys dev path); can't await it precisely, so move on.
+    if (audio) await whenClipEnds(audio, superseded);
+  }
 }
 
 export interface Recognizer {

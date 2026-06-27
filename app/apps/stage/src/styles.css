@@ -144,7 +144,7 @@ pre {
 .poseflash {
   position: absolute; inset: 0; display: grid; place-items: center;
   background: rgba(60, 255, 122, 0.16); color: #3cff7a; font-size: 40px; font-weight: 700;
-  transform: scaleX(-1); /* un-mirror the text */ letter-spacing: 0.05em;
+  letter-spacing: 0.05em;
 }
 /* Body not fully framed: flag the camera view red so the visitor self-corrects. */
 .posestage.unframed { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 24px rgba(255, 90, 60, 0.35); }
@@ -187,10 +187,14 @@ pre {
 .slot-box.in_progress { border-color: #39f; }
 .slot-head { display: flex; align-items: center; gap: 0.4rem; }
 .slot-number, .called-number { font-size: 1.6rem; font-weight: 700; }
-.pending-call { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem; padding: 0.3rem 0.5rem; border: 2px solid #fd5; border-radius: 6px; }
-.pending-call .arrow { opacity: 0.7; }
-.pulse { animation: dispatch-pulse 1s ease-in-out infinite; }
-@keyframes dispatch-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,221,85,0.7); } 50% { box-shadow: 0 0 0 6px rgba(255,221,85,0); } }
+.slot-actions { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.3rem; }
+.slot-actions button.end { margin-left: 0; }
+/* Pending call: number + Confirm live inside the station cell, whose border pulses yellow. */
+.slot-box.pending { border-color: #fd5; animation: slot-pending-pulse 1.1s ease-in-out infinite; }
+@keyframes slot-pending-pulse {
+  0%, 100% { border-color: #fd5; box-shadow: 0 0 8px 0 rgba(255,221,85,0.5); }
+  50%      { border-color: #6b5a1e; box-shadow: 0 0 0 0 rgba(255,221,85,0); }
+}
 
 /* ── Altered-State Console (operator-only generation controls on /channel) ── */
 .altered-state { margin: 16px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 12px; }

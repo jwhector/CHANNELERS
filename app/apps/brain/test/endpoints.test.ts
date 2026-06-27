@@ -324,6 +324,52 @@ describe("choreo fan-out (both timings)", () => {
     });
   }
 
+  /** Say one line and resolve with the choreo.done payload (or null) once the turn settles. */
+  function sayAndCollectDone(visitorId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const sock = new WebSocket(`ws://127.0.0.1:${cPort}/ws`);
+      let done: any = null;
+      let oracleDone = false;
+      let sid = "";
+      const timer = setTimeout(() => { sock.close(); resolve(done); }, 4000);
+      const finish = () => { clearTimeout(timer); sock.close(); resolve(done); };
+      sock.on("open", () => sock.send(JSON.stringify({ kind: "session.start", visitorId })));
+      sock.on("message", (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.kind === "session.started" && m.visitorId === visitorId) {
+          sid = m.sessionId;
+          sock.send(JSON.stringify({ kind: "session.say", sessionId: sid, text: "where do I go" }));
+        }
+        if (m.sessionId === sid) {
+          if (m.kind === "choreo.done") done = m;
+          if (m.kind === "oracle.done") oracleDone = true;
+        }
+        if (oracleDone && done) finish();
+      });
+      sock.on("error", (e) => { clearTimeout(timer); reject(e); });
+    });
+  }
+
+  it("flags the cue before a cadence mimic with prepareToChannel", async () => {
+    // N=2: turn 1 is a cue (1%2≠0) and turn 2 will be a mimic (2%2===0) → warn after turn 1's cue.
+    await cApp.inject({ method: "POST", url: "/api/choreo/config",
+      payload: { ...DEFAULT_CHOREO_CONFIG, mimicCadenceEnabled: true, mimicEveryNTurns: 2 } });
+    const done = await sayAndCollectDone(await oracleReady(9404));
+    expect(done?.kind).toBe("choreo.done");
+    expect(done.prepareToChannel).toBe(true);
+    await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { ...DEFAULT_CHOREO_CONFIG } });
+  });
+
+  it("does not flag an ordinary cue (no mimic next turn)", async () => {
+    // N=3: turn 1 is a cue and turn 2 (the next) is NOT a mimic (2%3≠0) → no warning.
+    await cApp.inject({ method: "POST", url: "/api/choreo/config",
+      payload: { ...DEFAULT_CHOREO_CONFIG, mimicCadenceEnabled: true, mimicEveryNTurns: 3 } });
+    const done = await sayAndCollectDone(await oracleReady(9405));
+    expect(done?.kind).toBe("choreo.done");
+    expect(done.prepareToChannel).toBeFalsy();
+    await cApp.inject({ method: "POST", url: "/api/choreo/config", payload: { ...DEFAULT_CHOREO_CONFIG } });
+  });
+
   it("manual mimic suppresses cues and emits choreo.mimic with the oracle line + archetype", async () => {
     await cApp.inject({ method: "POST", url: "/api/choreo/config",
       payload: { ...DEFAULT_CHOREO_CONFIG, mimicManual: true } });

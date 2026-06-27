@@ -168,7 +168,8 @@ export type WsServerMsg =
   | { kind: "oracle.delta"; sessionId: string; text: string }
   | { kind: "oracle.done"; sessionId: string; text: string }
   | { kind: "choreo.delta"; sessionId: string; text: string }
-  | { kind: "choreo.done"; sessionId: string; text: string }
+  /** `prepareToChannel`: this cue is the last before a cadence mimic — warn the dancers to switch. */
+  | { kind: "choreo.done"; sessionId: string; text: string; prepareToChannel?: boolean }
   | { kind: "choreo.mimic"; sessionId: string; text: string; archetype: string }
   | { kind: "session.ended"; sessionId: string }
   | { kind: "session.error"; sessionId?: string; visitorId?: string; message: string }

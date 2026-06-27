@@ -2,7 +2,13 @@ import type { WsServerMsg } from "@channelers/shared";
 
 export type CueLine = { sessionId: string; text: string };
 /** What /choreo should voice next: a cue (neutral) or a mimic line (persona voice via archetype). */
-export type SpeakReq = { sessionId: string; text: string; archetype?: string };
+export type SpeakReq = {
+  sessionId: string;
+  text: string;
+  archetype?: string;
+  /** This cue is the last before a cadence mimic — chase it with a "prepare to channel" clip. */
+  prepareToChannel?: boolean;
+};
 
 /**
  * Pure state for the /choreo feed. The choreo.* channel is broadcast to every screen
@@ -61,9 +67,11 @@ export function reduceChoreoFeed(state: ChoreoFeedState, msg: WsServerMsg): Chor
   const { [sessionId]: _spent, ...buffers } = state.buffers;
   const entry: CueLine = { sessionId, text };
   const log = [entry, ...state.log].slice(0, 30);
+  const speak: SpeakReq = { sessionId, text };
+  if (msg.prepareToChannel) speak.prepareToChannel = true;
   // Only the focused (or an unclaimed) session shows and voices its cue; a background
   // completion is logged but neither disturbs the live line nor talks over it.
   return focused
-    ? { ...state, cue: text, active: null, buffers, log, speak: entry, mimicking: false }
+    ? { ...state, cue: text, active: null, buffers, log, speak, mimicking: false }
     : { ...state, buffers, log, speak: null, mimicking: false };
 }

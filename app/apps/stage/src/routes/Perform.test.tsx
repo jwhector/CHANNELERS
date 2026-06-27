@@ -9,16 +9,18 @@ const shell = () => (
     channel={<div data-testid="channel-region">CHANNEL</div>}
     choreo={<div data-testid="choreo-region">CHOREO</div>}
     console={<div data-testid="console-region">CONSOLE</div>}
+    dispatch={<div data-testid="dispatch-region">DISPATCH</div>}
   />
 );
 const wrap = (id: string) => screen.getByTestId(id).closest("[data-tabpanel]") as HTMLElement;
 
-test("mounts all four regions", () => {
+test("mounts all five regions", () => {
   render(shell());
   expect(screen.getByTestId("altar-region")).toBeInTheDocument();
   expect(screen.getByTestId("channel-region")).toBeInTheDocument();
   expect(screen.getByTestId("choreo-region")).toBeInTheDocument();
   expect(screen.getByTestId("console-region")).toBeInTheDocument();
+  expect(screen.getByTestId("dispatch-region")).toBeInTheDocument();
 });
 
 test("defaults to the altar tab visible, others hidden", () => {
@@ -27,6 +29,7 @@ test("defaults to the altar tab visible, others hidden", () => {
   expect(wrap("channel-region").hidden).toBe(true);
   expect(wrap("choreo-region").hidden).toBe(true);
   expect(wrap("console-region").hidden).toBe(true);
+  expect(wrap("dispatch-region").hidden).toBe(true);
 });
 
 test("clicking a tab foregrounds its region", async () => {
@@ -36,6 +39,7 @@ test("clicking a tab foregrounds its region", async () => {
   expect(wrap("channel-region").hidden).toBe(false);
   expect(wrap("choreo-region").hidden).toBe(true);
   expect(wrap("console-region").hidden).toBe(true);
+  expect(wrap("dispatch-region").hidden).toBe(true);
 });
 
 test("clicking the console tab foregrounds the console region", async () => {
@@ -43,4 +47,11 @@ test("clicking the console tab foregrounds the console region", async () => {
   await userEvent.click(screen.getByRole("button", { name: /^console$/i }));
   expect(wrap("altar-region").hidden).toBe(true);
   expect(wrap("console-region").hidden).toBe(false);
+});
+
+test("clicking the dispatch tab foregrounds the dispatch region", async () => {
+  render(shell());
+  await userEvent.click(screen.getByRole("button", { name: /^dispatch$/i }));
+  expect(wrap("altar-region").hidden).toBe(true);
+  expect(wrap("dispatch-region").hidden).toBe(false);
 });

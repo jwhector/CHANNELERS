@@ -4,7 +4,7 @@ import { boardRows } from "./Board";
 
 const base: DispatchState = {
   slots: [], queue: [], completed: [], surplus: [],
-  stationsOnline: { intake: false, bodyscan: false, altar: false, paper: false },
+  stationsOnline: { intake: false, bodyscan: false, altar: false, paper: false, offering: false },
   altarReady: 0, altarReadyList: [], altarOpen: false,
   bodyscanIdle: false, bodyscanBlocked: "none",
 };

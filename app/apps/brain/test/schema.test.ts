@@ -39,6 +39,17 @@ describe("schema: VisitorProfile", () => {
     expect(r.location.station).toBe("paper"); // throws before "paper" is in the Station enum
   });
 
+  it("retains offeringAt + an offering location (timed time-offering room)", () => {
+    const ts = "2026-06-27T00:00:00.000Z";
+    const r = VisitorProfile.parse({
+      id: "u1", number: 42, scans: [],
+      location: { state: "in_progress", station: "offering", since: ts },
+      createdAt: ts, offeringAt: ts,
+    });
+    expect(r.offeringAt).toBe(ts);
+    expect(r.location.station).toBe("offering");
+  });
+
   it("accepts a fully-progressed record", () => {
     const r = VisitorProfile.safeParse({
       id: "u1", number: 42, scans: [],
@@ -68,6 +79,7 @@ describe("schema: Station + station.hello", () => {
   it("exports a Station enum", () => {
     expect(Station.safeParse("intake").success).toBe(true);
     expect(Station.safeParse("paper").success).toBe(true);
+    expect(Station.safeParse("offering").success).toBe(true); // timed time-offering room
     expect(Station.safeParse("waitingroom").success).toBe(false); // retired as a station (#24)
     expect(Station.safeParse("nope").success).toBe(false);
   });
