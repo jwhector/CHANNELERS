@@ -13,7 +13,9 @@ export type Row = { id: string; number: number; loc: string; tone: Tone };
 const pad3 = (n: number) => String(n).padStart(3, "0");
 
 /** Pure roster derivation — every visitor and where they are. A visitor who is waiting and not at
- *  a station is in the holding area (#24): "WAITING ROOM", or "ON HOLD" while held. */
+ *  a station is in the holding area (#24): "WAITING ROOM", or "ON HOLD" while held. A waiting visitor
+ *  who has cleared the pre-altar stations is labeled "ALTAR READY" (#18) — except a held visitor,
+ *  whose "ON HOLD" status takes precedence. */
 export function boardRows(state: DispatchState | null): Row[] {
   const fromSlots: Row[] = (state?.slots ?? [])
     .filter((s) => s.occupant)
@@ -24,19 +26,20 @@ export function boardRows(state: DispatchState | null): Row[] {
 
   const inSlot = new Set(fromSlots.map((r) => r.id));
   const inQueue = new Set((state?.queue ?? []).map((q) => q.id));
+  const altarReadyIds = new Set((state?.altarReadyList ?? []).map((v) => v.id));
 
   const fromQueue: Row[] = (state?.queue ?? []).map((q) => ({
     id: q.id,
     number: q.number,
-    loc: (q.heldUntil ?? q.holdReason) ? "ON HOLD" : "WAITING ROOM",
+    loc: (q.heldUntil ?? q.holdReason) ? "ON HOLD" : altarReadyIds.has(q.id) ? "ALTAR READY" : "WAITING ROOM",
     tone: "wait",
   }));
 
   // Altar-ready visitors who aren't otherwise placed (e.g. the altar is closed, so they're not
-  // eligible for any open station) are still parked in the holding area. (#24; #18 refines later.)
+  // eligible for any open station) are still parked in the holding area, flagged "ALTAR READY". (#18, #24)
   const fromReady: Row[] = (state?.altarReadyList ?? [])
     .filter((v) => !inSlot.has(v.id) && !inQueue.has(v.id))
-    .map((v) => ({ id: v.id, number: v.number, loc: "WAITING ROOM", tone: "wait" as Tone }));
+    .map((v) => ({ id: v.id, number: v.number, loc: "ALTAR READY", tone: "wait" as Tone }));
 
   const fromDone: Row[] = (state?.completed ?? []).map((c) => ({
     id: c.id, number: c.number, loc: "DONE", tone: "done",

@@ -13,6 +13,14 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-26 — Board Stream G: ALTAR READY on `/board` (#18)
+
+- **What:** `/board`'s pure `boardRows(state)` now labels altar-ready visitors **`ALTAR READY`** instead of the generic `WAITING ROOM`. The "altar-ready" subset is exactly the dispatcher's `altarReadyList` (keyed off `isAltarReady`: waiting, intake + pose done, not yet through divination). This covers both ways such a visitor reaches the board: the in-queue case (altar open → eligible → appears in `queue`) and the unplaced case (altar closed → not eligible → surfaced only via `altarReadyList`). **`ON HOLD` takes precedence** — a held altar-ready visitor still shows `ON HOLD`, since the hold is the active blocking status. Plain waiting visitors (haven't cleared the pre-altar stations) stay `WAITING ROOM`.
+- **Why:** Rehearsal note #18 — the lobby roster should distinguish "finished all the stations, queued for the climax" from "just waiting around". S6 (#24) had already unioned `queue` + `altarReadyList` into one holding bucket labeled `WAITING ROOM` and flagged this relabel as the #18 follow-on; this is that relabel, no new data plumbing.
+- **Files/areas:** `apps/stage/src/routes/Board.tsx` (`boardRows` label logic), `apps/stage/src/routes/Board.test.tsx` (+2 ALTAR READY cases, +1 hold-precedence case; the old "unplaced → WAITING ROOM" case became "→ ALTAR READY"). No `apps/brain` / `packages/shared` changes — `altarReadyList`/`isAltarReady` already existed. Branch `friday-preshow`.
+- **Verification:** TDD red→green; `pnpm -r typecheck` 0 errors; stage **114** tests pass (Board suite 6/6). **Not run here:** real-rig eyeball (operator watching a bodyscan-cleared visitor flip to `ALTAR READY` on `/board`).
+- **Docs touched:** this entry; `docs/rehearsal-punchlist.md` (#18 → 🟢, Session 7, Next up); `app/CLAUDE.md` + `docs/ARCHITECTURE.md` (`/board` route note: WAITING ROOM/ON HOLD/ALTAR READY).
+
 ## 2026-06-26 — Dispatcher Stream A: paper manual-checkout (#17) + waiting room → overflow bucket (#24)
 
 - **What:** Two dispatcher changes that together retire the "timed group station" model's two instances.

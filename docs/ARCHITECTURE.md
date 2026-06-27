@@ -50,7 +50,7 @@ channelers/
                   /choreo    Tier 2 choreography feed: live movement cue + in-ear TTS (§5.6)
                   /perform   one-device performer console: altar (camera-less) · channel · choreo as tabs; reuses the standalone components (all mounted, inactive ones hidden so sessions/sockets/audio persist)
                   /console   master overseer: visitors+controls / flow funnel+station LEDs / sessions+event log
-                  /board     public call display: #N → STATION, or WAITING ROOM/ON HOLD for the waiting-and-unplaced (live dispatch.state broadcast)
+                  /board     public call display: #N → STATION, or WAITING ROOM/ON HOLD/ALTAR READY for the waiting-and-unplaced (live dispatch.state broadcast)
                   /dispatch  lobby-operator interface: register arrivals, confirm/skip calls, manage queue
                   /station   per-station performer arrival-confirm view (bodyscan/altar/paper) (§5.x)
                   /feed      Scan/Shred/Feed — the paper group station's spectacle screen (§5.7)
@@ -252,7 +252,7 @@ A second station **kind**: a kiosk-less group station, the (now only) instance b
 - **`/feed` screen — kiosk-less spectacle.** A webcam over the slot plus a physical button (Space/Enter keypress = USB arcade button/footswitch) grabs a frame → `POST /api/paper/feed` (data-URL) → Brain `gpt-4o` vision OCR (`apps/brain/src/paper.ts`, offline → placeholder) → emits **`paper.fed { text, fedAt }`** on the bus **and** OSC (`/channelers/paper/fed`). The event is **identity-agnostic** (no `visitorId`) — see the §12 upgrade path.
 - **Animation.** `components/FeedMatrix.tsx` drives the fed text "into the matrix": a fit-to-screen monospace grid where the whole text fades in readable, holds, ripples cell-by-cell into flipping `0/1`, then a centre **black hole** rips characters in one at a time until empty. Per-cell travel vectors are measured in JS when the hole opens (`getBoundingClientRect` vs viewport centre) and driven by GPU CSS keyframes (`styles/feed.css`). Pure, tested logic in `lib/paperFeed.ts` + `lib/paperAnim.ts` (deterministic timeline + `DEFAULT_KNOBS` speed knobs).
 - **Shred** is physical-only / unmodeled for the MVP (promotion to a `paper.shredded` event is a §12 question).
-- **Waiting room — retired as a station (#24).** A `waitingroom` timed group station once existed here (10 slots, a 5-min hourglass dwell, a `waitingRoomAt` milestone, performer-confirmed at `/station/waitingroom`). The rehearsal reframed it as an **overflow holding space, not a station**: it was deleted from the `Station` enum, config, dispatcher, and `/station`, and `/board` now derives a `WAITING ROOM`/`ON HOLD` bucket for any waiting-and-unplaced visitor (pure `boardRows()`, unioning `queue` + `altarReadyList`). The hourglass is a stage direction, not code.
+- **Waiting room — retired as a station (#24).** A `waitingroom` timed group station once existed here (10 slots, a 5-min hourglass dwell, a `waitingRoomAt` milestone, performer-confirmed at `/station/waitingroom`). The rehearsal reframed it as an **overflow holding space, not a station**: it was deleted from the `Station` enum, config, dispatcher, and `/station`, and `/board` now derives a `WAITING ROOM`/`ON HOLD` bucket for any waiting-and-unplaced visitor (pure `boardRows()`, unioning `queue` + `altarReadyList`; the `altarReadyList` subset is labeled `ALTAR READY`, #18). The hourglass is a stage direction, not code.
 
 ## 6. The human QR code
 
