@@ -95,12 +95,21 @@ export const VisitorProfile = z.object({
 export type VisitorProfile = z.infer<typeof VisitorProfile>;
 
 /**
- * "Altar-ready": cleared the pre-altar stations (intake + bodyscan) and waiting in the pool,
- * not yet through divination. The dispatcher's altar-ready count + list and the Pluribus
- * "completed the stationing process" broadcast all key off this single predicate.
+ * Has the visitor cleared every pre-altar station? = all stations except the altar itself
+ * (intake, bodyscan, paper, time-offering). The single source of truth for what gates the
+ * altar, shared by `isAltarReady` (here) and the dispatcher's altar eligibility.
+ */
+export function clearedPreAltarStations(v: VisitorProfile): boolean {
+  return !!v.intakeAt && !!v.poseAt && !!v.paperAt && !!v.offeringAt;
+}
+
+/**
+ * "Altar-ready": cleared ALL pre-altar stations and waiting in the pool, not yet through
+ * divination. The dispatcher's altar-ready count + list and the Pluribus "completed the
+ * stationing process" broadcast all key off this single predicate.
  */
 export function isAltarReady(v: VisitorProfile): boolean {
-  return v.location.state === "waiting" && !!v.intakeAt && !!v.poseAt && !v.sessionEndAt;
+  return v.location.state === "waiting" && clearedPreAltarStations(v) && !v.sessionEndAt;
 }
 
 /** ── Generated seeds (intake → AI transform output) ── */

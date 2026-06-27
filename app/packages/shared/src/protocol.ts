@@ -113,7 +113,7 @@ export type Slot = {
 /** A visitor who finished the whole ritual (sessionEndAt set). */
 export type DispatchDone = { id: string; number: number; name?: string; at: string };
 
-/** An altar-ready visitor (intake + bodyscan done, waiting) — divination prerequisites met. */
+/** An altar-ready visitor (all pre-altar stations done, waiting) — divination prerequisites met. */
 export type DispatchReady = { id: string; number: number; name?: string };
 
 export type DispatchState = {
@@ -133,7 +133,7 @@ export type DispatchState = {
   noShowMs?: number;
   /** Operator gate: when false, no new visitor is dispatched to the altar (in-progress readings continue). */
   altarOpen: boolean;
-  /** Waiting visitors who are altar-ready (intakeAt && poseAt && !sessionEndAt) — the operator's buffer gauge. */
+  /** Waiting visitors who are altar-ready (all pre-altar stations done, not yet read) — the operator's buffer gauge. */
   altarReady: number;
   /** Altar-ready visitors — the /dispatch right-column roster + the Pluribus broadcast list. */
   altarReadyList: DispatchReady[];

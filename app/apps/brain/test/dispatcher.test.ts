@@ -164,7 +164,9 @@ describe("flow-health snapshot fields", () => {
 
     const v = store.register(NUM());
     store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] });
-    store.setPoseTemplate(v.id, { angles: [0], weights: [1] }); // posed → altar-ready
+    store.setPoseTemplate(v.id, { angles: [0], weights: [1] });
+    store.stampMilestone(v.id, "paperAt");      // all four stations now done →
+    store.stampMilestone(v.id, "offeringAt");   // genuinely altar-ready
     store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
     s = d.snapshot();
     expect(s.altarReady).toBe(1);
