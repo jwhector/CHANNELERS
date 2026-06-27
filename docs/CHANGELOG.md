@@ -13,6 +13,24 @@ The running record of what was built/changed and **why**, so context transfers b
 
 ---
 
+## 2026-06-27 — Time Offering room: re-add the waiting room as a timed `offering` station
+
+- **What:** Re-added the held waiting room — reframed as the **"time offering" room** — as a new `offering` station with **both** a timed auto-release and a manual early release. It's built entirely on the generic dwell machinery kept (deliberately) by #17: **listing `offering` in `config.dispatcher.timed` is the whole feature** — `isOnline` already ORs `isTimed` (always-online, kiosk-less) and `reconcile()`'s timed branch already dwell-completes it; manual **Done** (`markComplete`) releases early. **No new dispatcher logic.**
+  - **Shared:** `Station` enum `+ "offering"`; `STATION_LABEL.offering = "STATION A - TIME OFFERING"`; `VisitorProfile.offeringAt`.
+  - **Brain:** `store.stampMilestone` accepts `offeringAt`; `config.dispatcher` — `slots.offering = 5`, `fillPriority` += `offering` (last/soak), `timed.offering.dwellMs` (`OFFERING_DWELL_MS`, default 5 min); dispatcher `STATION_ORDER`/`eligibleStations` (`!offeringAt`, non-gating do-it-once)/`milestoneField`/`completionMilestoneSet`/`stationsOnline` get the `offering` case. `groupStations` stays `["paper"]`.
+  - **Stage:** `offering` added to `/station`'s `PERFORMER_STATIONS` — a performer confirms arrival and gets the **Done** (early-release) button (the `onComplete` gate already fires for any timed station); `/dispatch` shows the dwell countdown from the existing `timedDwellMs`. **`/board`:** the lobby-overflow fallback label renamed `WAITING ROOM` → `WAITING` so it doesn't read the same as the real room; an `offering` occupant shows as `STATION A - TIME OFFERING` via its slot. No own spectacle screen (performer-confirmed at `/station/offering`, like the old waiting room).
+- **Why:** Direction change — the room is wanted back, as a "time offering" experience (offer your time for a fixed hold, releasable early). This is a partial, adapted reversal of #24's retirement, but as a *new* id pointed at the new architecture rather than a literal revert. Capacity 5 / dwell 5 min chosen by the operator; both tunable.
+- **Files/areas:** `packages/shared/src/schemas.ts`; `apps/brain/src/{config,dispatcher,store}.ts` (+ tests `{dispatcher,schema,store}.test.ts`); `apps/stage/src/routes/{Station,Board}.tsx` (+ tests); `app/.env.example` (`OFFERING_DWELL_MS`). Branch `friday-preshow`. Plan: `docs/superpowers/plans/2026-06-27-time-offering-room.md`.
+- **Verification:** `pnpm -r typecheck` 0 errors; brain **158** tests pass (+7 offering dispatcher lifecycle: always-online, eligible, timed-release, no-early-complete, manual-early-Done, no-show, `timedDwellMs`; +1 store, +2 schema); stage **129** pass (+1 offering Done, board label case updated). TDD red→green on the timed-release + manual-early-release dispatcher tests and the board label. **Not run here:** real-rig smoke (operator watching the `/dispatch` countdown at `/station/offering`; a performer tapping **Done** to release early; the board showing `STATION A - TIME OFFERING` vs `WAITING`).
+- **Docs touched:** this entry; `docs/rehearsal-punchlist.md` (time-offering line + Session log + Next up); `app/CLAUDE.md` (`/station` + `/feed` notes); `docs/ARCHITECTURE.md` (§3 route map, §5 selection/fillPriority/knobs table, §5.7 — the #24 retirement note becomes the `offering` timed-station description).
+
+## 2026-06-27 — `/perform` gains a `dispatch` tab
+
+- **What:** Added `dispatch` as a fifth tab on the one-device performer shell — `altar · channel · choreo · console · dispatch` — reusing the standalone `<Dispatch />` component untouched, exactly as the `console` tab reuses `<Console />`. Appended last so existing tab order is unchanged. The standalone `/dispatch` route is kept as-is (matching the `/console` precedent), so the lobby operator can still open it full-screen on its own device. No CSS work: `Dispatch`'s `board board-3zone` lays out inside the shell the same way the `Console` tab already does. Each instance keeps its own socket + state fetch.
+- **Why:** Lets one device reach the lobby queue board alongside the performer screens without switching routes.
+- **Files/areas:** `apps/stage/src/routes/Perform.tsx` (+ `Perform.test.tsx`: 6/6, dispatch-tab case added). Gate: stage Perform suite green, `pnpm -r typecheck` clean.
+- **Docs touched:** this entry; `app/CLAUDE.md` `/perform` route description.
+
 ## 2026-06-27 — `/console` panel reorder: Broadcast → Altar gate → Flow → Visitors
 
 - **What:** Reordered the top of the `/console` overseer so the operator's two live levers sit first: **Broadcast** (Pluribus altar-ready TTS) moved to the top, **Altar gate** directly below it, then the **Flow** funnel + station LEDs now sit just above the **Visitors** table. Pure JSX reorder — no behavior, props, or state changes; the lower panels (Manual override / Active sessions / Events) are untouched.

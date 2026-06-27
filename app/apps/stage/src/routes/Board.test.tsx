@@ -10,9 +10,9 @@ const base: DispatchState = {
 };
 
 describe("boardRows", () => {
-  it("labels a plain waiting visitor WAITING ROOM", () => {
+  it("labels a plain waiting visitor WAITING (lobby overflow)", () => {
     const rows = boardRows({ ...base, queue: [{ id: "a", number: 12, eligible: ["intake"], waitingSince: "", flags: [] }] });
-    expect(rows.find((r) => r.id === "a")?.loc).toBe("WAITING ROOM");
+    expect(rows.find((r) => r.id === "a")?.loc).toBe("WAITING");
   });
   it("labels a held visitor ON HOLD", () => {
     const rows = boardRows({ ...base, queue: [{ id: "b", number: 13, eligible: ["intake"], waitingSince: "", flags: [], holdReason: "intro" }] });

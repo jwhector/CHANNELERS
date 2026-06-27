@@ -12,10 +12,10 @@ export type Row = { id: string; number: number; loc: string; tone: Tone };
 
 const pad3 = (n: number) => String(n).padStart(3, "0");
 
-/** Pure roster derivation — every visitor and where they are. A visitor who is waiting and not at
- *  a station is in the holding area (#24): "WAITING ROOM", or "ON HOLD" while held. A waiting visitor
- *  who has cleared the pre-altar stations is labeled "ALTAR READY" (#18) — except a held visitor,
- *  whose "ON HOLD" status takes precedence. */
+/** Pure roster derivation — every visitor and where they are. A waiting visitor not at a station is
+ *  lobby overflow ("WAITING", or "ON HOLD" while held); one who has cleared the pre-altar stations is
+ *  "ALTAR READY" (#18), except held → "ON HOLD" wins. (The real held room shows its slot label
+ *  STATION A - TIME OFFERING, not this overflow bucket.) */
 export function boardRows(state: DispatchState | null): Row[] {
   const fromSlots: Row[] = (state?.slots ?? [])
     .filter((s) => s.occupant)
@@ -31,7 +31,7 @@ export function boardRows(state: DispatchState | null): Row[] {
   const fromQueue: Row[] = (state?.queue ?? []).map((q) => ({
     id: q.id,
     number: q.number,
-    loc: (q.heldUntil ?? q.holdReason) ? "ON HOLD" : altarReadyIds.has(q.id) ? "ALTAR READY" : "WAITING ROOM",
+    loc: (q.heldUntil ?? q.holdReason) ? "ON HOLD" : altarReadyIds.has(q.id) ? "ALTAR READY" : "WAITING",
     tone: "wait",
   }));
 
