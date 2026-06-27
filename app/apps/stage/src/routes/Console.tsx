@@ -11,6 +11,7 @@ import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { altarReadyNumbers } from "../lib/pluribus";
 import { PluribusBroadcast } from "../components/PluribusBroadcast";
+import { AltarGate } from "../components/AltarGate";
 
 const dwell = (since?: string) =>
   since ? `${Math.max(0, Math.round((Date.now() - Date.parse(since)) / 1000))}s` : "—";
@@ -101,6 +102,9 @@ export function Console() {
           ))}
         </ul>
       )}
+
+      <h3>Altar gate</h3>
+      <AltarGate open={dispatch?.altarOpen ?? false} onToggle={(open) => void api.dispatch.altar(open)} />
 
       <h3>Broadcast</h3>
       <PluribusBroadcast numbers={ready} storageKey="out.console" />

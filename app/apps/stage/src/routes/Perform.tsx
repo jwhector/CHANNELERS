@@ -2,19 +2,27 @@ import { useState, type ReactNode } from "react";
 import { Altar } from "./Altar";
 import { Channel } from "./Channel";
 import { Choreo } from "./Choreo";
+import { Console } from "./Console";
 
-type Tab = "altar" | "channel" | "choreo";
-const TABS: Tab[] = ["altar", "channel", "choreo"];
+type Tab = "altar" | "channel" | "choreo" | "console";
+const TABS: Tab[] = ["altar", "channel", "choreo", "console"];
 
 /**
- * One-device performer shell: altar (entry) · channel (oracle) · choreo (cues).
- * All three regions stay mounted; inactive ones are `hidden` (display:none) so
+ * One-device performer shell: altar (entry) · channel (oracle) · choreo (cues) · console (overseer).
+ * All regions stay mounted; inactive ones are `hidden` (display:none) so
  * each child's WebSocket, claimed session, and audio never drop on a tab switch —
  * choreo ear-audio keeps playing while the performer is on another tab.
  */
-export function PerformShell({ altar, channel, choreo }: { altar: ReactNode; channel: ReactNode; choreo: ReactNode }) {
+export function PerformShell({
+  altar, channel, choreo, console,
+}: {
+  altar: ReactNode;
+  channel: ReactNode;
+  choreo: ReactNode;
+  console: ReactNode;
+}) {
   const [tab, setTab] = useState<Tab>("altar");
-  const region: Record<Tab, ReactNode> = { altar, channel, choreo };
+  const region: Record<Tab, ReactNode> = { altar, channel, choreo, console };
   return (
     <div className="perform">
       <nav className="perform-tabs">
@@ -34,5 +42,12 @@ export function PerformShell({ altar, channel, choreo }: { altar: ReactNode; cha
 }
 
 export function Perform() {
-  return <PerformShell altar={<Altar showCamera={false} />} channel={<Channel />} choreo={<Choreo />} />;
+  return (
+    <PerformShell
+      altar={<Altar showCamera={false} />}
+      channel={<Channel />}
+      choreo={<Choreo />}
+      console={<Console />}
+    />
+  );
 }
