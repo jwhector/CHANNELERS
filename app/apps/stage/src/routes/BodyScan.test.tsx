@@ -2,6 +2,7 @@ import { render, screen, act } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Slot, SlotOccupant, WsServerMsg } from "@channelers/shared";
 import type { Landmark } from "../lib/pose/landmarks";
+import { landmarksToAngles, poseSimilarity } from "../lib/pose/angles";
 
 // Mock the live hooks so the camera path is inert; capture the callbacks the
 // component registers so tests can drive frames + relayed commands directly.
@@ -42,6 +43,12 @@ const occ = (number: number, phase: SlotOccupant["phase"]): SlotOccupant => ({ v
 const landmarks = (visibility: number): Landmark[] =>
   Array.from({ length: 33 }, (_, i) => ({ x: 0.1 + (i % 7) * 0.1, y: 0.1 + Math.floor(i / 7) * 0.08, z: 0, visibility }));
 
+// A clearly different shape: every landmark on one vertical line, so the joint
+// angles collapse to straight/zero and poseSimilarity vs landmarks() is < 0.7.
+// Used to "break" the enrolled pose and to test a non-matching repeat.
+const lineLandmarks = (visibility: number): Landmark[] =>
+  Array.from({ length: 33 }, (_, i) => ({ x: 0.5, y: 0.05 + i * 0.025, z: 0, visibility }));
+
 const captureCmd = (visitorId: string): WsServerMsg =>
   ({ kind: "station.cmd", station: "bodyscan", action: "capture", visitorId });
 
@@ -76,16 +83,66 @@ test("not armed: a still, framed pose does NOT capture (gated behind the operato
   expect(api.enrollPose).not.toHaveBeenCalled();
 });
 
-test("armed + framed + held still past the hold window persists the pose", async () => {
+test("repeat-to-confirm: enroll, break the pose, re-form it, then persist", async () => {
   presence.current = { connected: true, slot: slot(occ(7, "in_progress")) };
   render(<BodyScan />);
-  const lms = landmarks(1);
-  act(() => onFrame!(lms, 0)); // establish framing + previous vector
-  act(() => onMessage!(captureCmd("v7"))); // operator arms
-  act(() => onFrame!(lms, 100)); // hold starts
-  await act(async () => { onFrame!(lms, 3700); }); // > 3.5s still + framed → save
+  const a = landmarks(1);
+  const b = lineLandmarks(1);
+  act(() => onFrame!(a, 0));                 // establish framing + prev vector
+  act(() => onMessage!(captureCmd("v7")));   // operator arms enroll
+  act(() => onFrame!(a, 100));               // enroll hold starts
+  act(() => onFrame!(a, 3700));              // > RECORD_SEC → capture pose A, enter confirm
+  expect(api.enrollPose).not.toHaveBeenCalled(); // NOT saved yet
+  act(() => onFrame!(b, 3800));              // similarity < BREAK_THRESH → pose broken
+  act(() => onFrame!(a, 3900));              // re-forming: motion high (prev=b) → not still yet
+  act(() => onFrame!(a, 4000));              // motion settles → confirm hold starts
+  await act(async () => { onFrame!(a, 5600); }); // > CONFIRM_SEC → persist
   expect(api.enrollPose).toHaveBeenCalledTimes(1);
-  expect(api.enrollPose).toHaveBeenCalledWith("v7", expect.objectContaining({ angles: expect.any(Array), weights: expect.any(Array) }));
+  expect(api.enrollPose).toHaveBeenCalledWith(
+    "v7",
+    expect.objectContaining({ angles: expect.any(Array), weights: expect.any(Array) }),
+  );
+});
+
+test("the first hold captures but does not persist — it prompts for the repeat", () => {
+  presence.current = { connected: true, slot: slot(occ(7, "in_progress")) };
+  render(<BodyScan />);
+  const a = landmarks(1);
+  act(() => onFrame!(a, 0));
+  act(() => onMessage!(captureCmd("v7")));
+  act(() => onFrame!(a, 100));
+  act(() => onFrame!(a, 3700)); // enroll completes → confirm
+  expect(api.enrollPose).not.toHaveBeenCalled();
+  expect(screen.getByText(/release, then form it again/i)).toBeInTheDocument();
+});
+
+test("holding the pose continuously (never breaking) never confirms", () => {
+  presence.current = { connected: true, slot: slot(occ(7, "in_progress")) };
+  render(<BodyScan />);
+  const a = landmarks(1);
+  act(() => onFrame!(a, 0));
+  act(() => onMessage!(captureCmd("v7")));
+  act(() => onFrame!(a, 100));
+  act(() => onFrame!(a, 3700));  // → confirm; similarity to A stays 1, never < BREAK_THRESH
+  act(() => onFrame!(a, 5000));
+  act(() => onFrame!(a, 8000));
+  expect(api.enrollPose).not.toHaveBeenCalled();
+});
+
+test("a non-matching repeat does not persist", () => {
+  presence.current = { connected: true, slot: slot(occ(7, "in_progress")) };
+  render(<BodyScan />);
+  const a = landmarks(1);
+  const b = lineLandmarks(1);
+  expect(poseSimilarity(landmarksToAngles(a), landmarksToAngles(b))).toBeLessThan(0.7); // precondition
+  act(() => onFrame!(a, 0));
+  act(() => onMessage!(captureCmd("v7")));
+  act(() => onFrame!(a, 100));
+  act(() => onFrame!(a, 3700));  // → confirm
+  act(() => onFrame!(b, 3800));  // breaks (sim < 0.7)
+  act(() => onFrame!(b, 3900));  // motion settles, but sim(A,B) < MATCH_THRESH
+  act(() => onFrame!(b, 6000));  // held well past CONFIRM_SEC → still must not save
+  expect(api.enrollPose).not.toHaveBeenCalled();
 });
 
 test("armed but out of frame: the hold never completes", () => {

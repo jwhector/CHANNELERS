@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SlotOccupant, WsServerMsg } from "@channelers/shared";
 import { usePoseLandmarker } from "../lib/pose/usePoseLandmarker";
-import { bodyCoverage, isBodyFramed, landmarksToAngles, motionMetric, type PoseVector } from "../lib/pose/angles";
+import { bodyCoverage, isBodyFramed, landmarksToAngles, motionMetric, poseSimilarity, type PoseVector } from "../lib/pose/angles";
 import { type Landmark } from "../lib/pose/landmarks";
 import { api } from "../lib/api";
 import { drawSkeleton } from "../components/poseUI";
@@ -90,8 +90,11 @@ function BodyScanStandby({ occ, connected }: { occ: SlotOccupant | undefined; co
   );
 }
 
-const RECORD_SEC = 3.5; // hold-still duration before the pose is saved
+const RECORD_SEC = 3.5; // hold-still duration to capture the pose
 const STILLNESS = 0.05; // max per-frame motion (radians) that still counts as "held"
+const CONFIRM_SEC = 1.5; // hold to confirm the repeat (mirrors the altar verify hold)
+const MATCH_THRESH = 0.9; // similarity the repeat must reach (altar's value)
+const BREAK_THRESH = 0.7; // they must leave pose A (similarity drops below this) before the repeat is armed
 
 function BodyScanCamera({
   visitorId,
@@ -115,9 +118,14 @@ function BodyScanCamera({
   const armedRef = useRef(false);
   const savingRef = useRef(false);
   const readyRef = useRef(false);
+  const phaseRef = useRef<"enroll" | "confirm">("enroll");
+  const enrolledRef = useRef<PoseVector | null>(null);
+  const brokenRef = useRef(false);
   const [framed, setFramed] = useState(false);
   const [armed, setArmed] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
+  const [phase, setPhase] = useState<"enroll" | "confirm">("enroll");
+  const [broken, setBroken] = useState(false);
 
   const updateFramed = (coverage: number) => {
     const next = isBodyFramed(coverage, framedRef.current);
@@ -132,6 +140,9 @@ function BodyScanCamera({
     setArmed(v);
     holdStartRef.current = null;
     setHoldProgress(0);
+    phaseRef.current = "enroll"; setPhase("enroll");
+    enrolledRef.current = null;
+    brokenRef.current = false; setBroken(false);
     if (v) savingRef.current = false;
   }, []);
 
@@ -168,12 +179,38 @@ function BodyScanCamera({
     prevVecRef.current = vec;
 
     if (!armedRef.current) return;
-    const still = motion < STILLNESS && framedNow;
-    if (!still) { holdStartRef.current = null; setHoldProgress(0); return; }
+
+    if (phaseRef.current === "enroll") {
+      const still = motion < STILLNESS && framedNow;
+      if (!still) { holdStartRef.current = null; setHoldProgress(0); return; }
+      if (holdStartRef.current == null) holdStartRef.current = tMs;
+      const prog = Math.min(1, (tMs - holdStartRef.current) / (RECORD_SEC * 1000));
+      setHoldProgress(prog);
+      if (prog >= 1) {
+        holdStartRef.current = null;
+        enrolledRef.current = vec;                 // remember pose A (saved only after confirm)
+        phaseRef.current = "confirm"; setPhase("confirm");
+        brokenRef.current = false; setBroken(false);
+        setHoldProgress(0);
+      }
+      return;
+    }
+
+    // confirm: they must break pose A, then re-form and hold it (altar-style match loop).
+    const template = enrolledRef.current;
+    if (!template) return;
+    const sim = poseSimilarity(template, vec);
+    if (!brokenRef.current) {
+      if (sim < BREAK_THRESH) { brokenRef.current = true; setBroken(true); }
+      holdStartRef.current = null; setHoldProgress(0);
+      return;
+    }
+    const qualifies = framedNow && motion < STILLNESS && sim >= MATCH_THRESH;
+    if (!qualifies) { holdStartRef.current = null; setHoldProgress(0); return; }
     if (holdStartRef.current == null) holdStartRef.current = tMs;
-    const prog = Math.min(1, (tMs - holdStartRef.current) / (RECORD_SEC * 1000));
+    const prog = Math.min(1, (tMs - holdStartRef.current) / (CONFIRM_SEC * 1000));
     setHoldProgress(prog);
-    if (prog >= 1) { holdStartRef.current = null; void persist(vec); }
+    if (prog >= 1) { holdStartRef.current = null; void persist(template); }
   }, [persist]);
 
   const { videoRef, status, error, start } = usePoseLandmarker(onFrame, deviceId);
@@ -200,7 +237,13 @@ function BodyScanCamera({
       {showFrameHint && <div className="framehint">Step back so your whole body is in frame.</div>}
       {armed && !showFrameHint && (
         <div className="bodyscan-hold">
-          <p className="bodyscan-hold-label">hold your shape</p>
+          <p className="bodyscan-hold-label">
+            {phase === "enroll"
+              ? "hold your shape"
+              : broken
+                ? "now hold the same shape"
+                : "release, then form it again"}
+          </p>
           <div className="bodyscan-hold-track">
             <div className="bodyscan-hold-fill" style={{ width: `${Math.round(holdProgress * 100)}%` }} />
           </div>
