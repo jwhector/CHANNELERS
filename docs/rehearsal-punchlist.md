@@ -45,8 +45,8 @@ Status: 🔴 todo · 🟡 in progress · 🟢 done · ⏸ blocked · ✅ shipped
 ### Stream B — Oracle / TTS (`apps/brain/src/{choreo,divination,tts}.ts`, `apps/stage/src/{routes/Choreo.tsx,lib/speech.ts}`)
 | # | Item | Pri | Status | Notes / deps |
 |---|------|-----|--------|--------------|
-| 22 | Mimic cadence broken: knobs don't toggle, once started never stops | P0 | 🔴 | systematic-debugging. Trace `isMimicTurn` (brain) + the `/api/choreo/config` toggle path. |
-| 23 | TTS reads too fast even at slowest ElevenLabs setting | P0 | 🔴 | Likely client-side `audio.playbackRate` (instant, free) rather than ElevenLabs settings — confirm. |
+| 22 | Mimic cadence broken: knobs don't toggle, once started never stops | P0 | ⏸ | **Paused S2** pending a better repro. Investigation so far: brain `isMimicTurn` reads **fresh** cfg per turn ([divination.ts:252-255](../app/apps/brain/src/divination.ts#L252)); cadence math, config round-trip, route, and client `update()` (sends the full cfg) all look correct in isolation — so the bug isn't obvious in code. The display `mimicking` banner persists *by design* while mimic is on (mimic turns emit only `choreo.mimic`, no cue to reset it) and clears on the next normal cue. Need to characterize: which knob, which surface, what exact sequence. |
+| 23 | TTS reads too fast even at slowest ElevenLabs setting | P0 | 🟢 | Done S2. Per-device client `playbackRate` knob (default 0.7, preserve pitch) on `/channel` + `/choreo`; `localStorage`-persisted. Compounds with the brain's ElevenLabs `speed: 0.7` (left as-is). New `lib/playbackRate.ts` + `components/SpeedPicker.tsx`. TDD; typecheck clean; 22/22 touched tests green. |
 
 ### Stream C — Intake (`apps/stage/src/routes/Intake.tsx`, CrtShell)
 | # | Item | Pri | Status | Notes / deps |
@@ -67,9 +67,9 @@ Status: 🔴 todo · 🟡 in progress · 🟢 done · ⏸ blocked · ✅ shipped
 ### Stream E — Channeling consolidation (`routes/{Channel,Choreo,Altar,Console}.tsx`)
 | # | Item | Pri | Status | Notes / deps |
 |---|------|-----|--------|--------------|
-| 19 | Centralize `/channel` + `/choreo` + `/altar` onto one device | P2 | 🔴 | Design; **dep:** real audio-routing constraints (is consolidation forced, or convenience?). |
-| 20 | Add altar bodyscan override to `/console` (mirror `/altar`'s override) | P2 | 🔴 | Small. |
-| 21 | Disable bodyscan confirmation at altar, default to override | P2 | 🔴 | Small; pairs with #20. |
+| 19 | Centralize `/channel` + `/choreo` + `/altar` onto one device | P2 | 🟢 | Done S3: new **`/perform`** tabbed shell reuses the existing components (all mounted, inactive `hidden` → sessions/sockets/audio persist). Consolidation was *convenience, not forced* (sinks route independently). |
+| 20 | Add altar bodyscan override to `/console` (mirror `/altar`'s override) | P2 | 🟢 | Done S3 (already present): Console `unlock` = same `api.verifyPose` override; relabeled `unlock (override)` for clarity. No behavior change. |
+| 21 | Disable bodyscan confirmation at altar, default to override | P2 | 🟢 | Done S3: `Unlock (override)` is the primary altar action; camera pose-match is an opt-in `verify by camera` toggle. `/perform` altar is camera-less (`showCamera={false}`); standalone `/altar` keeps camera as fallback. |
 
 ### Stream F — Bodyscan experience (`routes/BodyScan.tsx`, pose libs)
 | # | Item | Pri | Status | Notes / deps |
@@ -87,10 +87,13 @@ Status: 🔴 todo · 🟡 in progress · 🟢 done · ⏸ blocked · ✅ shipped
 
 - **#8** — Rachel's new intake form content: have it yet?
 - **#24** — which are "the 3 stations"? does WR keep any dwell/milestone or is it purely transient? retire the existing timed `waitingroom` station + `/station/waitingroom` + hourglass?
-- **#19** — is one-device consolidation *forced* by audio routing, or a convenience? (decides P2-design vs quick merge)
-- **#23** — OK to slow the oracle via client `playbackRate`?
+- ~~**#19** — is one-device consolidation *forced* by audio routing, or a convenience?~~ **Resolved (S3):** convenience — the two TTS sinks already route independently, so one device can host all three. Shipped `/perform` as a tabbed shell reusing the components; camera dropped from the consolidated altar (operator: won't be used this iteration).
+- ~~**#23** — OK to slow the oracle via client `playbackRate`?~~ **Resolved (S2):** yes — live per-device knob, default 0.7, preserve pitch.
+- **#22** — need a concrete repro: which knob ("mimic oracle" vs "cadence" vs "every N"), on which surface, and the exact turn-by-turn sequence where it "doesn't toggle" / "never stops". Code review in S2 found no obvious defect.
 
 ## Session log / next up
 
 - **Session 1 (2026-06-26):** set up this tracker + operating-model memory; **shipped #3 (no-show hold) + #4 (intro hold → 1 min)** (brain 148/148, typecheck clean, CHANGELOG written). Merged to `friday-preshow` (fast-forward, `fcdbfa7`).
-- **Next up:** Session 2 — Stream B oracle/TTS (#22 mimic bug — needs systematic-debugging to trace `isMimicTurn` + the `/api/choreo/config` toggle path; #23 TTS speed — confirm client `playbackRate` approach first).
+- **Session 2 (2026-06-26):** Stream B. **Shipped #23 (TTS speed)** — per-device client `playbackRate` knob (default 0.7, preserve pitch) on `/channel` + `/choreo`, `localStorage`-persisted; TDD, typecheck clean, 22/22 touched stage tests green. **#22 (mimic) paused** at user's request pending a better characterization — investigation notes captured on the item + in Open decisions. (One unrelated pre-existing `CrtShell.test.tsx` failure noted, not from this work.)
+- **Session 3 (2026-06-26):** Stream E. **Shipped #19/#20/#21** — new **`/perform`** one-device tabbed shell (altar · channel · choreo) reusing the existing components (all mounted, inactive `hidden` so sessions/sockets/choreo-audio persist); altar now defaults to override with camera as an opt-in fallback (#21); console override button relabeled (#20 was already present). Camera dropped from the consolidated altar per the operator (won't be used this iteration). TDD (new `Altar`/`Perform` suites); stage 100/100; typecheck clean. Plan: `docs/superpowers/plans/2026-06-26-stream-e-channeling-consolidation.md`. **#8 (Stream C) skipped** — still awaiting Rachel's content.
+- **Next up:** **#22 (mimic)** once a repro is in hand (resume systematic-debugging from the captured notes — brain logic looked correct, so suspect a live/multi-surface or sequence-specific condition). Otherwise a Stream C/G **legibility batch** (#7 font size, #9 post-intake exit copy, #18 ALTAR READY on `/board`, #10 CRT resolution), or Stream D (XP skin). **Live-verify Stream E on devices when convenient:** open `/perform`, confirm tab switching keeps choreo audio playing and a claimed channel session survives switching.

@@ -45,9 +45,10 @@ channelers/
     stage/      Vite + React + TypeScript                     — all screens, role-based routes:
                   /intake    visitor kiosk: confirm-at-station gate → data-only survey → handoff to Physical Challenge
                   /bodyscan  pose identity token enrollment (enroll self-invented pose → poseTemplate)
-                  /altar     pose verify + persona pick → oracle-ready
+                  /altar     pose verify + persona pick → oracle-ready (verify defaults to override; camera is an opt-in fallback)
                   /channel   performer page: lobby → teleprompter + the Altered-State Console (oracle tuning, §5.3)
                   /choreo    Tier 2 choreography feed: live movement cue + in-ear TTS (§5.6)
+                  /perform   one-device performer console: altar (camera-less) · channel · choreo as tabs; reuses the standalone components (all mounted, inactive ones hidden so sessions/sockets/audio persist)
                   /console   master overseer: visitors+controls / flow funnel+station LEDs / sessions+event log
                   /board     public call display: #N → STATION (live dispatch.state broadcast)
                   /dispatch  lobby-operator interface: register arrivals, confirm/skip calls, manage queue
