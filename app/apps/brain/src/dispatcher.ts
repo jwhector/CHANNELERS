@@ -1,6 +1,6 @@
 import { config } from "./config";
 import { store, type VisitorRecord } from "./store";
-import { isAltarReady } from "@channelers/shared";
+import { clearedPreAltarStations, isAltarReady } from "@channelers/shared";
 import type {
   Station, DispatchState, Slot, SlotOccupant, SlotCamera, DispatchDone, DispatchReady, DispatchQueueEntry, DispatchFlag,
   WsServerMsg, WsClientMsg,
@@ -97,7 +97,7 @@ export function createDispatcher(
     const out: Station[] = [];
     if (!v.intakeAt) out.push("intake");
     if (!v.poseAt) out.push("bodyscan");
-    if (altarOpen && v.intakeAt && v.poseAt && !v.sessionEndAt) out.push("altar");
+    if (altarOpen && clearedPreAltarStations(v) && !v.sessionEndAt) out.push("altar");
     if (!v.paperAt) out.push("paper"); // non-gating, ungated group station (spec 2026-06-22)
     if (!v.offeringAt) out.push("offering"); // non-gating timed room (do-it-once)
     return out;

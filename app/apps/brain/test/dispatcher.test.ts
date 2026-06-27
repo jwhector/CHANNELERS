@@ -142,6 +142,8 @@ describe("altar gate", () => {
     const v = store.register(NUM());
     store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] }); // intakeAt
     store.setPoseTemplate(v.id, { angles: [0], weights: [1] });          // poseAt
+    store.stampMilestone(v.id, "paperAt");                               // + paper
+    store.stampMilestone(v.id, "offeringAt");                            // + offering → altar-eligible
     store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
 
     d.kick();
@@ -150,6 +152,24 @@ describe("altar gate", () => {
 
     d.setAltarOpen(true);
     expect(d.snapshot().altarOpen).toBe(true);
+    expect(d.snapshot().slots.find((s) => s.station === "altar")?.occupant?.visitorId).toBe(v.id);
+  });
+
+  it("requires every pre-altar station, not just intake+pose, before dispatching to the altar", () => {
+    f.hello("altar", "ka", "ca"); // altar-0 online
+    d.setAltarOpen(true);
+    const v = store.register(NUM());
+    store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] }); // intakeAt
+    store.setPoseTemplate(v.id, { angles: [0], weights: [1] });          // poseAt
+    store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
+
+    d.kick();
+    // intake + pose alone is no longer enough — paper + offering still pending
+    expect(d.snapshot().slots.find((s) => s.station === "altar")?.occupant).toBeUndefined();
+
+    store.stampMilestone(v.id, "paperAt");
+    store.stampMilestone(v.id, "offeringAt");
+    d.kick();
     expect(d.snapshot().slots.find((s) => s.station === "altar")?.occupant?.visitorId).toBe(v.id);
   });
 });
@@ -296,7 +316,9 @@ describe("recovery", () => {
     f.hello("altar", "kA", "cA");
     const v = store.register(NUM());
     store.upsertSurvey(v.id, { name: "Jo", freeText: {}, phrases: [] });
-    store.setPoseTemplate(v.id, { angles: [0], weights: [1] }); // now altar-eligible
+    store.setPoseTemplate(v.id, { angles: [0], weights: [1] });
+    store.stampMilestone(v.id, "paperAt");
+    store.stampMilestone(v.id, "offeringAt"); // now altar-eligible
     store.setLocation(v.id, { state: "waiting", since: new Date().toISOString() });
     d.kick(); d.confirm(v.id); d.arrive(v.id); // in_progress@altar
     f.fireDisconnect("cA");
