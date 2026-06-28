@@ -4,3 +4,5 @@ dist/
 *.log
 .DS_Store
 .vite/
+# Local visitor-store snapshot (VISITOR_SNAPSHOT_PATH); dev recovery file, not source.
+apps/brain/tmp/

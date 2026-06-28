@@ -61,6 +61,15 @@ describe("snapshot read/write round-trip", () => {
     expect(back?.[0].number).toBe(502);
   });
 
+  it("writeSnapshot creates a missing parent directory", () => {
+    store.register(504);
+    // Point at a path whose parent dirs do not exist yet.
+    const path = join(mkdtempSync(join(tmpdir(), "chan-persist-")), "nested", "deep", "visitors.json");
+    expect(writeSnapshot(path, serializeStore())).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(readSnapshot(path)?.[0].number).toBe(504);
+  });
+
   it("readSnapshot returns null for a missing file (no throw)", () => {
     expect(readSnapshot(join(tmpdir(), "does-not-exist-xyz.json"))).toBeNull();
   });

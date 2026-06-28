@@ -1,4 +1,5 @@
-import { writeFileSync, renameSync, readFileSync, existsSync } from "node:fs";
+import { writeFileSync, renameSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { z } from "zod";
 import { VisitorProfile, Seeds, ChoreoScore } from "@channelers/shared";
 import { store, type VisitorRecord } from "./store";
@@ -30,6 +31,7 @@ export function serializeStore(): string {
  *  Synchronous (data is small) and never throws — a failure degrades to "no persistence". */
 export function writeSnapshot(path: string, data: string): boolean {
   try {
+    mkdirSync(dirname(path), { recursive: true }); // ensure the target dir exists (no-op if it does)
     const tmp = `${path}.tmp`;
     writeFileSync(tmp, data);
     renameSync(tmp, path);
