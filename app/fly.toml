@@ -13,6 +13,9 @@ primary_region = 'sjc'
   HOST = '0.0.0.0'
   PORT = '8080'
   SERVE_STAGE = 'true'
+  # Visitor-store crash recovery: snapshot to a mounted volume + hydrate on boot.
+  # Unset this (and drop the [[mounts]] below) to revert to fully volatile state.
+  VISITOR_SNAPSHOT_PATH = '/data/visitors.json'
 
 [http_service]
   internal_port = 8080
@@ -20,6 +23,14 @@ primary_region = 'sjc'
   auto_stop_machines = 'off'
   auto_start_machines = false
   min_machines_running = 1
+
+[[mounts]]
+  # Durable storage for the visitor snapshot (VISITOR_SNAPSHOT_PATH above). One volume,
+  # pinned to this single always-on machine. Create once: `fly volumes create channelers_data
+  # --region <primary_region> --size 1`. A host-level machine move that abandons the volume
+  # is not covered — acceptable for the workshop; see DEPLOY.md.
+  source = 'channelers_data'
+  destination = '/data'
 
 [[vm]]
   size = 'shared-cpu-1x'

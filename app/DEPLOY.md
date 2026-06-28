@@ -33,6 +33,11 @@ fly secrets set OPENAI_API_KEY=sk-...          # real oracle/transform/STT; unse
 fly secrets set ELEVENLABS_API_KEY=...         # optional: oracle TTS; unset → browser speechSynthesis
 fly secrets set ABLETON_AGENT_TOKEN=...        # optional: arms the /agent dial-home endpoint
 
+# Persistence volume for the visitor-store snapshot (VISITOR_SNAPSHOT_PATH + [[mounts]] in
+# fly.toml). One-time; region MUST match primary_region. Omit this + those two fly.toml lines
+# to run fully volatile (the old behavior).
+fly volumes create channelers_data --region sjc --size 1
+
 fly deploy
 ```
 
@@ -69,9 +74,17 @@ redeploy/crash, same as real ones.
 
 ## Operating caveats (read before show day)
 
-- **State is volatile.** A redeploy or crash wipes all visitors/sessions. **Do not
-  redeploy mid-show.** Keep one instance; no autoscale; no scale-to-zero.
-- **Single instance only** — in-memory store + sticky WS. Never scale horizontally.
+- **State recovery (opt-in).** With `VISITOR_SNAPSHOT_PATH=/data/visitors.json` (a mounted
+  volume — see `[[mounts]]` in `fly.toml`) the Brain snapshots the visitor store every
+  `VISITOR_SNAPSHOT_MS` (default 2 s) and restores it on boot, so a crash/redeploy recovers
+  participant data (surveys, poses, archetypes, milestones). **Not** restored: live divination
+  sessions and dispatcher slot positions — they re-derive as screens reconnect, so re-place
+  anyone caught mid-station. Unset the var (and drop the `[[mounts]]` block) → fully volatile,
+  as before. A redeploy mid-show is still best avoided, but is now recoverable rather than total
+  data loss. **Caveat:** a Fly volume is pinned to one machine/region — this covers process
+  crash / redeploy / restart, not a host-level move that abandons the volume.
+- **Single instance only** — in-memory store + sticky WS + a single-machine volume. Never scale
+  horizontally.
 - **Set `OPENAI_API_KEY`** so STT uses the Whisper API; otherwise the Brain loads a
   local Xenova model at runtime (a large first-call download in the container).
 - **Test the venue network early**, on a real kiosk: confirm it can load the URL *and*
