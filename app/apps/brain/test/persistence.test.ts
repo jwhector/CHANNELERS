@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { store, type VisitorRecord } from "../src/store";
 import {
-  serializeStore, writeSnapshot, readSnapshot, hydrateFromSnapshot,
+  serializeStore, writeSnapshot, readSnapshot, hydrateFromSnapshot, startSnapshotLoop,
 } from "../src/persistence";
 
 const tmpFile = (name = "visitors.json") =>
@@ -91,5 +91,26 @@ describe("snapshot read/write round-trip", () => {
     const missing = join(tmpdir(), "nope-xyz.json");
     expect(hydrateFromSnapshot(missing)).toBe(0);
     expect(existsSync(missing)).toBe(false);
+  });
+});
+
+describe("startSnapshotLoop", () => {
+  beforeEach(() => store.clear());
+
+  it("writes after a change, skips when unchanged, and stop() halts writes", () => {
+    vi.useFakeTimers();
+    const path = tmpFile();
+    const stop = startSnapshotLoop(path, 1000);
+
+    store.register(601);
+    vi.advanceTimersByTime(1000);
+    expect(readSnapshot(path)?.length).toBe(1); // wrote on change
+
+    stop();
+    store.register(602);
+    vi.advanceTimersByTime(5000);
+    expect(readSnapshot(path)?.length).toBe(1); // no writes after stop
+
+    vi.useRealTimers();
   });
 });

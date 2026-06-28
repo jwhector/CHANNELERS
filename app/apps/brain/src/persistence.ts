@@ -63,3 +63,18 @@ export function hydrateFromSnapshot(path: string): number {
   store.load(records);
   return records.length;
 }
+
+/** Snapshot the store every `intervalMs`, writing only when the visitor payload changed.
+ *  Returns a stop function. The interval is unref()'d so it doesn't hold the event loop open. */
+export function startSnapshotLoop(path: string, intervalMs: number): () => void {
+  let last = ""; // empty → the first non-empty state forces an initial write
+  const tick = setInterval(() => {
+    const digest = JSON.stringify(store.list());
+    if (digest === last) return;
+    if (writeSnapshot(path, serializeStore())) last = digest;
+  }, intervalMs);
+  if (typeof (tick as { unref?: () => void }).unref === "function") {
+    (tick as { unref: () => void }).unref();
+  }
+  return () => clearInterval(tick);
+}
