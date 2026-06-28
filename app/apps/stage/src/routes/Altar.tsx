@@ -10,14 +10,43 @@ import { useStationPresence } from "../lib/useStationPresence";
 import { useReleaseToGate } from "../lib/useReleaseToGate";
 import { useDevices } from "../lib/devices";
 import { DevicePicker } from "../components/DevicePicker";
+import { AltarGate } from "../components/AltarGate";
+import { PluribusBroadcast } from "../components/PluribusBroadcast";
+import { readyNumbers } from "../lib/pluribus";
+import { usePlaybackRate } from "../lib/playbackRate";
 
 export function Altar({ showCamera = true }: { showCamera?: boolean } = {}) {
-  const { connected, slot } = useStationPresence("altar");
+  const { connected, slot, state } = useStationPresence("altar");
   const [visitor, setVisitor] = useState<VisitorProfile | null>(null);
+  const { rate, setRate } = usePlaybackRate("rate.altar");
 
   useReleaseToGate(visitor, slot, false, () => setVisitor(null));
 
-  if (!visitor) return <CalledGate station="altar" title="Altar" connected={connected} slot={slot} confirmedBy="operator" onArrived={setVisitor} />;
+  if (!visitor) {
+    // Standby surface: with no dispatcher present, the altar performer drives the gate and
+    // the summons here, then admits the called visitor in one tap (CalledGate operator mode).
+    const ready = readyNumbers(state?.altarReadyList ?? []);
+    const standby = (
+      <div className="altar-standby">
+        <h3>Altar gate</h3>
+        <AltarGate open={state?.altarOpen ?? false} onToggle={(open) => void api.dispatch.altar(open)} />
+        <h3>Broadcast</h3>
+        <PluribusBroadcast
+          numbers={ready}
+          storageKey="out.altar.room"
+          earStorageKey="out.altar.ear"
+          rate={rate}
+          onChangeRate={setRate}
+        />
+      </div>
+    );
+    return (
+      <CalledGate
+        station="altar" title="Altar" connected={connected} slot={slot}
+        confirmedBy="operator" onArrived={setVisitor} extra={standby}
+      />
+    );
+  }
   return <Gate visitor={visitor} connected={connected} showCamera={showCamera} />;
 }
 

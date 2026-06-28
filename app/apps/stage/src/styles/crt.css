@@ -393,6 +393,31 @@ textarea.win-field {
   border-color: var(--win-lo) var(--win-hi) var(--win-hi) var(--win-lo);
   background: #b8d0ff;
 }
+.win-chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* "(2/3)" selection counter beside a capped multi-select label. */
+.win-count {
+  color: #555;
+  font-variant-numeric: tabular-nums;
+}
+/* 1–N rating: the numbered chips flanked by the two end-anchor labels. */
+.win-scale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.win-scale-anchor {
+  flex: 1 1 0;
+  min-width: 96px;
+  font-size: clamp(12px, 1.6vmin, 15px);
+  color: #3a3a3a;
+}
+.win-scale-anchor:last-child {
+  text-align: right;
+}
 .win-btn {
   align-self: flex-end;
   font: inherit;

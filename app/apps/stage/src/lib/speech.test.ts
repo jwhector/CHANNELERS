@@ -9,10 +9,14 @@ class SeqAudio {
   onerror: (() => void) | null = null;
   preservesPitch = false;
   playbackRate = 1;
+  sinkId = "";
   private listeners: Record<string, Array<() => void>> = {};
   constructor(public src: string) {
     SeqAudio.instances.push(this);
   }
+  setSinkId = vi.fn(async (id: string) => {
+    this.sinkId = id;
+  });
   play = vi.fn(async () => {
     SeqAudio.played.push(this.src);
   });
@@ -190,6 +194,21 @@ test("speakSequence plays clips back-to-back — the next starts only after the 
   await vi.waitFor(() => expect(SeqAudio.played).toEqual(["cue one"])); // first plays, second waits
   SeqAudio.instances[0]!.fire("ended"); // first clip finishes…
   await vi.waitFor(() => expect(SeqAudio.played).toEqual(["cue one", "prepare"])); // …now the second
+  SeqAudio.instances[1]!.fire("ended");
+  await seq;
+});
+
+test("speakSequence routes each clip to its own sink (dual-channel broadcast)", async () => {
+  stubSeqAudio();
+  const seq = speakSequence([
+    { text: "intro", sinkId: "room" },
+    { text: "numbers", sinkId: "ear" },
+  ]);
+  await vi.waitFor(() => expect(SeqAudio.played).toEqual(["intro"]));
+  expect(SeqAudio.instances[0]!.sinkId).toBe("room"); // intro → room speakers
+  SeqAudio.instances[0]!.fire("ended");
+  await vi.waitFor(() => expect(SeqAudio.played).toEqual(["intro", "numbers"]));
+  expect(SeqAudio.instances[1]!.sinkId).toBe("ear"); // numbers → performer's in-ear
   SeqAudio.instances[1]!.fire("ended");
   await seq;
 });

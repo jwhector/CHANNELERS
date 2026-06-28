@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Slot, Station, VisitorProfile } from "@channelers/shared";
 import { api } from "../lib/api";
 import { SegmentNumber } from "./SegmentNumber";
@@ -15,6 +15,7 @@ export function CalledGate({
   onArrived,
   skin = "default",
   confirmedBy = "visitor",
+  extra,
 }: {
   station: Station;
   title: string;
@@ -25,6 +26,9 @@ export function CalledGate({
   skin?: "crt" | "default";
   /** "operator" turns this into the on-station admit surface: Confirm arrival + Release. */
   confirmedBy?: "visitor" | "operator";
+  /** Operator-only standby controls rendered under the header (default skin) — e.g. the
+   *  /altar gate toggle + Pluribus broadcast. Shown only while no visitor is admitted. */
+  extra?: ReactNode;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +46,13 @@ export function CalledGate({
   async function confirmArrival() {
     if (!occ) return;
     setBusy(true); setError(null);
-    try { await api.arrive(occ.visitorId); }
+    // Operator self-serve: a pending occupant hasn't been called yet, so confirm the call
+    // (pending → called) before admitting (called → in_progress). This lets the altar
+    // performer run the whole handshake with no dispatcher on /dispatch.
+    try {
+      if (occ.phase === "pending") await api.dispatch.confirm(occ.visitorId);
+      await api.arrive(occ.visitorId);
+    }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   }
@@ -95,11 +105,19 @@ export function CalledGate({
         <h1>{title}</h1>
         <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
       </header>
+      {extra}
       {!slot && <p className="dim">No slot bound — open this screen with <code>?kiosk=&lt;id&gt;</code> or wait for a free {station} slot.</p>}
       {slot && !occ && <p className="dim">Slot {slot.id} ready. Waiting to be called…</p>}
-      {occ && occ.phase !== "in_progress" && occ.phase !=="pending" && (
+      {occ && occ.phase !== "in_progress" &&
+        // Operator admits a pending occupant too (confirm call + arrive in one); a visitor
+        // only self-confirms once actually called.
+        (confirmedBy === "operator" || occ.phase !== "pending") && (
         <section className="called">
-          <p className="dim">{confirmedBy === "operator" ? "Called — awaiting arrival" : "Now calling"}</p>
+          <p className="dim">
+            {confirmedBy === "operator"
+              ? occ.phase === "pending" ? "Pending — confirm to admit" : "Called — awaiting arrival"
+              : "Now calling"}
+          </p>
           <div className="called-number">#{occ.number}</div>
           <div className="controls">
             <button className="submit" disabled={busy} onClick={() => void confirmArrival()}>

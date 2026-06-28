@@ -3,6 +3,8 @@ import type { DispatchReady, VisitorProfile } from "@channelers/shared";
 import {
   altarReadyNumbers,
   buildPluribusBroadcast,
+  buildPluribusDesignation,
+  buildPluribusIntro,
   formatNumberList,
   readyNumbers,
 } from "./pluribus";
@@ -57,15 +59,32 @@ describe("formatNumberList", () => {
   });
 });
 
-describe("buildPluribusBroadcast", () => {
-  it("uses USER (singular) for one and the exact template", () => {
-    expect(buildPluribusBroadcast([3])).toBe(
-      "INCOMING BROADCAST - PREPARE FOR PLURIBUS: 3... 2... 1... USER 3, YOU HAVE COMPLETED THE STATIONING PROCESS",
+describe("buildPluribusIntro", () => {
+  it("is the public countdown framing, with no numbers", () => {
+    expect(buildPluribusIntro()).toBe("INCOMING BROADCAST 3... 2... 1...");
+  });
+});
+
+describe("buildPluribusDesignation", () => {
+  it("uses USER (singular) for one", () => {
+    expect(buildPluribusDesignation([3])).toBe(
+      "USER 3, YOU HAVE COMPLETED THE STATIONING PROCESS. YOUR DATA OFFERINGS HAVE BEEN RECEIVED. PROCEED TO THE CENTRAL ALTAR IN PREPARATION FOR THE SUMMONING.",
     );
   });
   it("uses USERS (plural) and an Oxford-comma join for many", () => {
+    expect(buildPluribusDesignation([3, 7, 12])).toBe(
+      "USERS 3, 7, and 12, YOU HAVE COMPLETED THE STATIONING PROCESS. YOUR DATA OFFERINGS HAVE BEEN RECEIVED. PROCEED TO THE CENTRAL ALTAR IN PREPARATION FOR THE SUMMONING.",
+    );
+  });
+});
+
+describe("buildPluribusBroadcast", () => {
+  it("is the intro and designation joined by a space (single-channel)", () => {
     expect(buildPluribusBroadcast([3, 7, 12])).toBe(
-      "INCOMING BROADCAST - PREPARE FOR PLURIBUS: 3... 2... 1... USERS 3, 7, and 12, YOU HAVE COMPLETED THE STATIONING PROCESS",
+      `${buildPluribusIntro()} ${buildPluribusDesignation([3, 7, 12])}`,
+    );
+    expect(buildPluribusBroadcast([3])).toBe(
+      "INCOMING BROADCAST 3... 2... 1... USER 3, YOU HAVE COMPLETED THE STATIONING PROCESS. YOUR DATA OFFERINGS HAVE BEEN RECEIVED. PROCEED TO THE CENTRAL ALTAR IN PREPARATION FOR THE SUMMONING.",
     );
   });
 });

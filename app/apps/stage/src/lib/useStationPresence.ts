@@ -16,20 +16,26 @@ function kioskId(): string {
  * Announce this screen as a station kiosk and track its bound slot.
  * Sends station.hello { station, kioskId, slotHint? } on every (re)connect (spec §4),
  * and returns the slot this kiosk is bound to (from dispatch.state), or undefined.
+ * Also surfaces the full dispatch.state so an operator station (e.g. /altar) can read
+ * altarOpen / altarReadyList without opening a second socket.
  */
-export function useStationPresence(station: Station): { connected: boolean; slot: Slot | undefined } {
+export function useStationPresence(station: Station): {
+  connected: boolean;
+  slot: Slot | undefined;
+  state: DispatchState | undefined;
+} {
   const id = useMemo(kioskId, []);
   const slotHint = useMemo(() => new URLSearchParams(location.search).get("slot") ?? undefined, []);
-  const [slots, setSlots] = useState<Slot[]>([]);
+  const [state, setState] = useState<DispatchState>();
 
   const { connected, send } = useBrainSocket((m: WsServerMsg) => {
-    if (m.kind === "dispatch.state") setSlots((m.state as DispatchState).slots);
+    if (m.kind === "dispatch.state") setState(m.state as DispatchState);
   });
 
   useEffect(() => {
     if (connected) send({ kind: "station.hello", station, kioskId: id, slotHint });
   }, [connected, send, station, id, slotHint]);
 
-  const slot = slots.find((s) => s.kioskId === id && s.station === station);
-  return { connected, slot };
+  const slot = state?.slots.find((s) => s.kioskId === id && s.station === station);
+  return { connected, slot, state };
 }

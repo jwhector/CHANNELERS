@@ -20,8 +20,18 @@ export function formatNumberList(numbers: number[]): string {
   return `${numbers.slice(0, -1).join(", ")}, and ${numbers[numbers.length - 1]}`;
 }
 
-/** The Pluribus broadcast line for the given visitor numbers (caller ensures non-empty). */
-export function buildPluribusBroadcast(numbers: number[]): string {
+/** Public countdown/framing — the theatrical summons voiced over the room speakers. */
+export function buildPluribusIntro(): string {
+  return "INCOMING BROADCAST 3... 2... 1...";
+}
+
+/** Private designation — the user numbers + completion line, for the performer's in-ear. */
+export function buildPluribusDesignation(numbers: number[]): string {
   const word = numbers.length === 1 ? "USER" : "USERS";
-  return `incoming broadcast - PREPARE FOR PLURIBUS: 3... 2... 1... ${word} ${formatNumberList(numbers)}, YOU HAVE COMPLETED THE STATIONING PROCESS. YOUR DATA OFFERINGS HAVE BEEN RECEIVED. PROCEED TO THE CENTRAL ALTAR IN PREPARATION FOR THE ARRIVAL.`;
+  return `${word} ${formatNumberList(numbers)}, YOU HAVE COMPLETED THE STATIONING PROCESS. YOUR DATA OFFERINGS HAVE BEEN RECEIVED. PROCEED TO THE CENTRAL ALTAR IN PREPARATION FOR THE SUMMONING.`;
+}
+
+/** The full single-channel Pluribus line: intro + designation (caller ensures non-empty). */
+export function buildPluribusBroadcast(numbers: number[]): string {
+  return `${buildPluribusIntro()} ${buildPluribusDesignation(numbers)}`;
 }

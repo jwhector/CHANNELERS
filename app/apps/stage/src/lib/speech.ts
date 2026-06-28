@@ -110,7 +110,7 @@ export async function speak(text: string, opts: ClipOpts = {}): Promise<SpeakRes
  * generation and abandons whatever clips remain.
  */
 export async function speakSequence(
-  clips: Array<{ text: string; archetype?: string }>,
+  clips: Array<{ text: string; archetype?: string; sinkId?: string }>,
   opts: { sinkId?: string; rate?: number } = {},
 ): Promise<void> {
   const items = clips.filter((c) => c.text.trim());
@@ -120,7 +120,9 @@ export async function speakSequence(
   const superseded = () => mine !== generation;
   for (const clip of items) {
     if (superseded()) return;
-    const audio = await startClip(clip.text, { ...opts, archetype: clip.archetype }, mine);
+    // A per-clip sinkId wins over the sequence default — this is how the dual-channel
+    // Pluribus broadcast voices its intro to the room and its numbers to the in-ear.
+    const audio = await startClip(clip.text, { ...opts, archetype: clip.archetype, sinkId: clip.sinkId ?? opts.sinkId }, mine);
     if (superseded()) return;
     // No element → browser-TTS fallback (no-keys dev path); can't await it precisely, so move on.
     if (audio) await whenClipEnds(audio, superseded);
