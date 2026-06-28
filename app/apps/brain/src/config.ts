@@ -20,7 +20,7 @@ export const config = {
   // and half-open connections are detected. 0 disables.
   wsHeartbeatMs: Number(process.env.WS_HEARTBEAT_MS ?? 30_000),
   openaiApiKey: process.env.OPENAI_API_KEY,
-  transformModel: process.env.TRANSFORM_MODEL ?? "gpt-4o",
+  transformModel: process.env.TRANSFORM_MODEL ?? "gpt-5-mini",
   // Both default to gpt-4o; override per-role via env (ARCHITECTURE.md §5.3).
   oracleModel: process.env.ORACLE_MODEL ?? "gpt-4o",
   // OpenAI Whisper STT model for the divination mic (apps/brain/src/stt.ts).
@@ -58,7 +58,7 @@ export const config = {
   dispatcher: {
     /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper` (manual group) and
      *  `offering` (timed room) are kiosk-less group capacities. */
-    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 3, offering: 5 } as Record<Station, number>,
+    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 1, offering: 2 } as Record<Station, number>,
     /** Order fill() serves free slots in — scarce single gate (bodyscan) first, soaks last.
      *  Keeps the one bodyscan station from losing its only candidate to the 2-wide intake. */
     fillPriority: ["bodyscan", "intake", "altar", "paper", "offering"] as Station[],

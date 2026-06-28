@@ -23,5 +23,5 @@ export function formatNumberList(numbers: number[]): string {
 /** The Pluribus broadcast line for the given visitor numbers (caller ensures non-empty). */
 export function buildPluribusBroadcast(numbers: number[]): string {
   const word = numbers.length === 1 ? "USER" : "USERS";
-  return `INCOMING BROADCAST - PREPARE FOR PLURIBUS: 3... 2... 1... ${word} ${formatNumberList(numbers)}, YOU HAVE COMPLETED THE STATIONING PROCESS`;
+  return `incoming broadcast - PREPARE FOR PLURIBUS: 3... 2... 1... ${word} ${formatNumberList(numbers)}, YOU HAVE COMPLETED THE STATIONING PROCESS. YOUR DATA OFFERINGS HAVE BEEN RECEIVED. PROCEED TO THE CENTRAL ALTAR IN PREPARATION FOR THE ARRIVAL.`;
 }

@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { SurveyResponse, PoseVector } from "@channelers/shared";
-import { parseCount, sampleSurvey, samplePose } from "../src/seed-lib";
+import { ARCHETYPES, SurveyResponse, PoseVector } from "@channelers/shared";
+import {
+  completeStation,
+  parseArchetype,
+  parseCount,
+  sampleSurvey,
+  samplePose,
+  type SeedClient,
+} from "../src/seed-lib";
 
 describe("seed parseCount", () => {
   it("defaults to the fallback when --count is absent", () => {
@@ -17,6 +24,39 @@ describe("seed parseCount", () => {
 
   it("rejects a --count below 1", () => {
     expect(() => parseCount({ count: "0" }, 3)).toThrow();
+  });
+});
+
+describe("seed parseArchetype", () => {
+  it("defaults to the fallback when --archetype is absent", () => {
+    expect(parseArchetype({}, "tree")).toBe("tree");
+  });
+
+  it("accepts a known archetype id", () => {
+    const id = ARCHETYPES[0].id;
+    expect(parseArchetype({ archetype: id }, "tree")).toBe(id);
+  });
+
+  it("throws on an unknown archetype", () => {
+    expect(() => parseArchetype({ archetype: "not-a-real-archetype" }, "tree")).toThrow();
+  });
+});
+
+describe("seed completeStation", () => {
+  it("drives checkin then dispatch/complete with the right payloads", async () => {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    const client: SeedClient = {
+      get: async () => ({}) as never,
+      post: async (path, body) => {
+        calls.push({ path, body });
+        return {} as never;
+      },
+    };
+    await completeStation(client, 9000, "v1", "paper");
+    expect(calls).toEqual([
+      { path: "/api/checkin", body: { number: 9000, station: "paper" } },
+      { path: "/api/dispatch/complete", body: { visitorId: "v1" } },
+    ]);
   });
 });
 

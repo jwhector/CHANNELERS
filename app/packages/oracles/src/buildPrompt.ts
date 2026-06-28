@@ -28,7 +28,7 @@ export function buildSystemPrompt(persona: Persona, survey: SurveyResponse): str
     `You are giving a divination to this visitor, drawn from their intake:`,
     facts,
     ``,
-    `Feel free to make replies longer, but sometimes it's best to keep it short and concise. This is spoken aloud and channelled by a performer.`,
+    `Feel free to make replies longer. This is spoken aloud and channelled by a performer.`,
   ].join("\n");
 }
 

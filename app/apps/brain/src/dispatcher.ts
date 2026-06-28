@@ -120,8 +120,13 @@ export function createDispatcher(
     if (target && target.station !== station) target = undefined;
     // 3. else auto-claim the next free (unbound) slot
     if (!target) target = slotsOf(station).find((s) => !s.kioskId);
+    // 3b. no free slot? take over one that's bound-but-offline (its tab closed; grace not yet
+    // expired). A new device/tab gets a fresh kioskId, so it can't reclaim by id (step 1) — without
+    // this it would be parked as surplus until the 20s grace lapses. Newest screen wins; the grace
+    // timer is cleared below so it can't later unbind us, and any occupant carries to the new screen.
+    if (!target) target = slotsOf(station).find((s) => !s.connId);
     if (!target) {
-      surplus.set(connId, { station, kioskId }); // 4. no free slot
+      surplus.set(connId, { station, kioskId }); // 4. every slot is online under another kiosk
       broadcastState();
       return;
     }

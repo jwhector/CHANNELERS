@@ -108,10 +108,10 @@ export function Channel() {
           setSessionMeta({ archetype: m.archetype, visitorName: m.visitorName });
           setHistory([]);
           setLive("");
-          setTeleprompter(m.opening);
+          // setTeleprompter(m.opening);
           setError(null);
           archetypeRef.current = m.archetype;
-          if (whisperRef.current) void speak(m.opening, { archetype: m.archetype, sinkId: outRef.current, rate: rateRef.current });
+          // if (whisperRef.current) void speak(m.opening, { archetype: m.archetype, sinkId: outRef.current, rate: rateRef.current });
         }
         break;
 

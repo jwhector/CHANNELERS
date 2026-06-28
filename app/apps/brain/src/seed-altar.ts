@@ -32,8 +32,9 @@
  */
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { Station, VisitorProfile } from "@channelers/shared";
+import type { VisitorProfile } from "@channelers/shared";
 import {
+  completeStation,
   flags,
   makeClient,
   nextDevNumber,
@@ -49,21 +50,14 @@ const BASE = resolveBase(flags(process.argv.slice(2)));
 const client = makeClient(BASE);
 const { get, post } = client;
 
-/** Drive a station to completion via the operator-override path: force the visitor
- *  in_progress at the station, then Done (markComplete stamps its milestone, repools). */
-async function completeStation(number: number, visitorId: string, station: Station): Promise<void> {
-  await post("/api/checkin", { number, station });
-  await post("/api/dispatch/complete", { visitorId });
-}
-
 /** Drive one visitor through every pre-altar station, leaving them altar-ready. */
 async function seedOne(number: number, name: string): Promise<VisitorProfile> {
   const registered = await post<VisitorProfile>("/api/register", { number });
   const id = registered.id;
   await post<VisitorProfile>(`/api/visitors/${id}/intake`, { survey: sampleSurvey(name) }); // → intakeAt
   await post<VisitorProfile>(`/api/visitors/${id}/pose`, { template: samplePose() });        // → poseAt
-  await completeStation(number, id, "paper");                                                 // → paperAt
-  await completeStation(number, id, "offering");                                              // → offeringAt
+  await completeStation(client, number, id, "paper");                                         // → paperAt
+  await completeStation(client, number, id, "offering");                                      // → offeringAt
   return get<VisitorProfile>(`/api/visitors/by-number/${number}`);                            // final, all four stamped
 }
 

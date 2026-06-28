@@ -30,7 +30,7 @@ export function FeedMatrix({
   const gridRef = useRef<HTMLDivElement>(null);
 
   // Per-cell vector (px) from where the character sits to the centre of the screen — measured once,
-  // the instant the black hole opens, so the CSS keyframes can fling each cell to the singularity.
+  // the instant the black hole opens, so the CSS keyframes can fling each cell to the centre.
   const [pulls, setPulls] = useState<Map<number, { dx: number; dy: number }> | null>(null);
 
   // Timeline clock: controlled (tests) or an internal rAF loop that restarts on each new text.
@@ -97,7 +97,6 @@ export function FeedMatrix({
 
   return (
     <div ref={gridRef} className="feed-matrix-grid" aria-label={displayText}>
-      {shredding && pulls && <span className="feed-singularity" aria-hidden />}
       {words.map((word, gi) => (
         <Fragment key={gi}>
           {gi > 0 ? " " : null}

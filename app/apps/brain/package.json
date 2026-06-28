@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "seed:visitor": "tsx src/seed.ts",
     "seed:altar": "tsx src/seed-altar.ts",
+    "seed:no-intake": "tsx src/seed-no-intake.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"

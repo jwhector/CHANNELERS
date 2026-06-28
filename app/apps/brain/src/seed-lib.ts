@@ -4,7 +4,8 @@
  * real visitor would hit, so the only thing that differs between them is which
  * milestones they stamp. Keeping the HTTP client + fixtures here keeps that single.
  */
-import type { PoseVector, SurveyResponse } from "@channelers/shared";
+import { ARCHETYPES } from "@channelers/shared";
+import type { PoseVector, Station, SurveyResponse } from "@channelers/shared";
 import { config } from "./config";
 
 /** Tiny `--flag value` / `--flag=value` parser over argv. */
@@ -47,6 +48,16 @@ export function parseCount(f: Record<string, string>, fallback: number): number 
   return n;
 }
 
+/** Resolve a `--archetype <id>` flag against the persona library, falling back when absent. */
+export function parseArchetype(f: Record<string, string>, fallback: string): string {
+  const a = f.archetype ?? fallback;
+  if (!ARCHETYPES.some((x) => x.id === a)) {
+    const ids = ARCHETYPES.map((x) => x.id).join(", ");
+    throw new Error(`unknown archetype "${a}" — choose one of: ${ids}`);
+  }
+  return a;
+}
+
 export type SeedClient = {
   get: <T>(path: string) => Promise<T>;
   post: <T>(path: string, body?: unknown) => Promise<T>;
@@ -78,6 +89,19 @@ export async function nextDevNumber(client: SeedClient): Promise<number> {
   let n = 9000;
   while (taken.has(n)) n++;
   return n;
+}
+
+/** Drive a station to completion via the operator-override path: force the visitor
+ *  in_progress at the station, then Done (markComplete stamps its milestone, repools).
+ *  Used to stamp the kiosk-less group stations (`paper`, `offering`) from a seed. */
+export async function completeStation(
+  client: SeedClient,
+  number: number,
+  visitorId: string,
+  station: Station,
+): Promise<void> {
+  await client.post("/api/checkin", { number, station });
+  await client.post("/api/dispatch/complete", { visitorId });
 }
 
 /** A plausible filled-in survey (real field ids from packages/shared/src/survey.ts). */

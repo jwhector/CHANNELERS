@@ -93,6 +93,23 @@ test("bodyscan in-progress row shows Capture pose and fires onCapture", () => {
   expect(onCapture).toHaveBeenCalledWith("v9");
 });
 
+test("bodyscan in-progress row offers Done as a manual-approve fallback alongside Capture", () => {
+  const onComplete = vi.fn();
+  const slot: Slot = {
+    id: "bodyscan-0", station: "bodyscan", online: true,
+    occupant: { visitorId: "v9", number: 9, phase: "in_progress", since: "" },
+  };
+  render(
+    <StationOpsView
+      station="bodyscan" connected called={[]} inProgress={[slot]}
+      busyId={null} onArrive={() => {}} onRelease={() => {}}
+      onCapture={() => {}} onComplete={onComplete} />,
+  );
+  expect(screen.getByRole("button", { name: /capture pose/i })).toBeInTheDocument();
+  screen.getByRole("button", { name: /done/i }).click();
+  expect(onComplete).toHaveBeenCalledWith("v9");
+});
+
 test("no Capture button when onCapture is not provided", () => {
   const slot: Slot = {
     id: "bodyscan-0", station: "bodyscan", online: true,

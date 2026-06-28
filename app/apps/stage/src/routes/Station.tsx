@@ -60,9 +60,11 @@ function StationContainer({ station }: { station: StationName }) {
       busyId={busyId}
       onArrive={(id) => void run(id, () => api.arrive(id))}
       onRelease={(id) => void run(id, () => api.dispatch.repool(id))}
-      // Manual checkout (Done): paper (always — its only exit) and any timed station (early-complete).
+      // Manual checkout (Done): paper (always — its only exit), any timed station (early-complete),
+      // and bodyscan as a fallback to approve a visitor when the kiosk pose-capture won't cooperate
+      // (markComplete stamps poseAt — the same milestone enrollPose sets — and frees the slot).
       onComplete={
-        station === "paper" || state?.timedDwellMs?.[station] !== undefined
+        station === "paper" || station === "bodyscan" || state?.timedDwellMs?.[station] !== undefined
           ? (id) => void run(id, () => api.dispatch.complete(id))
           : undefined
       }

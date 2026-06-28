@@ -112,6 +112,41 @@ describe("socket-drop → slot offline after grace", () => {
   });
 });
 
+describe("offline-slot takeover: new device after closing the original tab (single-slot bodyscan)", () => {
+  // A closed tab clears its per-tab kioskId, so a new device/tab arrives with a FRESH id and
+  // cannot reclaim by id. With one slot held bound-but-offline through the grace window, the new
+  // screen used to be parked as surplus; it should take over the offline slot instead (newest wins).
+  const ONE_BODYSCAN = { ...KNOBS, slots: { intake: 3, bodyscan: 1, altar: 1 } };
+
+  it("a fresh kiosk reclaims the offline lone slot instead of being parked as surplus", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, { knobs: ONE_BODYSCAN, autoStart: false });
+    f2.hello("bodyscan", "kioskOld", "connOld");        // original screen claims bodyscan-0
+    f2.fireDisconnect("connOld");                       // tab closes → slot offline, still bound
+    vi.advanceTimersByTime(5);                          // still within the grace window
+    f2.hello("bodyscan", "kioskNew", "connNew");        // a different device opens /bodyscan
+    const s = d2.snapshot();
+    expect(s.surplus.some((x) => x.kioskId === "kioskNew")).toBe(false);
+    const slot = s.slots.find((x) => x.station === "bodyscan")!;
+    expect(slot.kioskId).toBe("kioskNew");
+    expect(slot.online).toBe(true);
+    d2.stop();
+  });
+
+  it("the superseded slot's grace timer no longer unbinds the new kiosk", () => {
+    const f2 = fakeBus();
+    const d2 = createDispatcher(f2.bus, { knobs: ONE_BODYSCAN, autoStart: false });
+    f2.hello("bodyscan", "kioskOld", "connOld");
+    f2.fireDisconnect("connOld");
+    f2.hello("bodyscan", "kioskNew", "connNew");        // takeover within grace
+    vi.advanceTimersByTime(KNOBS.graceMs + 10);         // the OLD grace timer would fire here
+    const slot = d2.snapshot().slots.find((x) => x.station === "bodyscan");
+    expect(slot?.kioskId).toBe("kioskNew");
+    expect(slot?.online).toBe(true);
+    d2.stop();
+  });
+});
+
 const NUM = () => 500000 + Math.floor(Math.random() * 400000);
 
 describe("fill priority: scarce gate first", () => {
