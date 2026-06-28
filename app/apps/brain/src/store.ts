@@ -122,6 +122,15 @@ export const store = {
     byNumber.delete(v.number);
     return true;
   },
+  /** Replace all records (boot-time hydrate from a snapshot). Rebuilds the number index. */
+  load(records: VisitorRecord[]): void {
+    visitors.clear();
+    byNumber.clear();
+    for (const r of records) {
+      visitors.set(r.id, r);
+      byNumber.set(r.number, r.id);
+    }
+  },
   /** Wipe all records — test isolation only. Do NOT call in production paths. */
   clear(): void {
     visitors.clear();
