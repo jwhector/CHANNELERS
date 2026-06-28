@@ -92,4 +92,11 @@ export const config = {
     /** Flip ON to auto-re-pool no-shows instead of just flagging them. */
     noShowAutoRepool: process.env.DISPATCH_NOSHOW_AUTOREPOOL === "true",
   },
+  persistence: {
+    /** When set, the visitor store is snapshotted to this file every `intervalMs` and hydrated
+     *  from it on boot (crash/redeploy recovery for participant data). Unset → OFF (dev/test
+     *  default; behavior identical to no persistence). On Fly this points into a mounted volume. */
+    path: process.env.VISITOR_SNAPSHOT_PATH,
+    intervalMs: Number(process.env.VISITOR_SNAPSHOT_MS ?? 2_000),
+  },
 };
