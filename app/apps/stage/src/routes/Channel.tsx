@@ -13,7 +13,9 @@ import { speak, stopSpeaking, createRecognizer, type Recognizer } from "../lib/s
 import { loadHandle, saveHandle, clearHandle } from "../lib/sessionHandle";
 import { AlteredStateConsole } from "../components/AlteredStateConsole";
 import { useDevices } from "../lib/devices";
+import { usePlaybackRate } from "../lib/playbackRate";
 import { DevicePicker } from "../components/DevicePicker";
+import { SpeedPicker } from "../components/SpeedPicker";
 
 type Line = { role: "visitor" | "oracle"; text: string };
 
@@ -56,6 +58,11 @@ export function Channel() {
   const mic = useDevices("audioinput", "in.channel", "in");
   const micRef = useRef(mic.deviceId);
   micRef.current = mic.deviceId;
+
+  // Oracle playback speed (per-device). Read inside WS handlers via rateRef.
+  const { rate, setRate } = usePlaybackRate("rate.channel");
+  const rateRef = useRef(rate);
+  rateRef.current = rate;
 
   const whisperRef = useRef(whisper);
   whisperRef.current = whisper;
@@ -101,10 +108,10 @@ export function Channel() {
           setSessionMeta({ archetype: m.archetype, visitorName: m.visitorName });
           setHistory([]);
           setLive("");
-          setTeleprompter(m.opening);
+          // setTeleprompter(m.opening);
           setError(null);
           archetypeRef.current = m.archetype;
-          if (whisperRef.current) void speak(m.opening, { archetype: m.archetype, sinkId: outRef.current });
+          // if (whisperRef.current) void speak(m.opening, { archetype: m.archetype, sinkId: outRef.current, rate: rateRef.current });
         }
         break;
 
@@ -140,7 +147,7 @@ export function Channel() {
         setTeleprompter(m.text);
         setLive("");
         if (whisperRef.current)
-          void speak(m.text, { archetype: archetypeRef.current ?? undefined, sinkId: outRef.current });
+          void speak(m.text, { archetype: archetypeRef.current ?? undefined, sinkId: outRef.current, rate: rateRef.current });
         break;
 
       case "session.ended":
@@ -247,6 +254,7 @@ export function Channel() {
           <label className="toggle">
             <input type="checkbox" checked={whisper} onChange={(e) => setWhisper(e.target.checked)} /> whisper (TTS)
           </label>
+          <SpeedPicker value={rate} onChange={setRate} />
           <DevicePicker
             kind="audiooutput"
             label="earpiece"

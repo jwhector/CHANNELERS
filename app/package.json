@@ -8,7 +8,9 @@
     "dev": "pnpm --parallel -r run dev",
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck",
-    "seed": "pnpm --filter @channelers/brain seed:visitor"
+    "seed": "pnpm --filter @channelers/brain seed:visitor",
+    "seed:altar": "pnpm --filter @channelers/brain seed:altar",
+    "seed:no-intake": "pnpm --filter @channelers/brain seed:no-intake"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

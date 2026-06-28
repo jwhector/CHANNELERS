@@ -34,23 +34,38 @@ test("shows a no-show warning when the occupant is flagged", () => {
   expect(screen.getByText(/no-show/i)).toBeInTheDocument();
 });
 
-test("a timed in-progress occupant shows Done and fires onComplete", () => {
+test("a paper in-progress occupant shows Done and fires onComplete", () => {
   const onComplete = vi.fn();
   const slot: Slot = {
-    id: "waitingroom-0", station: "waitingroom", online: true,
+    id: "paper-0", station: "paper", online: true,
     occupant: { visitorId: "v9", number: 9, phase: "in_progress", since: "" },
   };
   render(
     <StationOpsView
-      station="waitingroom" connected called={[]} inProgress={[slot]}
-      dwellMs={300_000} busyId={null}
-      onArrive={() => {}} onRelease={() => {}} onComplete={onComplete} />,
+      station="paper" connected called={[]} inProgress={[slot]}
+      busyId={null} onArrive={() => {}} onRelease={() => {}} onComplete={onComplete} />,
   );
   screen.getByRole("button", { name: /done/i }).click();
   expect(onComplete).toHaveBeenCalledWith("v9");
 });
 
-test("a non-timed in-progress occupant shows no Done button", () => {
+test("an offering in-progress occupant shows Done (manual early release)", () => {
+  const onComplete = vi.fn();
+  const slot: Slot = {
+    id: "offering-0", station: "offering", online: true,
+    occupant: { visitorId: "v7", number: 7, phase: "in_progress", since: "" },
+  };
+  render(
+    <StationOpsView
+      station="offering" connected called={[]} inProgress={[slot]}
+      dwellMs={300_000} busyId={null}
+      onArrive={() => {}} onRelease={() => {}} onComplete={onComplete} />,
+  );
+  screen.getByRole("button", { name: /done/i }).click();
+  expect(onComplete).toHaveBeenCalledWith("v7");
+});
+
+test("an in-progress occupant with no onComplete shows no Done button", () => {
   const slot: Slot = {
     id: "bodyscan-0", station: "bodyscan", online: true,
     occupant: { visitorId: "v1", number: 1, phase: "in_progress", since: "" },
@@ -58,7 +73,7 @@ test("a non-timed in-progress occupant shows no Done button", () => {
   render(
     <StationOpsView
       station="bodyscan" connected called={[]} inProgress={[slot]}
-      busyId={null} onArrive={() => {}} onRelease={() => {}} onComplete={() => {}} />,
+      busyId={null} onArrive={() => {}} onRelease={() => {}} />,
   );
   expect(screen.queryByRole("button", { name: /done/i })).toBeNull();
 });
@@ -76,6 +91,23 @@ test("bodyscan in-progress row shows Capture pose and fires onCapture", () => {
   );
   screen.getByRole("button", { name: /capture pose/i }).click();
   expect(onCapture).toHaveBeenCalledWith("v9");
+});
+
+test("bodyscan in-progress row offers Done as a manual-approve fallback alongside Capture", () => {
+  const onComplete = vi.fn();
+  const slot: Slot = {
+    id: "bodyscan-0", station: "bodyscan", online: true,
+    occupant: { visitorId: "v9", number: 9, phase: "in_progress", since: "" },
+  };
+  render(
+    <StationOpsView
+      station="bodyscan" connected called={[]} inProgress={[slot]}
+      busyId={null} onArrive={() => {}} onRelease={() => {}}
+      onCapture={() => {}} onComplete={onComplete} />,
+  );
+  expect(screen.getByRole("button", { name: /capture pose/i })).toBeInTheDocument();
+  screen.getByRole("button", { name: /done/i }).click();
+  expect(onComplete).toHaveBeenCalledWith("v9");
 });
 
 test("no Capture button when onCapture is not provided", () => {

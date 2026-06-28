@@ -1,5 +1,48 @@
 import { afterEach, beforeEach, expect, test, vi, type Mock } from "vitest";
-import { speak, createRecognizer } from "./speech";
+import { speak, speakSequence, createRecognizer } from "./speech";
+
+/** An <audio> stand-in that records what was played and lets a test fire its lifecycle events. */
+class SeqAudio {
+  static instances: SeqAudio[] = [];
+  static played: string[] = [];
+  onended: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  preservesPitch = false;
+  playbackRate = 1;
+  sinkId = "";
+  private listeners: Record<string, Array<() => void>> = {};
+  constructor(public src: string) {
+    SeqAudio.instances.push(this);
+  }
+  setSinkId = vi.fn(async (id: string) => {
+    this.sinkId = id;
+  });
+  play = vi.fn(async () => {
+    SeqAudio.played.push(this.src);
+  });
+  pause = vi.fn(() => this.fire("pause"));
+  addEventListener(type: string, fn: () => void) {
+    (this.listeners[type] ??= []).push(fn);
+  }
+  fire(type: string) {
+    (this.listeners[type] ?? []).forEach((fn) => fn());
+  }
+}
+
+/** Wire up the MP3 path so each fetched clip's text rides through to the Audio src. */
+function stubSeqAudio() {
+  SeqAudio.instances = [];
+  SeqAudio.played = [];
+  vi.stubGlobal("Audio", SeqAudio);
+  vi.stubGlobal("URL", { createObjectURL: (b: { _text: string }) => b._text, revokeObjectURL: vi.fn() });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((_url: string, init: RequestInit) => {
+      const { text } = JSON.parse(init.body as string) as { text: string };
+      return Promise.resolve({ ok: true, status: 200, blob: async () => ({ _text: text }) });
+    }),
+  );
+}
 
 let speakSpy: Mock;
 
@@ -36,6 +79,42 @@ test("plays the MP3 and does NOT use browser TTS when the brain returns audio", 
   await speak("hello", { archetype: "tree" });
   expect(playSpy).toHaveBeenCalledTimes(1);
   expect(speakSpy).not.toHaveBeenCalled();
+});
+
+test("applies the playback rate and preserves pitch on the MP3 element", async () => {
+  let made: { playbackRate: number; preservesPitch: boolean } | undefined;
+  class FakeAudio {
+    onended: unknown = null;
+    onerror: unknown = null;
+    playbackRate = 1;
+    preservesPitch = false;
+    constructor(public src: string) {
+      made = this;
+    }
+    play = vi.fn().mockResolvedValue(undefined);
+    pause = vi.fn();
+  }
+  vi.stubGlobal("Audio", FakeAudio);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob() }));
+  await speak("slow down", { archetype: "tree", rate: 0.7 });
+  expect(made?.playbackRate).toBe(0.7);
+  expect(made?.preservesPitch).toBe(true); // natural pitch, just slower
+});
+
+test("applies the rate to the browser-TTS fallback too (no keys)", async () => {
+  let utter: { rate: number } | undefined;
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      rate = 1;
+      constructor(public text: string) {
+        utter = this;
+      }
+    },
+  );
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 204 }));
+  await speak("slow down", { rate: 0.7 });
+  expect(utter?.rate).toBe(0.7);
 });
 
 test("falls back to browser TTS when the fetch rejects", async () => {
@@ -107,6 +186,41 @@ test("overlapping cues don't double-play — a later speak() preempts an in-flig
   await Promise.all([first, second]);
 
   expect(played).toEqual(["second cue"]); // only the latest cue is voiced — no overlap
+});
+
+test("speakSequence plays clips back-to-back — the next starts only after the previous ends", async () => {
+  stubSeqAudio();
+  const seq = speakSequence([{ text: "cue one" }, { text: "prepare" }]);
+  await vi.waitFor(() => expect(SeqAudio.played).toEqual(["cue one"])); // first plays, second waits
+  SeqAudio.instances[0]!.fire("ended"); // first clip finishes…
+  await vi.waitFor(() => expect(SeqAudio.played).toEqual(["cue one", "prepare"])); // …now the second
+  SeqAudio.instances[1]!.fire("ended");
+  await seq;
+});
+
+test("speakSequence routes each clip to its own sink (dual-channel broadcast)", async () => {
+  stubSeqAudio();
+  const seq = speakSequence([
+    { text: "intro", sinkId: "room" },
+    { text: "numbers", sinkId: "ear" },
+  ]);
+  await vi.waitFor(() => expect(SeqAudio.played).toEqual(["intro"]));
+  expect(SeqAudio.instances[0]!.sinkId).toBe("room"); // intro → room speakers
+  SeqAudio.instances[0]!.fire("ended");
+  await vi.waitFor(() => expect(SeqAudio.played).toEqual(["intro", "numbers"]));
+  expect(SeqAudio.instances[1]!.sinkId).toBe("ear"); // numbers → performer's in-ear
+  SeqAudio.instances[1]!.fire("ended");
+  await seq;
+});
+
+test("a later speak() preempts an in-flight sequence — its remaining clips don't play", async () => {
+  stubSeqAudio();
+  const seq = speakSequence([{ text: "cue one" }, { text: "prepare" }]);
+  await vi.waitFor(() => expect(SeqAudio.played).toEqual(["cue one"]));
+  await speak("new cue"); // preempts: stopSpeaking() pauses the in-flight clip and bumps the generation
+  SeqAudio.instances[0]!.fire("ended"); // even if the first clip "ends" late, the sequence was abandoned
+  await seq;
+  expect(SeqAudio.played).toEqual(["cue one", "new cue"]); // "prepare" never voiced
 });
 
 class FakeRecorder {

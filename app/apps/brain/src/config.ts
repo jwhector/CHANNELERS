@@ -20,7 +20,7 @@ export const config = {
   // and half-open connections are detected. 0 disables.
   wsHeartbeatMs: Number(process.env.WS_HEARTBEAT_MS ?? 30_000),
   openaiApiKey: process.env.OPENAI_API_KEY,
-  transformModel: process.env.TRANSFORM_MODEL ?? "gpt-4o",
+  transformModel: process.env.TRANSFORM_MODEL ?? "gpt-5-mini",
   // Both default to gpt-4o; override per-role via env (ARCHITECTURE.md §5.3).
   oracleModel: process.env.ORACLE_MODEL ?? "gpt-4o",
   // OpenAI Whisper STT model for the divination mic (apps/brain/src/stt.ts).
@@ -56,23 +56,23 @@ export const config = {
     agentPath: process.env.ABLETON_AGENT_PATH ?? "/agent",
   },
   dispatcher: {
-    /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper`/`waitingroom` are timed group capacities. */
-    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 3, waitingroom: 10 } as Record<
-      "intake" | "bodyscan" | "altar" | "paper" | "waitingroom", number
-    >,
+    /** Per-station capacity. intake/bodyscan/altar are kiosk slots; `paper` (manual group) and
+     *  `offering` (timed room) are kiosk-less group capacities. */
+    slots: { intake: 2, bodyscan: 1, altar: 1, paper: 1, offering: 2 } as Record<Station, number>,
     /** Order fill() serves free slots in — scarce single gate (bodyscan) first, soaks last.
      *  Keeps the one bodyscan station from losing its only candidate to the 2-wide intake. */
-    fillPriority: ["bodyscan", "intake", "altar", "paper", "waitingroom"] as Station[],
-    /** Timed group stations: present ⇒ kiosk-less, always-online, completed by a dwell timer (spec 2026-06-22). */
+    fillPriority: ["bodyscan", "intake", "altar", "paper", "offering"] as Station[],
+    /** Kiosk-less group stations: always-online slots with no hardware binding. A member also
+     *  listed in `timed` auto-completes on its dwell; otherwise it exits only by manual Done (#17). */
+    groupStations: ["paper"] as Station[],
+    /** Optional per-station dwell auto-complete. `offering` (the timed "time offering" room) uses it
+     *  for its timed release; a performer can still Done it early via markComplete. */
     timed: {
-      paper: { dwellMs: Number(process.env.PAPER_DWELL_MS ?? 300_000) },
-      waitingroom: { dwellMs: Number(process.env.WAITINGROOM_DWELL_MS ?? 300_000) },
-    } as Partial<
-      Record<"intake" | "bodyscan" | "altar" | "paper" | "waitingroom", { dwellMs: number }>
-    >,
+      offering: { dwellMs: Number(process.env.OFFERING_DWELL_MS ?? 300_000) },
+    } as Partial<Record<Station, { dwellMs: number }>>,
     /** Per-visitor intro hold: a fresh registrant is ineligible for new assignment for this long
      *  after registration (replaces the old global K / warm-up). */
-    introHoldMs: Number(process.env.DISPATCH_INTRO_HOLD_MS ?? 30_000),
+    introHoldMs: Number(process.env.DISPATCH_INTRO_HOLD_MS ?? 60_000),
     /** Anti-starvation: waiting longer than this jumps the random pick. */
     maxWaitMs: Number(process.env.DISPATCH_T_MAX_MS ?? 240_000),
     /** Called-but-not-arrived past this → flagged (or auto-repooled if noShowAutoRepool). */

@@ -6,8 +6,11 @@ import { useBrainSocket } from "../lib/useBrainSocket";
 import { useNow } from "../lib/useNow";
 import { remainingSec, fmtClock, noShowDeadline } from "../lib/dispatchTiming";
 
-/** Stations a performer admits arrivals for. Intake self-confirms; it is not here. */
-const PERFORMER_STATIONS: StationName[] = ["bodyscan", "altar", "paper", "waitingroom"];
+/**
+ * Stations a performer admits arrivals for from this screen. Intake self-confirms;
+ * altar admits on its own /altar surface (operator-confirmed there) — neither is here.
+ */
+const PERFORMER_STATIONS: StationName[] = ["bodyscan", "paper", "offering"];
 
 /** Route entry: bare /station shows a picker; /station/:station opens that station's view. */
 export function Station() {
@@ -57,7 +60,14 @@ function StationContainer({ station }: { station: StationName }) {
       busyId={busyId}
       onArrive={(id) => void run(id, () => api.arrive(id))}
       onRelease={(id) => void run(id, () => api.dispatch.repool(id))}
-      onComplete={(id) => void run(id, () => api.dispatch.complete(id))}
+      // Manual checkout (Done): paper (always — its only exit), any timed station (early-complete),
+      // and bodyscan as a fallback to approve a visitor when the kiosk pose-capture won't cooperate
+      // (markComplete stamps poseAt — the same milestone enrollPose sets — and frees the slot).
+      onComplete={
+        station === "paper" || station === "bodyscan" || state?.timedDwellMs?.[station] !== undefined
+          ? (id) => void run(id, () => api.dispatch.complete(id))
+          : undefined
+      }
       onCapture={station === "bodyscan" ? (id) => void run(id, () => api.captureBodyscan(id)) : undefined}
       cameraSlots={station === "bodyscan" ? slots.filter((s) => s.online && s.cameras && s.cameras.length > 0) : undefined}
       onSetCamera={station === "bodyscan" ? (kioskId, deviceId) => void api.setBodyscanCamera(kioskId, deviceId) : undefined}
@@ -134,10 +144,10 @@ export function StationOpsView({
                   Capture pose
                 </button>
               )}
-              {dwellMs !== undefined && (
+              {onComplete && (
                 <>
                   <button className="submit" disabled={busyId === o.visitorId}
-                    onClick={() => onComplete?.(o.visitorId)}>
+                    onClick={() => onComplete(o.visitorId)}>
                     Done
                   </button>
                   <button className="ghost" disabled={busyId === o.visitorId}

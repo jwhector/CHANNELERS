@@ -32,7 +32,8 @@ export type PaperAnimKnobs = {
 };
 
 export const DEFAULT_KNOBS: PaperAnimKnobs = {
-  readHoldMs: 1000,
+  readHoldMs: 20000, // fade in, then linger readable ~8s before the letters convert to binary
+
   transformStaggerMs: 4,
   flipMinMs: 70,
   flipMaxMs: 140,

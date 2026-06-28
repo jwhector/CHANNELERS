@@ -5,13 +5,14 @@ import { Altar } from "./routes/Altar";
 import { Console } from "./routes/Console";
 import { Channel } from "./routes/Channel";
 import { Choreo } from "./routes/Choreo";
+import { Perform } from "./routes/Perform";
 import { Board } from "./routes/Board";
 import { Dispatch } from "./routes/Dispatch";
 import { Souvenir } from "./routes/Souvenir";
 import { Feed } from "./routes/Feed";
 import { Station } from "./routes/Station";
 
-const SCREENS = ["intake", "bodyscan", "altar", "channel", "choreo", "console", "board", "dispatch", "station", "souvenir", "feed"] as const;
+const SCREENS = ["intake", "bodyscan", "altar", "channel", "choreo", "perform", "console", "board", "dispatch", "station", "souvenir", "feed"] as const;
 
 export function App() {
   return (
@@ -23,6 +24,7 @@ export function App() {
         <Route path="/altar" element={<Altar />} />
         <Route path="/channel" element={<Channel />} />
         <Route path="/choreo" element={<Choreo />} />
+        <Route path="/perform" element={<Perform />} />
         <Route path="/console" element={<Console />} />
         <Route path="/board" element={<Board />} />
         <Route path="/dispatch" element={<Dispatch />} />

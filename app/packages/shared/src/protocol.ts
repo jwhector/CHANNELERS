@@ -113,7 +113,7 @@ export type Slot = {
 /** A visitor who finished the whole ritual (sessionEndAt set). */
 export type DispatchDone = { id: string; number: number; name?: string; at: string };
 
-/** An altar-ready visitor (intake + bodyscan done, waiting) — divination prerequisites met. */
+/** An altar-ready visitor (all pre-altar stations done, waiting) — divination prerequisites met. */
 export type DispatchReady = { id: string; number: number; name?: string };
 
 export type DispatchState = {
@@ -133,7 +133,7 @@ export type DispatchState = {
   noShowMs?: number;
   /** Operator gate: when false, no new visitor is dispatched to the altar (in-progress readings continue). */
   altarOpen: boolean;
-  /** Waiting visitors who are altar-ready (intakeAt && poseAt && !sessionEndAt) — the operator's buffer gauge. */
+  /** Waiting visitors who are altar-ready (all pre-altar stations done, not yet read) — the operator's buffer gauge. */
   altarReady: number;
   /** Altar-ready visitors — the /dispatch right-column roster + the Pluribus broadcast list. */
   altarReadyList: DispatchReady[];
@@ -168,7 +168,8 @@ export type WsServerMsg =
   | { kind: "oracle.delta"; sessionId: string; text: string }
   | { kind: "oracle.done"; sessionId: string; text: string }
   | { kind: "choreo.delta"; sessionId: string; text: string }
-  | { kind: "choreo.done"; sessionId: string; text: string }
+  /** `prepareToChannel`: this cue is the last before a cadence mimic — warn the dancers to switch. */
+  | { kind: "choreo.done"; sessionId: string; text: string; prepareToChannel?: boolean }
   | { kind: "choreo.mimic"; sessionId: string; text: string; archetype: string }
   | { kind: "session.ended"; sessionId: string }
   | { kind: "session.error"; sessionId?: string; visitorId?: string; message: string }

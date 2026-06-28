@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { VisitorProfile, PoseVector, SurveyResponse, ChoreoScore } from "@channelers/shared";
 import { WsClientMsg, Station, ChoreoConfig } from "@channelers/shared";
+import { isAltarReady, clearedPreAltarStations } from "@channelers/shared";
 
 describe("schema: ChoreoConfig", () => {
   it("accepts a full config and rejects N < 1", () => {
@@ -13,6 +14,33 @@ describe("schema: ChoreoConfig", () => {
 describe("schema: PoseVector", () => {
   it("accepts an angle/weight vector", () => {
     expect(PoseVector.safeParse({ angles: [0.1, 0.2], weights: [1, 0.5] }).success).toBe(true);
+  });
+});
+
+describe("isAltarReady / clearedPreAltarStations", () => {
+  const base = {
+    id: "u1", number: 1, scans: [],
+    location: { state: "waiting", since: "t" } as const,
+    createdAt: "t",
+  };
+  const withMilestones = (m: Partial<Record<"intakeAt" | "poseAt" | "paperAt" | "offeringAt", string>>) =>
+    VisitorProfile.parse({ ...base, ...m });
+
+  it("is NOT altar-ready with only intake + bodyscan done (paper + offering still pending)", () => {
+    const v = withMilestones({ intakeAt: "t", poseAt: "t" });
+    expect(clearedPreAltarStations(v)).toBe(false);
+    expect(isAltarReady(v)).toBe(false);
+  });
+
+  it("is altar-ready once all four pre-altar stations are done and the visitor is waiting", () => {
+    const v = withMilestones({ intakeAt: "t", poseAt: "t", paperAt: "t", offeringAt: "t" });
+    expect(clearedPreAltarStations(v)).toBe(true);
+    expect(isAltarReady(v)).toBe(true);
+  });
+
+  it("drops back out of altar-ready once the reading has ended", () => {
+    const v = withMilestones({ intakeAt: "t", poseAt: "t", paperAt: "t", offeringAt: "t" });
+    expect(isAltarReady({ ...v, sessionEndAt: "t" })).toBe(false);
   });
 });
 
@@ -39,15 +67,15 @@ describe("schema: VisitorProfile", () => {
     expect(r.location.station).toBe("paper"); // throws before "paper" is in the Station enum
   });
 
-  it("retains waitingRoomAt + a waitingroom location (timed group station)", () => {
-    const ts = "2026-06-25T00:00:00.000Z";
+  it("retains offeringAt + an offering location (timed time-offering room)", () => {
+    const ts = "2026-06-27T00:00:00.000Z";
     const r = VisitorProfile.parse({
       id: "u1", number: 42, scans: [],
-      location: { state: "in_progress", station: "waitingroom", since: ts },
-      createdAt: ts, waitingRoomAt: ts,
+      location: { state: "in_progress", station: "offering", since: ts },
+      createdAt: ts, offeringAt: ts,
     });
-    expect(r.waitingRoomAt).toBe(ts); // zod strips unknown keys → fails before waitingRoomAt is declared
-    expect(r.location.station).toBe("waitingroom"); // throws before "waitingroom" is in the Station enum
+    expect(r.offeringAt).toBe(ts);
+    expect(r.location.station).toBe("offering");
   });
 
   it("accepts a fully-progressed record", () => {
@@ -79,7 +107,8 @@ describe("schema: Station + station.hello", () => {
   it("exports a Station enum", () => {
     expect(Station.safeParse("intake").success).toBe(true);
     expect(Station.safeParse("paper").success).toBe(true);
-    expect(Station.safeParse("waitingroom").success).toBe(true);
+    expect(Station.safeParse("offering").success).toBe(true); // timed time-offering room
+    expect(Station.safeParse("waitingroom").success).toBe(false); // retired as a station (#24)
     expect(Station.safeParse("nope").success).toBe(false);
   });
   it("parses a station.hello command", () => {

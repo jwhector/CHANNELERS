@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Slot, Station, VisitorProfile } from "@channelers/shared";
 import { api } from "../lib/api";
 import { SegmentNumber } from "./SegmentNumber";
@@ -15,6 +15,7 @@ export function CalledGate({
   onArrived,
   skin = "default",
   confirmedBy = "visitor",
+  extra,
 }: {
   station: Station;
   title: string;
@@ -23,8 +24,11 @@ export function CalledGate({
   onArrived: (visitor: VisitorProfile) => void;
   /** "crt" renders shell-less CRT content meant to live inside Intake's <CrtShell>. */
   skin?: "crt" | "default";
-  /** "performer" hides the self-confirm button; a station guide admits the visitor. */
-  confirmedBy?: "visitor" | "performer";
+  /** "operator" turns this into the on-station admit surface: Confirm arrival + Release. */
+  confirmedBy?: "visitor" | "operator";
+  /** Operator-only standby controls rendered under the header (default skin) — e.g. the
+   *  /altar gate toggle + Pluribus broadcast. Shown only while no visitor is admitted. */
+  extra?: ReactNode;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +46,21 @@ export function CalledGate({
   async function confirmArrival() {
     if (!occ) return;
     setBusy(true); setError(null);
-    try { await api.arrive(occ.visitorId); }
+    // Operator self-serve: a pending occupant hasn't been called yet, so confirm the call
+    // (pending → called) before admitting (called → in_progress). This lets the altar
+    // performer run the whole handshake with no dispatcher on /dispatch.
+    try {
+      if (occ.phase === "pending") await api.dispatch.confirm(occ.visitorId);
+      await api.arrive(occ.visitorId);
+    }
+    catch (e) { setError(String(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function releaseArrival() {
+    if (!occ) return;
+    setBusy(true); setError(null);
+    try { await api.dispatch.repool(occ.visitorId); }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   }
@@ -87,19 +105,30 @@ export function CalledGate({
         <h1>{title}</h1>
         <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
       </header>
+      {extra}
       {!slot && <p className="dim">No slot bound — open this screen with <code>?kiosk=&lt;id&gt;</code> or wait for a free {station} slot.</p>}
       {slot && !occ && <p className="dim">Slot {slot.id} ready. Waiting to be called…</p>}
-      {occ && occ.phase !== "in_progress" && occ.phase !=="pending" && (
+      {occ && occ.phase !== "in_progress" &&
+        // Operator admits a pending occupant too (confirm call + arrive in one); a visitor
+        // only self-confirms once actually called.
+        (confirmedBy === "operator" || occ.phase !== "pending") && (
         <section className="called">
-          <p className="dim">{confirmedBy === "performer" ? "You've been called" : "Now calling"}</p>
+          <p className="dim">
+            {confirmedBy === "operator"
+              ? occ.phase === "pending" ? "Pending — confirm to admit" : "Called — awaiting arrival"
+              : "Now calling"}
+          </p>
           <div className="called-number">#{occ.number}</div>
-          {confirmedBy === "performer" ? (
-            <p className="dim">Please proceed to the station — wait for staff to admit you.</p>
-          ) : (
+          <div className="controls">
             <button className="submit" disabled={busy} onClick={() => void confirmArrival()}>
               {busy ? "…" : "Confirm arrival"}
             </button>
-          )}
+            {confirmedBy === "operator" && (
+              <button className="ghost" disabled={busy} onClick={() => void releaseArrival()}>
+                Release
+              </button>
+            )}
+          </div>
         </section>
       )}
       {error && <p className="error">{error}</p>}

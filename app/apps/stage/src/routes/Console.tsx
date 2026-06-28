@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ARCHETYPES,
+  Station,
   type DispatchState,
   type SessionSummary,
   type ShowEvent,
@@ -10,7 +11,9 @@ import {
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { altarReadyNumbers } from "../lib/pluribus";
+import { usePlaybackRate } from "../lib/playbackRate";
 import { PluribusBroadcast } from "../components/PluribusBroadcast";
+import { AltarGate } from "../components/AltarGate";
 
 const dwell = (since?: string) =>
   since ? `${Math.max(0, Math.round((Date.now() - Date.parse(since)) / 1000))}s` : "—";
@@ -61,16 +64,21 @@ export function Console() {
       v.sessionEndAt && "done",
     ].filter(Boolean).join(" · ") || "registered";
 
-  // Panel 2 — flow funnel counts
+  const ready = altarReadyNumbers(visitors);
+  // Panel 2 — flow funnel counts: per-station milestones → altar-ready pool → channelling → done.
+  // altarReady mirrors the Pluribus broadcast set (intake + pose done, waiting, not finished).
   const counts = {
     registered: visitors.length,
     intake: visitors.filter((v) => v.intakeAt).length,
     pose: visitors.filter((v) => v.poseAt).length,
-    oracleReady: visitors.filter((v) => v.personaAt && v.poseVerifiedAt && !v.sessionEndAt).length,
+    paper: visitors.filter((v) => v.paperAt).length,
+    offering: visitors.filter((v) => v.offeringAt).length,
+    altarReady: ready.length,
     channelling: roster.length,
     done: visitors.filter((v) => v.sessionEndAt).length,
   };
-  const ready = altarReadyNumbers(visitors);
+  // Broadcast TTS playback speed (per-tab), paralleling rate.choreo / rate.channel.
+  const { rate, setRate } = usePlaybackRate("rate.console");
 
   return (
     <main className="void console master">
@@ -78,6 +86,12 @@ export function Console() {
         <h1>Console</h1>
         <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
       </header>
+
+      <h3>Broadcast</h3>
+      <PluribusBroadcast numbers={ready} storageKey="out.console" rate={rate} onChangeRate={setRate} />
+
+      <h3>Altar gate</h3>
+      <AltarGate open={dispatch?.altarOpen ?? false} onToggle={(open) => void api.dispatch.altar(open)} />
 
       {/* ── Panel 2: flow + stations ── */}
       <h3>Flow</h3>
@@ -102,9 +116,6 @@ export function Console() {
         </ul>
       )}
 
-      <h3>Broadcast</h3>
-      <PluribusBroadcast numbers={ready} storageKey="out.console" />
-
       {/* ── Panel 1: visitors + controls ── */}
       <h3>Visitors ({visitors.length})</h3>
       <ul className="visitors">
@@ -116,7 +127,7 @@ export function Console() {
               <span className="dim">{archLabel(v.archetype)}</span>
               <span className="dim">{milestone(v)}</span>
               <span className="dim">{v.location.state}{v.location.station ? `@${v.location.station}` : ""} · {dwell(v.location.since)}</span>
-              {!v.poseVerifiedAt && <button className="choice" onClick={() => void api.verifyPose(v.id).then(refresh)}>unlock</button>}
+              {!v.poseVerifiedAt && <button className="choice" onClick={() => void api.verifyPose(v.id).then(refresh)}>unlock (override)</button>}
               <select
                 className="choice"
                 value={v.archetype ?? ""}
@@ -165,7 +176,7 @@ export function Console() {
 /** Hidden operator safety net (spec §5): force a visitor in_progress@station via /api/checkin. */
 function ManualCheckin() {
   const [num, setNum] = useState("");
-  const [station, setStation] = useState<"intake" | "bodyscan" | "altar">("intake");
+  const [station, setStation] = useState<Station>("intake");
   const [msg, setMsg] = useState<string | null>(null);
   async function go() {
     const n = Number(num);
@@ -180,10 +191,8 @@ function ManualCheckin() {
     <div className="row">
       <input className="choice" inputMode="numeric" value={num} placeholder="#"
         onChange={(e) => setNum(e.target.value.replace(/[^0-9]/g, ""))} style={{ width: "4rem" }} />
-      <select className="choice" value={station} onChange={(e) => setStation(e.target.value as typeof station)}>
-        <option value="intake">intake</option>
-        <option value="bodyscan">bodyscan</option>
-        <option value="altar">altar</option>
+      <select className="choice" value={station} onChange={(e) => setStation(e.target.value as Station)}>
+        {Station.options.map((s) => <option key={s} value={s}>{s}</option>)}
       </select>
       <button className="choice" onClick={() => void go()}>force check-in</button>
       {msg && <span className="dim">{msg}</span>}

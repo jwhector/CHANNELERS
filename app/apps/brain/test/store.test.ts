@@ -80,13 +80,13 @@ describe("paper station milestone", () => {
   });
 });
 
-describe("waitingroom station milestone", () => {
-  it("stamps waitingRoomAt via stampMilestone", () => {
+describe("offering station milestone", () => {
+  it("stamps offeringAt via stampMilestone", () => {
     store.clear();
-    const v = store.register(780001);
-    expect(v.waitingRoomAt).toBeUndefined();
-    store.stampMilestone(v.id, "waitingRoomAt");
-    expect(store.get(v.id)?.waitingRoomAt).toBeTruthy();
+    const v = store.register(790001);
+    expect(v.offeringAt).toBeUndefined();
+    store.stampMilestone(v.id, "offeringAt");
+    expect(store.get(v.id)?.offeringAt).toBeTruthy();
   });
 });
 

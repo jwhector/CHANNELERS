@@ -41,8 +41,9 @@ export const PoseVector = z.object({
 });
 export type PoseVector = z.infer<typeof PoseVector>;
 
-/** The dispatchable stations (spec §4). `paper` and `waitingroom` are timed group stations. */
-export const Station = z.enum(["intake", "bodyscan", "altar", "paper", "waitingroom"]);
+/** The dispatchable stations (spec §4). `paper` is a kiosk-less manual group station;
+ *  `offering` is the timed "time offering" room (dwell release + manual early release). */
+export const Station = z.enum(["intake", "bodyscan", "altar", "paper", "offering"]);
 export type Station = z.infer<typeof Station>;
 
 /** Human-facing station names — the public wayfinding labels shared by the lobby board (`/board`)
@@ -53,7 +54,7 @@ export const STATION_LABEL: Record<Station, string> = {
   bodyscan: "STATION C - BODY SCAN",
   altar: "ALTAR",
   paper: "STATION B - TYPEWRITER",
-  waitingroom: "STATION A - WAITING ROOM",
+  offering: "STATION A - TIME OFFERING",
 };
 
 /** Transient dispatch location — a visitor is in exactly one place at a time (spec §3.2).
@@ -84,22 +85,31 @@ export const VisitorProfile = z.object({
   poseAt: z.string().optional(),
   personaAt: z.string().optional(),
   poseVerifiedAt: z.string().optional(),
-  /** Timed group station: stamped on dwell-timer expiry at the paper station (spec 2026-06-22). */
+  /** Kiosk-less group station: stamped on manual checkout (Done) at the paper station. */
   paperAt: z.string().optional(),
-  /** Timed group station: stamped on dwell-timer expiry at the waiting room (5-min hold). */
-  waitingRoomAt: z.string().optional(),
+  /** Timed "time offering" room: stamped on dwell expiry OR manual early Done at /station/offering. */
+  offeringAt: z.string().optional(),
   sessionStartAt: z.string().optional(),
   sessionEndAt: z.string().optional(),
 });
 export type VisitorProfile = z.infer<typeof VisitorProfile>;
 
 /**
- * "Altar-ready": cleared the pre-altar stations (intake + bodyscan) and waiting in the pool,
- * not yet through divination. The dispatcher's altar-ready count + list and the Pluribus
- * "completed the stationing process" broadcast all key off this single predicate.
+ * Has the visitor cleared every pre-altar station? = all stations except the altar itself
+ * (intake, bodyscan, paper, time-offering). The single source of truth for what gates the
+ * altar, shared by `isAltarReady` (here) and the dispatcher's altar eligibility.
+ */
+export function clearedPreAltarStations(v: VisitorProfile): boolean {
+  return !!v.intakeAt && !!v.poseAt && !!v.paperAt && !!v.offeringAt;
+}
+
+/**
+ * "Altar-ready": cleared ALL pre-altar stations and waiting in the pool, not yet through
+ * divination. The dispatcher's altar-ready count + list and the Pluribus "completed the
+ * stationing process" broadcast all key off this single predicate.
  */
 export function isAltarReady(v: VisitorProfile): boolean {
-  return v.location.state === "waiting" && !!v.intakeAt && !!v.poseAt && !v.sessionEndAt;
+  return v.location.state === "waiting" && clearedPreAltarStations(v) && !v.sessionEndAt;
 }
 
 /** ── Generated seeds (intake → AI transform output) ── */

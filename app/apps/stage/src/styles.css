@@ -17,7 +17,15 @@ body {
   font: 16px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
-.void { max-width: 760px; margin: 0 auto; padding: 48px 20px; }
+.void { 
+  /* max-width: 760px;  */
+  margin: 0 auto; 
+  padding: 48px 100px; 
+}
+
+/* /perform — one-device tab shell (altar · channel · choreo) */
+.perform-tabs { display: flex; gap: 8px; padding: 12px 20px 0; max-width: 760px; margin: 0 auto; }
+.perform-tabs .choice { text-transform: capitalize; }
 h1 { font-weight: 600; letter-spacing: 0.02em; }
 h3 { margin-top: 32px; }
 .dim { color: var(--dim); }
@@ -77,6 +85,12 @@ header { display: flex; align-items: center; gap: 14px; }
 .choreo-head .head-controls .period { white-space: nowrap; }
 .turns-input { width: 3.25em; }
 
+/* Oracle TTS speed slider (in /choreo + /channel headers). */
+.speed-picker { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); white-space: nowrap; }
+.speed-picker label { display: flex; align-items: center; gap: 6px; }
+.speed-picker input[type="range"] { width: 5.5em; }
+.speed-readout { font-variant-numeric: tabular-nums; min-width: 3.2em; }
+
 .visitors { list-style: none; padding: 0; }
 .visitors .row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .visitors code { color: var(--dim); }
@@ -134,7 +148,7 @@ pre {
 .poseflash {
   position: absolute; inset: 0; display: grid; place-items: center;
   background: rgba(60, 255, 122, 0.16); color: #3cff7a; font-size: 40px; font-weight: 700;
-  transform: scaleX(-1); /* un-mirror the text */ letter-spacing: 0.05em;
+  letter-spacing: 0.05em;
 }
 /* Body not fully framed: flag the camera view red so the visitor self-corrects. */
 .posestage.unframed { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 24px rgba(255, 90, 60, 0.35); }
@@ -177,10 +191,14 @@ pre {
 .slot-box.in_progress { border-color: #39f; }
 .slot-head { display: flex; align-items: center; gap: 0.4rem; }
 .slot-number, .called-number { font-size: 1.6rem; font-weight: 700; }
-.pending-call { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem; padding: 0.3rem 0.5rem; border: 2px solid #fd5; border-radius: 6px; }
-.pending-call .arrow { opacity: 0.7; }
-.pulse { animation: dispatch-pulse 1s ease-in-out infinite; }
-@keyframes dispatch-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,221,85,0.7); } 50% { box-shadow: 0 0 0 6px rgba(255,221,85,0); } }
+.slot-actions { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.3rem; }
+.slot-actions button.end { margin-left: 0; }
+/* Pending call: number + Confirm live inside the station cell, whose border pulses yellow. */
+.slot-box.pending { border-color: #fd5; animation: slot-pending-pulse 1.1s ease-in-out infinite; }
+@keyframes slot-pending-pulse {
+  0%, 100% { border-color: #fd5; box-shadow: 0 0 8px 0 rgba(255,221,85,0.5); }
+  50%      { border-color: #6b5a1e; box-shadow: 0 0 0 0 rgba(255,221,85,0); }
+}
 
 /* ── Altered-State Console (operator-only generation controls on /channel) ── */
 .altered-state { margin: 16px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 12px; }

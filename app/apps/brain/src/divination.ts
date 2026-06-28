@@ -220,7 +220,11 @@ export function registerDivination(bus: Bus): void {
    * Fan-out consumer (spec §8): a movement cue per turn, on the separate choreo.* feed.
    * Fire-and-forget — wrapped so a choreo failure NEVER disturbs the oracle turn.
    */
-  async function runChoreo(session: Session, turn: { visitor: string; oracle?: string }): Promise<void> {
+  async function runChoreo(
+    session: Session,
+    turn: { visitor: string; oracle?: string },
+    prepareToChannel = false,
+  ): Promise<void> {
     const sessionId = session.id;
     try {
       const cue = await streamCue(
@@ -231,7 +235,9 @@ export function registerDivination(bus: Bus): void {
       );
       session.choreoHistory.push({ role: "user", content: buildChoreoTurnPrompt(turn) });
       session.choreoHistory.push({ role: "assistant", content: cue });
-      if (sessions.has(sessionId)) bus.broadcast({ kind: "choreo.done", sessionId, text: cue });
+      // prepareToChannel rides the cue so /choreo voices a "prepare to channel" warning after it.
+      if (sessions.has(sessionId))
+        bus.broadcast({ kind: "choreo.done", sessionId, text: cue, ...(prepareToChannel ? { prepareToChannel } : {}) });
     } catch (err) {
       console.warn("[choreo] turn failed:", err);
     }
@@ -253,9 +259,12 @@ export function registerDivination(bus: Bus): void {
     // 1-based index of the oracle reply this turn will produce (drives the mimic cadence).
     const turnNumber = session.history.filter((t) => t.role === "assistant").length + 1;
     const mimic = isMimicTurn(cfg, turnNumber);
+    // If THIS turn is a cue but the NEXT will be a (cadence) mimic, tell /choreo to chase the cue
+    // with a "prepare to channel" warning so the dancers can switch from following to mimicking.
+    const prepareToChannel = !mimic && isMimicTurn(cfg, turnNumber + 1);
     // Cue mode, independent timing: kick the cue off in parallel from the utterance alone.
     // On a mimic turn the choreographer is fully suppressed — the dancers hear the oracle instead.
-    if (!mimic && !cfg.reactToOracle) void runChoreo(session, { visitor: text });
+    if (!mimic && !cfg.reactToOracle) void runChoreo(session, { visitor: text }, prepareToChannel);
 
     try {
       const full = await streamReply(session, (chunk) => {
@@ -270,7 +279,7 @@ export function registerDivination(bus: Bus): void {
           bus.broadcast({ kind: "choreo.mimic", sessionId, text: full, archetype: session.archetype });
       } else if (cfg.reactToOracle) {
         // Reactive cue mode: now that the oracle reply exists, react to utterance + reply.
-        void runChoreo(session, { visitor: text, oracle: full });
+        void runChoreo(session, { visitor: text, oracle: full }, prepareToChannel);
       }
     } catch (err) {
       bus.broadcast({ kind: "session.error", sessionId, message: String(err) });

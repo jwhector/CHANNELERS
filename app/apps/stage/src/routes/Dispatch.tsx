@@ -5,8 +5,6 @@ import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
 import { useNow } from "../lib/useNow";
 import { remainingSec, fmtClock } from "../lib/dispatchTiming";
-import { readyNumbers } from "../lib/pluribus";
-import { PluribusBroadcast } from "../components/PluribusBroadcast";
 
 const elapsed = (since: string) =>
   `${Math.max(0, Math.round((Date.now() - Date.parse(since)) / 1000))}s`;
@@ -18,22 +16,18 @@ const BLOCKED_MSG: Record<"none" | "soaking" | "held" | "empty", string> = {
   empty: "no one needs a scan",
 };
 
-/** Operator flow strip: altar gate toggle + altar-ready buffer + bodyscan idle/blocked health. */
+/** Operator flow strip: altar-ready buffer + bodyscan idle/blocked health. (The altar
+ * gate toggle and the Pluribus broadcast moved to the `/console` overseer.) */
 export function FlowStrip({
-  altarOpen, altarReady, bodyscanIdle, bodyscanBlocked, onToggleAltar,
+  altarReady, bodyscanIdle, bodyscanBlocked,
 }: {
-  altarOpen: boolean;
   altarReady: number;
   bodyscanIdle: boolean;
   bodyscanBlocked: "none" | "soaking" | "held" | "empty";
-  onToggleAltar: (open: boolean) => void;
 }) {
   const warn = bodyscanIdle && bodyscanBlocked !== "none";
   return (
     <div className="flow-strip">
-      <button className={altarOpen ? "submit" : "ghost"} onClick={() => onToggleAltar(!altarOpen)}>
-        Altar: {altarOpen ? "OPEN" : "CLOSED"}
-      </button>
       <span className="flow-stat">altar-ready {altarReady}</span>
       <span className={`flow-stat${warn ? " warn" : ""}`}>
         bodyscan {bodyscanIdle ? "idle" : "busy"}
@@ -91,14 +85,10 @@ export function Dispatch() {
         <p className="error">Surplus screens: {state.surplus.map((s) => `${s.station}/${s.kioskId.slice(0, 6)}`).join(", ")}</p>
       )}
       <FlowStrip
-        altarOpen={state.altarOpen}
         altarReady={state.altarReady}
         bodyscanIdle={state.bodyscanIdle}
         bodyscanBlocked={state.bodyscanBlocked}
-        onToggleAltar={(open) => void api.dispatch.altar(open)}
       />
-
-      <PluribusBroadcast numbers={readyNumbers(state.altarReadyList)} storageKey="out.dispatch" />
 
       <div className="zones">
         {/* LEFT — waiting pool */}
@@ -133,21 +123,21 @@ export function Dispatch() {
               const pend = pendingBySlot(s);
               return (
                 <div key={s.id} className="slot-wrap">
-                  {pend && (
-                    <div className="pending-call pulse">
-                      <span>#{pend.number}</span>
-                      <span className="arrow">→</span>
-                      <button className="submit" onClick={() => void api.dispatch.confirm(pend.visitorId)}>Confirm call</button>
-                      <button className="end" title="skip" onClick={() => void api.dispatch.repool(pend.visitorId)}>×</button>
-                    </div>
-                  )}
                   <div className={`slot-box ${s.online ? "on" : "off"} ${s.occupant ? s.occupant.phase : ""}`}>
                     <div className="slot-head">
                       <span className={s.online ? "led on" : "led"} />
                       <code title={s.id}>{STATION_LABEL[s.station]}</code>
                     </div>
                     <div className="slot-body">
-                      {s.occupant && s.occupant.phase !== "pending" ? (
+                      {pend ? (
+                        <>
+                          <div className="slot-number">#{pend.number}</div>
+                          <div className="slot-actions">
+                            <button className="submit" onClick={() => void api.dispatch.confirm(pend.visitorId)}>Confirm call</button>
+                            <button className="end" title="skip" onClick={() => void api.dispatch.repool(pend.visitorId)}>×</button>
+                          </div>
+                        </>
+                      ) : s.occupant && s.occupant.phase !== "pending" ? (
                         <>
                           <div className="slot-number">#{s.occupant.number}</div>
                           <div className="dim">

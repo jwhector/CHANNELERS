@@ -106,7 +106,7 @@ export const store = {
   stampMilestone(
     id: string,
     field:
-      | "intakeAt" | "poseAt" | "personaAt" | "paperAt" | "waitingRoomAt"
+      | "intakeAt" | "poseAt" | "personaAt" | "paperAt" | "offeringAt"
       | "poseVerifiedAt" | "sessionStartAt" | "sessionEndAt",
   ): VisitorRecord | undefined {
     const v = visitors.get(id);

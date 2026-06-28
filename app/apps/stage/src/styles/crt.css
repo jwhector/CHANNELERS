@@ -178,6 +178,31 @@
   gap: 0.2em;
 }
 
+/* Post-intake exit directive (#9): the terminal's own voice, large and amber-lit,
+   sending the visitor away from the kiosk. No number — just the instruction. */
+.crt-exit {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5em;
+  font-family: "MSSans", Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 700;
+  font-size: clamp(28px, 7vmin, 60px);
+  line-height: 1.05;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--amber);
+  text-shadow: 0 0 0.18em var(--amber-glow), 0 0 0.05em var(--amber-glow);
+}
+/* The second beat — still instruction, a step down so the directive leads. */
+.crt-exit-note {
+  font-size: 0.46em;
+  letter-spacing: 0.22em;
+  color: var(--crt-dim);
+  text-shadow: none;
+}
+
 /* Called: the readout holds the centre of the screen, the confirm drops lower
    into the safe area (fills .crt-safe, which is position:relative). */
 .crt-called {
@@ -280,6 +305,10 @@
   max-width: 520px;
   text-align: left;
   color: #101010;
+  /* Base size for the form (#7 legibility): fields/textarea/button use
+     `font: inherit`, so this scales them; the hardcoded label/chip sizes below
+     are bumped to match. Sized for a CRT viewed across the room. */
+  font-size: clamp(15px, 2vmin, 19px);
   background: var(--win-face);
   border: 2px solid;
   border-color: var(--win-hi) var(--win-lo) var(--win-lo) var(--win-hi);
@@ -310,7 +339,7 @@
 .win-subject {
   margin: 0 0 4px;
   font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-size: clamp(12px, 1.7vmin, 15px);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #2a2a2a;
@@ -328,7 +357,7 @@
   gap: 4px;
 }
 .win-field-row label {
-  font-size: 12px;
+  font-size: clamp(14px, 1.9vmin, 18px);
   color: #1a1a1a;
 }
 .win-field {
@@ -351,7 +380,7 @@ textarea.win-field {
 }
 .win-chip {
   font: inherit;
-  font-size: 12px;
+  font-size: clamp(14px, 1.9vmin, 18px);
   color: #101010;
   background: var(--win-face);
   border: 2px solid;
@@ -363,6 +392,31 @@ textarea.win-field {
 .win-chip.on {
   border-color: var(--win-lo) var(--win-hi) var(--win-hi) var(--win-lo);
   background: #b8d0ff;
+}
+.win-chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* "(2/3)" selection counter beside a capped multi-select label. */
+.win-count {
+  color: #555;
+  font-variant-numeric: tabular-nums;
+}
+/* 1–N rating: the numbered chips flanked by the two end-anchor labels. */
+.win-scale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.win-scale-anchor {
+  flex: 1 1 0;
+  min-width: 96px;
+  font-size: clamp(12px, 1.6vmin, 15px);
+  color: #3a3a3a;
+}
+.win-scale-anchor:last-child {
+  text-align: right;
 }
 .win-btn {
   align-self: flex-end;

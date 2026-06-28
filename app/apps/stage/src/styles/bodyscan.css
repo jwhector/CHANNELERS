@@ -6,6 +6,9 @@
 .bodyscan-cam video,
 .bodyscan-cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
+/* The webcam feeds MediaPipe but is never shown — the aura canvas is the whole picture. */
+.bodyscan-cam video { opacity: 0; }
+
 /* One-time camera setup overlay (/bodyscan?setup=1) — un-mirror so the control is usable. */
 .bodyscan-setup { position: fixed; right: 1rem; bottom: 1rem; z-index: 10; transform: scaleX(-1); }
 
