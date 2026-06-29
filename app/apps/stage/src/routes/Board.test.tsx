@@ -1,9 +1,18 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, test, expect, vi, beforeEach } from "vitest";
+import { render, fireEvent, act } from "@testing-library/react";
 import type { DispatchState } from "@channelers/shared";
 import { STATION_LABEL } from "@channelers/shared";
-import { boardRows } from "./Board";
+
+// Drive the brain socket by hand: capture Board's dispatch.state handler so tests can push state.
+const { socketCb } = vi.hoisted(() => ({ socketCb: { current: null as null | ((m: unknown) => void) } }));
+vi.mock("../lib/useBrainSocket", () => ({
+  useBrainSocket: (cb: (m: unknown) => void) => { socketCb.current = cb; return { connected: true, send: vi.fn() }; },
+}));
+vi.mock("../lib/api", () => ({ api: { dispatch: { state: () => new Promise(() => {}) } } }));
+
+import { boardRows, nextBoardView, Board } from "./Board";
 
 const base: DispatchState = {
   slots: [], queue: [], completed: [], surplus: [],
@@ -78,5 +87,83 @@ describe("board.css .bd-row sizing", () => {
     const longest = Math.max(...Object.values(STATION_LABEL).map((l) => l.length));
 
     expect(locBudget / longest).toBeGreaterThanOrEqual(COMFORT_RATIO);
+  });
+});
+
+// ── /board altar video cue ───────────────────────────────────────────────────
+// The altar open/close signal already rides dispatch.state, so the board reuses it as a media
+// cue: roster → (altar opens) play one fullscreen clip → (clip ends) black, and stay black for
+// the rest of the run. A sessionStorage flag makes an accidental reload stay black, not replay.
+beforeEach(() => {
+  window.sessionStorage.clear();
+  window.history.replaceState({}, "", "/");
+});
+
+describe("nextBoardView", () => {
+  it("stays on the roster while the altar is closed", () => {
+    expect(nextBoardView("roster", false)).toBe("roster");
+  });
+  it("switches to the video when the altar opens", () => {
+    expect(nextBoardView("roster", true)).toBe("video");
+  });
+  it("keeps playing the video even if the altar closes mid-clip", () => {
+    expect(nextBoardView("video", false)).toBe("video");
+  });
+  it("never replays once black, even if the altar re-opens (one-shot)", () => {
+    expect(nextBoardView("black", true)).toBe("black");
+  });
+});
+
+describe("Board altar video cue", () => {
+  const push = (s: Partial<DispatchState>) =>
+    act(() => socketCb.current?.({ kind: "dispatch.state", state: { ...base, ...s } }));
+
+  test("stays on the roster before the altar opens (no video)", () => {
+    const { container } = render(<Board />);
+    push({ altarOpen: false, queue: [{ id: "a", number: 1, eligible: ["intake"], waitingSince: "", flags: [] }] });
+    expect(container.querySelector("video")).toBeNull();
+    expect(container.querySelector(".bd-rows")).not.toBeNull();
+  });
+
+  test("plays the video once when the altar opens", () => {
+    const { container } = render(<Board />);
+    push({ altarOpen: true });
+    const video = container.querySelector("video");
+    expect(video).not.toBeNull();
+    expect(video).toHaveAttribute("src", "/altar.mp4");
+    expect(video).not.toHaveAttribute("loop"); // one-shot, never loops
+  });
+
+  test("?src overrides the clip path (swap the clip without a rebuild)", () => {
+    window.history.replaceState({}, "", "/board?src=/finale.webm");
+    const { container } = render(<Board />);
+    push({ altarOpen: true });
+    expect(container.querySelector("video")).toHaveAttribute("src", "/finale.webm");
+  });
+
+  test("goes black when the video finishes", () => {
+    const { container } = render(<Board />);
+    push({ altarOpen: true });
+    fireEvent.ended(container.querySelector("video")!);
+    expect(container.querySelector("video")).toBeNull();
+    expect(container.querySelector(".bd-rows")).toBeNull();
+    expect(container.querySelector(".bd-black")).not.toBeNull();
+  });
+
+  test("stays black on reload after the cue has played (no replay)", () => {
+    window.sessionStorage.setItem("channelers.board.played", "1");
+    const { container } = render(<Board />);
+    push({ altarOpen: true });
+    expect(container.querySelector("video")).toBeNull();
+    expect(container.querySelector(".bd-black")).not.toBeNull();
+  });
+
+  test("?reset clears the played flag so the cue can be re-tested", () => {
+    window.sessionStorage.setItem("channelers.board.played", "1");
+    window.history.replaceState({}, "", "/board?reset");
+    const { container } = render(<Board />);
+    push({ altarOpen: false });
+    expect(container.querySelector(".bd-black")).toBeNull();
+    expect(window.sessionStorage.getItem("channelers.board.played")).toBeNull();
   });
 });

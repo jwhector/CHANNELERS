@@ -126,6 +126,27 @@
   color: var(--term-dim);
 }
 
+/* ── Altar media cue ──
+   When the operator opens the altar, the roster gives way to a one-shot fullscreen clip, then a
+   black hold for the rest of the run. `depboard-media` strips the tube chrome (padding, vignette,
+   scanlines) so the clip/black fills the screen edge to edge. */
+.depboard-media {
+  padding: 0;
+  background: #000;
+}
+.depboard-media::after { content: none; } /* no scanline overlay over the clip */
+
+.bd-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* fill the screen (may crop); swap to `contain` to letterbox the whole frame */
+}
+.bd-black {
+  position: absolute;
+  inset: 0;
+  background: #000;
+}
+
 /* ── Motion ── */
 @keyframes bd-blink {
   0%, 100% { opacity: 1; }

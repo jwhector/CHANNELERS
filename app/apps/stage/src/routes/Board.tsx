@@ -48,10 +48,26 @@ export function boardRows(state: DispatchState | null): Row[] {
   return [...fromSlots, ...fromQueue, ...fromReady, ...fromDone].sort((a, b) => a.number - b.number);
 }
 
+/** Where /board sends an accidental reload after the cue has fired, and the default clip path. */
+const PLAYED_KEY = "channelers.board.played";
+const VIDEO_SRC_DEFAULT = "/altar.mp4";
+
+/** The board's media view. The altar open/close signal (dispatch.state.altarOpen) drives a one-shot
+ *  cue: roster → (altar opens) video → (clip ends) black. Once black it never returns — re-opening
+ *  the altar does not replay. Pure so the state machine is unit-tested; the video→black step is the
+ *  clip's `ended` event, handled in the component. */
+export type BoardView = "roster" | "video" | "black";
+export function nextBoardView(current: BoardView, altarOpen: boolean): BoardView {
+  return current === "roster" && altarOpen ? "video" : current;
+}
+
 /** Public lobby roster — every visitor number and their current station, as one
- *  bare terminal. `called` = NOW SERVING (highlighted). Lives off dispatch.state. */
+ *  bare terminal. `called` = NOW SERVING (highlighted). Lives off dispatch.state.
+ *  Doubles as the central display: when the operator opens the altar, the roster gives way to a
+ *  one-shot fullscreen clip, then holds black for the rest of the run (reuses dispatch.state). */
 export function Board() {
   const [state, setState] = useState<DispatchState | null>(null);
+  const [view, setView] = useState<BoardView>("roster");
 
   useBrainSocket((m: WsServerMsg) => {
     if (m.kind === "dispatch.state") setState(m.state);
@@ -60,6 +76,44 @@ export function Board() {
   useEffect(() => {
     void api.dispatch.state().then(setState).catch(() => {});
   }, []);
+
+  // Once-per-run guard: ?reset re-arms the cue for rehearsal; otherwise an accidental reload after
+  // the clip has played returns to black, never a surprise replay.
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has("reset")) sessionStorage.removeItem(PLAYED_KEY);
+    if (sessionStorage.getItem(PLAYED_KEY)) setView("black");
+  }, []);
+
+  // Reuse the altar signal: opening it promotes roster → video. Level-triggered, but nextBoardView
+  // keeps it one-shot — video and black ignore any further altar toggles.
+  useEffect(() => {
+    setView((v) => nextBoardView(v, state?.altarOpen ?? false));
+  }, [state?.altarOpen]);
+
+  if (view === "video") {
+    const src = new URLSearchParams(location.search).get("src") ?? VIDEO_SRC_DEFAULT;
+    return (
+      <main className="depboard depboard-media">
+        <video
+          className="bd-video"
+          src={src}
+          autoPlay
+          playsInline
+          muted
+          ref={(el) => { if (el) el.muted = true; }} // a passive kiosk may only autoplay muted video
+          onEnded={() => { sessionStorage.setItem(PLAYED_KEY, "1"); setView("black"); }}
+        />
+      </main>
+    );
+  }
+
+  if (view === "black") {
+    return (
+      <main className="depboard depboard-media">
+        <div className="bd-black" />
+      </main>
+    );
+  }
 
   const rows = boardRows(state);
 
