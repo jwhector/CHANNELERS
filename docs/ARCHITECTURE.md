@@ -205,7 +205,7 @@ The dispatcher (`apps/brain/src/dispatcher.ts`, `createDispatcher(bus)`) is an i
 | `maxWaitMs` | `DISPATCH_T_MAX_MS` | 240 000 | Anti-starvation threshold |
 | `noShowMs` | `DISPATCH_T_NOSHOW_MS` | 90 000 | No-show flag threshold |
 | `noShowHoldMs` | `DISPATCH_NOSHOW_HOLD_MS` | 120 000 | No-show cooldown (hold after being repooled as a no-show) |
-| `staleMs` | `DISPATCH_T_STALE_MS` | 300 000 | Stale-occupant reap threshold |
+| `staleMs` | `DISPATCH_T_STALE_MS` | 86 400 000 | Stale-occupant reap threshold (~24h ≈ disabled for the show — slow visitors aren't yanked mid-station; operators release abandoned slots via `/station`) |
 | `graceMs` | `DISPATCH_GRACE_MS` | 20 000 | Socket-drop grace window |
 | `tickMs` | `DISPATCH_TICK_MS` | 5 000 | Reconcile cadence |
 | `autoConfirm` | `DISPATCH_AUTO_CONFIRM` | false | Skip operator confirm step (pending → called) |

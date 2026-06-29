@@ -76,11 +76,13 @@ export const config = {
     /** Anti-starvation: waiting longer than this jumps the random pick. */
     maxWaitMs: Number(process.env.DISPATCH_T_MAX_MS ?? 240_000),
     /** Called-but-not-arrived past this → flagged (or auto-repooled if noShowAutoRepool). */
-    noShowMs: Number(process.env.DISPATCH_T_NOSHOW_MS ?? 90_000),
+    noShowMs: Number(process.env.DISPATCH_T_NOSHOW_MS ?? 120_000),
     /** No-show cooldown: a no-show number is held out of new assignment for this long. */
     noShowHoldMs: Number(process.env.DISPATCH_NOSHOW_HOLD_MS ?? 120_000),
-    /** in_progress past this with no completion → auto-reap to waiting. */
-    staleMs: Number(process.env.DISPATCH_T_STALE_MS ?? 300_000),
+    /** in_progress past this with no completion → auto-reap to waiting.
+     *  Default bumped to ~24h for the show so slow visitors are never yanked
+     *  mid-station; operators release abandoned slots manually via /station. */
+    staleMs: Number(process.env.DISPATCH_T_STALE_MS ?? 86_400_000),
     /** Station-screen socket-drop grace before reaping its in_progress occupants. */
     graceMs: Number(process.env.DISPATCH_GRACE_MS ?? 20_000),
     /** Periodic re-evaluation cadence for the time-threshold detectors. */
@@ -91,6 +93,12 @@ export const config = {
     autoArrive: process.env.DISPATCH_AUTO_ARRIVE === "true",
     /** Flip ON to auto-re-pool no-shows instead of just flagging them. */
     noShowAutoRepool: process.env.DISPATCH_NOSHOW_AUTOREPOOL === "true",
+  },
+  paper: {
+    /** Diagnostic: when set, each captured page frame is written here (paper-<ts>.jpg) alongside the
+     *  OCR result (paper-<ts>.txt), so an unreliable feed can be debugged by eye — a dark/blurry/glary
+     *  capture vs. an empty model read. Unset → off (no frames retained). */
+    debugDir: process.env.PAPER_DEBUG_DIR,
   },
   persistence: {
     /** When set, the visitor store is snapshotted to this file every `intervalMs` and hydrated

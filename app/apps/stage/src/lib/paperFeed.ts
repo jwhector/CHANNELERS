@@ -14,5 +14,7 @@ export function captureDataUrl(video: HTMLVideoElement): string | null {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   ctx.drawImage(video, 0, 0);
-  return canvas.toDataURL("image/jpeg", 0.85);
+  // Quality 0.92 (not the usual ~0.85): JPEG ringing around glyph edges costs OCR accuracy, and a
+  // single still page is cheap to send at higher fidelity.
+  return canvas.toDataURL("image/jpeg", 0.92);
 }

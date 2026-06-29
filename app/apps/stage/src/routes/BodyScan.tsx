@@ -92,9 +92,9 @@ function BodyScanStandby({ occ, connected }: { occ: SlotOccupant | undefined; co
 
 const RECORD_SEC = 3.5; // hold-still duration to capture the pose
 const STILLNESS = 0.05; // max per-frame motion (radians) that still counts as "held"
-const CONFIRM_SEC = 1.5; // hold to confirm the repeat (mirrors the altar verify hold)
+const CONFIRM_SEC = 3; // hold to confirm the repeat (mirrors the altar verify hold)
 const MATCH_THRESH = 0.9; // similarity the repeat must reach (altar's value)
-const BREAK_THRESH = 0.7; // they must leave pose A (similarity drops below this) before the repeat is armed
+const BREAK_THRESH = 0.8; // they must leave pose A (similarity drops below this) before the repeat is armed
 
 function BodyScanCamera({
   visitorId,

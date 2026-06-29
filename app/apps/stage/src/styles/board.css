@@ -91,10 +91,11 @@
 
 .bd-row {
   /* Fixed column width every wrapped column lines up to. Sized to fit the longest label
-     ("STATION B - TYPEWRITER") whole: a 4ch number, a 2ch gap, and the location. VT323's letters
-     run wider than its "0", so the ch-based width is generous on purpose — short labels just leave
-     trailing space rather than risk truncating a station name. */
-  width: 34ch;
+     ("STATION A - TIME OFFERING", 25ch) whole: a 4ch number, a 2ch gap, and the location. VT323's
+     letters run wider than its "0", so the ch-based width is generous on purpose — short labels just
+     leave trailing space rather than risk truncating a station name. Board.test.tsx guards that this
+     width still clears the longest STATION_LABEL with the column's ~1.2ch-per-char comfort margin. */
+  width: 38ch;
   display: grid;
   grid-template-columns: 4ch 1fr;
   gap: 0 2ch;

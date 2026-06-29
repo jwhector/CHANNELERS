@@ -4,6 +4,30 @@ let current: HTMLAudioElement | null = null;
 // window can't both reach play() and talk over each other.
 let generation = 0;
 
+// Whether oracle audio is currently sounding (MP3 element or browser TTS). Drives the
+// /channel "Stop voice" control so a performer can see — and cut — an overlong divination.
+let speaking = false;
+const speakingListeners = new Set<(speaking: boolean) => void>();
+
+function setSpeaking(next: boolean): void {
+  if (next === speaking) return;
+  speaking = next;
+  for (const cb of speakingListeners) cb(next);
+}
+
+/** True while an oracle clip is sounding. */
+export function isSpeaking(): boolean {
+  return speaking;
+}
+
+/** Subscribe to playback start/stop; returns an unsubscribe. Fires only on change. */
+export function onSpeakingChange(cb: (speaking: boolean) => void): () => void {
+  speakingListeners.add(cb);
+  return () => {
+    speakingListeners.delete(cb);
+  };
+}
+
 /** Stop any in-flight oracle audio — MP3 playback and/or browser speech. */
 export function stopSpeaking(): void {
   generation++;
@@ -12,6 +36,7 @@ export function stopSpeaking(): void {
     current = null;
   }
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  setSpeaking(false);
 }
 
 /** Browser speechSynthesis — the offline fallback when the brain has no ElevenLabs key. */
@@ -19,7 +44,10 @@ function speakViaBrowser(text: string, rate?: number): void {
   if (!("speechSynthesis" in window)) return;
   const u = new SpeechSynthesisUtterance(text);
   if (rate !== undefined) u.rate = rate; // utterance rate ≈ <audio> playbackRate (1 = normal, lower = slower)
+  u.onend = () => setSpeaking(false);
+  u.onerror = () => setSpeaking(false);
   window.speechSynthesis.cancel();
+  setSpeaking(true);
   window.speechSynthesis.speak(u);
 }
 
@@ -52,7 +80,10 @@ async function startClip(text: string, opts: ClipOpts, mine: number): Promise<HT
         audio.playbackRate = opts.rate;
       }
       current = audio;
-      const done = () => URL.revokeObjectURL(url);
+      const done = () => {
+        URL.revokeObjectURL(url);
+        setSpeaking(false);
+      };
       audio.onended = done;
       audio.onerror = done;
       if (opts.sinkId && typeof audio.setSinkId === "function") {
@@ -68,6 +99,7 @@ async function startClip(text: string, opts: ClipOpts, mine: number): Promise<HT
         }
       }
       await audio.play();
+      setSpeaking(true);
       return audio;
     }
   } catch {

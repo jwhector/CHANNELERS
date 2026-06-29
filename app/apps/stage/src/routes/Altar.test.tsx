@@ -28,7 +28,7 @@ const visitor = {
   id: "v1",
   number: 7,
   location: { state: "in_progress" },
-  survey: { name: "Ada" },
+  survey: { name: "Ada", freeText: { weekMood: "Disco Love" } },
 } as unknown as VisitorProfile;
 
 beforeEach(() => verifyPose.mockClear());
@@ -37,6 +37,17 @@ test("override is the primary action and calls verifyPose", async () => {
   render(<Gate visitor={visitor} connected showCamera={false} />);
   await userEvent.click(screen.getByRole("button", { name: /unlock \(override\)/i }));
   expect(verifyPose).toHaveBeenCalledWith("v1");
+});
+
+test("shows the called user's synth patch (weekMood) from intake", () => {
+  render(<Gate visitor={visitor} connected showCamera={false} />);
+  expect(screen.getByText(/synth patch · disco love/i)).toBeInTheDocument();
+});
+
+test("synth patch falls back to — when weekMood is unanswered", () => {
+  const noMood = { ...visitor, survey: { name: "Ada", freeText: {} } } as unknown as VisitorProfile;
+  render(<Gate visitor={noMood} connected showCamera={false} />);
+  expect(screen.getByText(/synth patch · —/i)).toBeInTheDocument();
 });
 
 test("showCamera=false hides all camera UI", () => {

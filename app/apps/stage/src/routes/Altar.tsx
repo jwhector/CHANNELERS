@@ -117,6 +117,7 @@ export function Gate({ visitor, connected, showCamera = true }: { visitor: Visit
         <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
       </header>
       <p className="dim">Number {visitor.number} · {visitor.survey?.name ?? "—"}</p>
+      <p className="synth-patch">Synth patch · {visitor.survey?.freeText?.weekMood ?? "—"}</p>
       {/* {ready && <p className="poseflash">ORACLE READY proceed to be channelled.</p>} */}
       {error && <p className="error">{error}</p>}
 

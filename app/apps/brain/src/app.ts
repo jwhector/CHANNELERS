@@ -13,7 +13,7 @@ import { createDispatcher } from "./dispatcher";
 import { transcribeWav } from "./stt";
 import { synthesizeSpeech } from "./tts";
 import { generateFirstPass, getChoreoConfig, setChoreoConfig } from "./choreo";
-import { ocrPage } from "./paper";
+import { ocrPage, savePaperDebugFrame } from "./paper";
 import { config } from "./config";
 import { initAbleton } from "./ableton";
 
@@ -81,19 +81,26 @@ export async function buildApp(
   // ── paper station: capture → OCR → animate (identity-agnostic spectacle, spec 2026-06-22) ──
   // Body is a data: URL (the stage grabs a webcam frame on a physical button). gpt-4o vision OCRs
   // it; on no-key/failure we emit placeholder text so the "into the matrix" animation never blocks.
+  // Outcomes are logged (read vs. empty vs. error) — and, with PAPER_DEBUG_DIR set, the frame is
+  // dumped to disk — so an unreliable feed is diagnosable instead of collapsing to one "illegible".
   const PAPER_FALLBACK_TEXT = "⋯ the page is illegible ⋯";
   const PaperFeedBody = z.object({ image: z.string().min(1) });
   app.post("/api/paper/feed", async (req, reply) => {
     const parsed = PaperFeedBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const fedAt = new Date().toISOString();
     let text: string | null = null;
     try {
       text = await ocrPage(parsed.data.image);
     } catch (err) {
-      req.log.error(err); // degrade — never block the spectacle
+      req.log.error({ err }, "paper OCR failed"); // degrade — never block the spectacle
+    }
+    if (text) req.log.info({ chars: text.length, preview: text.slice(0, 80) }, "paper OCR read");
+    else req.log.warn("paper OCR returned nothing → placeholder");
+    if (config.paper.debugDir) {
+      await savePaperDebugFrame(config.paper.debugDir, parsed.data.image, text, fedAt, req.log);
     }
     const finalText = text && text.length > 0 ? text : PAPER_FALLBACK_TEXT;
-    const fedAt = new Date().toISOString();
     bus.publish({ type: "paper.fed", text: finalText, fedAt });
     return { text: finalText, fedAt };
   });

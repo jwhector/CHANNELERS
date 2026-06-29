@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi, type Mock } from "vitest";
-import { speak, speakSequence, createRecognizer } from "./speech";
+import { speak, speakSequence, createRecognizer, isSpeaking, onSpeakingChange, stopSpeaking } from "./speech";
 
 /** An <audio> stand-in that records what was played and lets a test fire its lifecycle events. */
 class SeqAudio {
@@ -221,6 +221,78 @@ test("a later speak() preempts an in-flight sequence — its remaining clips don
   SeqAudio.instances[0]!.fire("ended"); // even if the first clip "ends" late, the sequence was abandoned
   await seq;
   expect(SeqAudio.played).toEqual(["cue one", "new cue"]); // "prepare" never voiced
+});
+
+test("onSpeakingChange reports true while the oracle MP3 plays and false once it ends", async () => {
+  let made: { onended: (() => void) | null } | undefined;
+  class FakeAudio {
+    onended: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    constructor(public src: string) {
+      made = this;
+    }
+    play = vi.fn().mockResolvedValue(undefined);
+    pause = vi.fn();
+  }
+  vi.stubGlobal("Audio", FakeAudio);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob() }));
+
+  stopSpeaking(); // normalise to a known-idle baseline before subscribing
+  const events: boolean[] = [];
+  const off = onSpeakingChange((v) => events.push(v));
+
+  expect(isSpeaking()).toBe(false);
+  await speak("the forms are processing", { archetype: "tree" });
+  expect(isSpeaking()).toBe(true);
+  expect(events).toEqual([true]);
+
+  made!.onended!(); // the clip finishes on its own
+  expect(isSpeaking()).toBe(false);
+  expect(events).toEqual([true, false]);
+
+  off();
+});
+
+test("stopSpeaking notifies subscribers that playback was cut", async () => {
+  class FakeAudio {
+    onended: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    constructor(public src: string) {}
+    play = vi.fn().mockResolvedValue(undefined);
+    pause = vi.fn();
+  }
+  vi.stubGlobal("Audio", FakeAudio);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob() }));
+
+  await speak("an overlong divination", { archetype: "tree" });
+  expect(isSpeaking()).toBe(true);
+
+  const events: boolean[] = [];
+  const off = onSpeakingChange((v) => events.push(v));
+  stopSpeaking();
+  expect(events).toEqual([false]);
+  expect(isSpeaking()).toBe(false);
+
+  off();
+});
+
+test("onSpeakingChange returns an unsubscribe that stops further notifications", async () => {
+  class FakeAudio {
+    onended: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    constructor(public src: string) {}
+    play = vi.fn().mockResolvedValue(undefined);
+    pause = vi.fn();
+  }
+  vi.stubGlobal("Audio", FakeAudio);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob() }));
+
+  stopSpeaking();
+  const events: boolean[] = [];
+  const off = onSpeakingChange((v) => events.push(v));
+  off();
+  await speak("nobody is listening", { archetype: "tree" });
+  expect(events).toEqual([]);
 });
 
 class FakeRecorder {

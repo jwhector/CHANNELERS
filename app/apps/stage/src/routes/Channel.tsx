@@ -9,7 +9,7 @@ import {
 } from "@channelers/shared";
 import { api } from "../lib/api";
 import { useBrainSocket } from "../lib/useBrainSocket";
-import { speak, stopSpeaking, createRecognizer, type Recognizer } from "../lib/speech";
+import { speak, stopSpeaking, isSpeaking, onSpeakingChange, createRecognizer, type Recognizer } from "../lib/speech";
 import { loadHandle, saveHandle, clearHandle } from "../lib/sessionHandle";
 import { AlteredStateConsole } from "../components/AlteredStateConsole";
 import { useDevices } from "../lib/devices";
@@ -44,6 +44,7 @@ export function Channel() {
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false); // oracle TTS currently sounding — drives Stop voice
 
   // Live Altered-State tuning — seeded from the brain's tuning.state broadcast, edited here.
   const [tuning, setTuning] = useState<OracleTuning>(DEFAULT_TUNING);
@@ -184,6 +185,12 @@ export function Channel() {
     void refresh();
   }, []);
 
+  // Mirror the speech module's playback state so the Stop-voice control reflects reality.
+  useEffect(() => {
+    setSpeaking(isSpeaking());
+    return onSpeakingChange(setSpeaking);
+  }, []);
+
   // On every (re)connect, re-assert our session if we have one: recovers it after a page refresh,
   // and on a transient blip cancels the brain's grace reaper before it can kill a still-live session.
   useEffect(() => {
@@ -238,6 +245,11 @@ export function Channel() {
     send({ kind: "session.end", sessionId: mySessionId });
   }
 
+  // Manual override: cut an overlong divination's TTS without ending the session.
+  function stopVoice() {
+    stopSpeaking();
+  }
+
   const busyVisitorIds = new Set(roster.map((s) => s.visitorId));
   const isOracleReady = (v: VisitorProfile) =>
     !!v.personaAt && !!v.poseVerifiedAt && !v.sessionEndAt;
@@ -248,7 +260,7 @@ export function Channel() {
   if (mySessionId) {
     return (
       <main className="void oracle">
-        <header>
+        <header className="oracle-head">
           <h1>Oracle</h1>
           <span className={connected ? "led on" : "led"} title={connected ? "live" : "offline"} />
           <label className="toggle">
@@ -273,7 +285,9 @@ export function Channel() {
             needsPermission={mic.needsPermission}
             onEnableLabels={mic.enableLabels}
           />
-          <button className="end" onClick={endSession}>End</button>
+          <button className="end end-session" onClick={endSession} title="End this visitor's channeling session">
+            <span aria-hidden="true">⏏</span> End session
+          </button>
         </header>
 
         {sessionMeta && (
@@ -284,19 +298,8 @@ export function Channel() {
         <AlteredStateConsole tuning={tuning} onChange={changeTuning} connected={connected} />
         {error && <p className="error">{error}</p>}
 
-        <div className="teleprompter">
-          {display || "…"}
-          {live && <span className="caret">▍</span>}
-        </div>
-
-        <ul className="transcript">
-          {history.map((l, i) => (
-            <li key={i} className={`bubble ${l.role}`}>
-              <span>{l.text}</span>
-            </li>
-          ))}
-        </ul>
-
+        {/* Control strip sits above the oracle text stream so the performer never scrolls to reach
+            the mic / input — and can cut an overlong divination's voice on demand. */}
         <div className="inputrow">
           {recRef.current?.supported && (
             <button className={listening ? "mic on" : "mic"} onClick={toggleMic}>
@@ -312,7 +315,28 @@ export function Channel() {
             }}
           />
           <button className="submit" onClick={submit}>Say</button>
+          <button
+            className={speaking ? "stopvoice on" : "stopvoice"}
+            onClick={stopVoice}
+            disabled={!speaking}
+            title="Cut the oracle's voice (stops TTS without ending the session)"
+          >
+            <span aria-hidden="true">⏹</span> Stop voice
+          </button>
         </div>
+
+        <div className="teleprompter">
+          {display || "…"}
+          {live && <span className="caret">▍</span>}
+        </div>
+
+        <ul className="transcript">
+          {history.map((l, i) => (
+            <li key={i} className={`bubble ${l.role}`}>
+              <span>{l.text}</span>
+            </li>
+          ))}
+        </ul>
       </main>
     );
   }

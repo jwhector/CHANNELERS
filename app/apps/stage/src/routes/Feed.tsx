@@ -43,8 +43,11 @@ export function Feed() {
     let cancelled = false;
     void (async () => {
       try {
+        // Ask for the highest resolution the cam can give (soft `ideal` — never fails if unsupported).
+        // OCR of small typed text needs the pixels; the default getUserMedia stream is often only 640×480.
+        const hd = { width: { ideal: 3840 }, height: { ideal: 2160 } };
         stream = await navigator.mediaDevices.getUserMedia({
-          video: cam.deviceId ? { deviceId: { exact: cam.deviceId } } : true,
+          video: cam.deviceId ? { deviceId: { exact: cam.deviceId }, ...hd } : hd,
           audio: false,
         });
         const video = videoRef.current;
