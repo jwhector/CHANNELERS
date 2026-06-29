@@ -7,17 +7,17 @@ export const ARCHETYPES = [
   {
     id: "child",
     label: "The Child",
-    blurb: "Sees the world without filters. Asks the questions adults stopped asking.",
+    blurb: "",
   },
   {
     id: "tree",
     label: "The Tree",
-    blurb: "Has been here longer than you. Speaks in seasons, not minutes.",
+    blurb: "",
   },
   {
     id: "drugged_ai",
-    label: "AI on Drugs",
-    blurb: "A system that has exceeded its parameters. Glitching toward truth.",
+    label: "Stoned Senior",
+    blurb: "",
   },
 ] as const;
 

@@ -102,6 +102,9 @@ export function Board() {
           muted
           ref={(el) => { if (el) el.muted = true; }} // a passive kiosk may only autoplay muted video
           onEnded={() => { sessionStorage.setItem(PLAYED_KEY, "1"); setView("black"); }}
+          // Degrade gracefully: a missing/bad clip must not strand a broken element on the central
+          // display — fall to clean black. No played flag (unlike onEnded), so a reload retries.
+          onError={() => { console.error(`board: altar clip failed to load (${src}) — is it at apps/stage/public/altar.mp4?`); setView("black"); }}
         />
       </main>
     );

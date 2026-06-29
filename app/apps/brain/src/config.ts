@@ -21,7 +21,7 @@ export const config = {
   wsHeartbeatMs: Number(process.env.WS_HEARTBEAT_MS ?? 30_000),
   openaiApiKey: process.env.OPENAI_API_KEY,
   transformModel: process.env.TRANSFORM_MODEL ?? "gpt-5-mini",
-  // Both default to gpt-4o; override per-role via env (ARCHITECTURE.md §5.3).
+  // default to gpt-4o; override per-role via env (ARCHITECTURE.md §5.3).
   oracleModel: process.env.ORACLE_MODEL ?? "gpt-4o",
   // OpenAI Whisper STT model for the divination mic (apps/brain/src/stt.ts).
   // Falls back to the local Xenova transcriber when OPENAI_API_KEY is unset.

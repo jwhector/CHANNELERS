@@ -12,8 +12,11 @@ const CONFESSION_FIELDS = [
   "knowConfident",
   "aiFeeling",
   "happyMemory",
-  "tenderTexture",
   "cryFrequency",
+  "birthPlace",
+  "eyeColor",
+  "occupation",
+  "passiveAggression"
 ] as const;
 
 /** Human phrasings for the intake field ids, so the prompt reads as a person's answers and not
@@ -60,15 +63,11 @@ function renderIntake(survey: SurveyResponse): string {
     .map((id) => `${fieldPhrasing(id)}: ${val(id)}`);
 
   const out = [`This visitor — ticket #${survey.name} — just filled out the intake desk's form. Most of it is noise.`];
-  if (confessions.length) out.push(``, `What they let slip:`, ...confessions);
-  if (trivia.length) out.push(``, `Incidental marks on the form (texture — most of it doesn't matter):`, `  ${trivia.join(" · ")}`);
+  if (confessions.length) out.push(``, `What they divulged:`, ...confessions);
+  // if (trivia.length) out.push(``, `Incidental marks on the form (texture — most of it doesn't matter):`, `  ${trivia.join(" · ")}`);
   out.push(
     ``,
-    `Let at least one thing they confessed AND at least one incidental detail catch on you, and let the two collide — ` +
-      `as if the small absurd thing were secretly about the large unspoken one. Anchor on what they confessed; glance ` +
-      `off the absurd detail sideways. Don't explain the connection, don't itemize, and never read the form back. ` +
-      `Everything else is allowed to fall away.`,
-  );
+    `You must incorporate at least three deatils they divulged, but integrate it into your response as naturally as possible. Don't explain the connection, don't itemize, and never read the form back or explain the connection to the intake form. Remember to end with one piece of concrete actionable advice.`);
   return out.join("\n");
 }
 
@@ -91,7 +90,7 @@ export function buildSystemPrompt(persona: Persona, survey: SurveyResponse): str
     ``,
     renderIntake(survey),
     ``,
-    `Feel free to make replies longer. This is spoken aloud and channelled by a performer.`,
+    `Keep your response to six sentences or less. Do not be too verbose. Keep responses short and concise. This is spoken aloud and channelled by a performer, and we do not want to take up too much time.`,
   ].join("\n");
 }
 

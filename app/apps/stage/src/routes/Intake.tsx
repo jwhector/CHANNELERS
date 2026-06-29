@@ -210,8 +210,8 @@ export function ExitScreen() {
   return (
     <div className="crt-processed">
       <p className="crt-exit">
-        step away from the terminal
-        <span className="crt-exit-note">await your summons</span>
+        You have completed the intake survey.
+        <span className="crt-exit-note">Please continue to your next station.</span>
       </p>
     </div>
   );

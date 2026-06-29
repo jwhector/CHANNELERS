@@ -6,3 +6,6 @@ dist/
 .vite/
 # Local visitor-store snapshot (VISITOR_SNAPSHOT_PATH); dev recovery file, not source.
 apps/brain/tmp/
+
+# Large video asset — kept local, shared out-of-band (too big for GitHub 100MB limit)
+apps/stage/public/altar.mp4

@@ -150,6 +150,18 @@ describe("Board altar video cue", () => {
     expect(container.querySelector(".bd-black")).not.toBeNull();
   });
 
+  test("a media-load failure degrades to clean black (retryable: no played flag set)", () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { container } = render(<Board />);
+    push({ altarOpen: true });
+    fireEvent.error(container.querySelector("video")!);
+    expect(container.querySelector("video")).toBeNull();
+    expect(container.querySelector(".bd-black")).not.toBeNull();
+    // a failed load is not a completed play — leave the cue re-armed so a reload retries during setup
+    expect(window.sessionStorage.getItem("channelers.board.played")).toBeNull();
+    errSpy.mockRestore();
+  });
+
   test("stays black on reload after the cue has played (no replay)", () => {
     window.sessionStorage.setItem("channelers.board.played", "1");
     const { container } = render(<Board />);

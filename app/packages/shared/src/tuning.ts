@@ -89,7 +89,7 @@ export type Preset = {
 
 export type PresetName = Exclude<Intensity, "baseline" | "custom">;
 
-const TOKENS = 100; // module has no max-tokens; seed every preset with today's oracle value
+const TOKENS = 300; // module has no max-tokens; seed every preset with today's oracle value
 const HBUDGET = 0.6; // module default hallucinationBudget
 
 /** Verbatim values from app/Ayahuasca_v1.3.js (PRESETS). */
