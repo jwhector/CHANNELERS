@@ -72,6 +72,9 @@ importers:
 
   apps/stage:
     dependencies:
+      '@channelers/oracles':
+        specifier: workspace:*
+        version: link:../../packages/oracles
       '@channelers/shared':
         specifier: workspace:*
         version: link:../../packages/shared

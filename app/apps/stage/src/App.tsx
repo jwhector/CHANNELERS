@@ -11,8 +11,9 @@ import { Dispatch } from "./routes/Dispatch";
 import { Souvenir } from "./routes/Souvenir";
 import { Feed } from "./routes/Feed";
 import { Station } from "./routes/Station";
+import { PromptLab } from "./routes/PromptLab";
 
-const SCREENS = ["intake", "bodyscan", "altar", "channel", "choreo", "perform", "console", "board", "dispatch", "station", "souvenir", "feed"] as const;
+const SCREENS = ["intake", "bodyscan", "altar", "channel", "choreo", "perform", "console", "board", "dispatch", "station", "souvenir", "feed", "prompt-lab"] as const;
 
 export function App() {
   return (
@@ -32,6 +33,7 @@ export function App() {
         <Route path="/station/:station" element={<Station />} />
         <Route path="/souvenir" element={<Souvenir />} />
         <Route path="/feed" element={<Feed />} />
+        <Route path="/prompt-lab" element={<PromptLab />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>

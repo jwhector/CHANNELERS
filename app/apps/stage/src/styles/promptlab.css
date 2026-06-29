@@ -1,0 +1,127 @@
+/* Prompt Lab (/prompt-lab) — utilitarian workshop tool, not a show surface. */
+.lab {
+  padding: 1rem 1.25rem;
+  color: #d8d8d8;
+  background: #111;
+  min-height: 100vh;
+  font: 14px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+}
+.lab-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.lab-head h1 {
+  font-size: 1.1rem;
+  margin: 0;
+  letter-spacing: 0.04em;
+}
+.lab-hint { font-size: 0.8rem; }
+.lab .dim { color: #888; }
+.lab code { color: #9ad; }
+
+.lab-error { color: #ff7b72; margin: 0.4rem 0; }
+.lab-status { margin: 0.3rem 0; }
+
+.lab-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1.1fr) minmax(300px, 1.2fr);
+  gap: 1rem;
+  margin-top: 0.75rem;
+  align-items: start;
+}
+@media (max-width: 980px) {
+  .lab-grid { grid-template-columns: 1fr; }
+}
+
+.lab-col {
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 0.75rem 0.85rem;
+  max-height: calc(100vh - 110px);
+  overflow: auto;
+}
+.lab-col h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #9aa;
+  margin: 0.9rem 0 0.4rem;
+}
+.lab-col h3:first-child { margin-top: 0; }
+
+.lab-row { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+.lab-spread { justify-content: space-between; }
+
+.lab input, .lab select, .lab textarea {
+  background: #0d0d0d;
+  color: #e6e6e6;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 0.35rem 0.45rem;
+  font: inherit;
+}
+.lab select { flex: 1; }
+.lab textarea { width: 100%; min-height: 3.2rem; resize: vertical; }
+.lab-raw { min-height: 22rem; white-space: pre; }
+
+.lab button {
+  background: #242424;
+  color: #ddd;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+  font: inherit;
+}
+.lab button:hover:not(:disabled) { background: #2e2e2e; }
+.lab button:disabled { opacity: 0.4; cursor: not-allowed; }
+.lab-primary { background: #1d3a2a !important; border-color: #2f6347 !important; }
+.lab-end { background: #3a1d1d !important; border-color: #633 !important; }
+
+.lab-field { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.5rem 0; }
+.lab-field > span, .lab-field > legend { color: #aaa; font-size: 0.8rem; }
+.lab-scale { display: flex; align-items: center; gap: 0.5rem; }
+.lab-scale input { flex: 1; }
+.lab-scale em { color: #9ad; font-style: normal; min-width: 1.2rem; text-align: center; }
+.lab-multi { border: 1px solid #2a2a2a; border-radius: 4px; padding: 0.4rem 0.6rem; }
+.lab-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: #cfcfcf; }
+.lab-check input { flex: none; }
+
+.lab-preview {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0d0d0d;
+  border: 1px solid #262626;
+  border-radius: 4px;
+  padding: 0.6rem;
+  color: #cfe;
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.lab-teleprompter {
+  background: #0d0d0d;
+  border: 1px solid #262626;
+  border-radius: 4px;
+  padding: 0.7rem;
+  margin: 0.5rem 0;
+  min-height: 5rem;
+  color: #f0e9d2;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+.lab-teleprompter .caret { animation: lab-blink 1s steps(1) infinite; color: #f0e9d2; }
+@keyframes lab-blink { 50% { opacity: 0; } }
+
+.lab-transcript { list-style: none; padding: 0; margin: 0.5rem 0 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.lab-bubble { padding: 0.35rem 0.55rem; border-radius: 5px; font-size: 0.85rem; }
+.lab-bubble.visitor { background: #1a2330; color: #bcd; align-self: flex-end; max-width: 85%; }
+.lab-bubble.oracle { background: #201a26; color: #e3d6ef; align-self: flex-start; max-width: 90%; }
+
+.lab .led {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #533; display: inline-block;
+}
+.lab .led.on { background: #4c9; box-shadow: 0 0 6px #4c9; }
