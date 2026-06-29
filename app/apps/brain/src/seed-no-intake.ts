@@ -5,7 +5,7 @@
  * different intakes without re-walking the whole circuit each time.
  *
  * The loop:
- *   pnpm seed:no-intake            # one such visitor (archetype "tree")
+ *   pnpm seed:no-intake            # one such visitor (archetype "child")
  *   → submit any intake survey for them (the /intake kiosk, or POST /api/visitors/:id/intake)
  *   → channel them on /channel — the oracle builds its prompt from THAT fresh survey
  *   (the divination reads `visitor.survey` live at session start; buildPrompt.ts).
@@ -24,7 +24,7 @@
  *
  * No new brain routes, no kiosk flow. The brain must already be running.
  *
- *   pnpm seed:no-intake                      # 1 visitor, archetype "tree"
+ *   pnpm seed:no-intake                      # 1 visitor, archetype "child"
  *   pnpm seed:no-intake --count 3            # three of them
  *   pnpm seed:no-intake --archetype drugged_ai
  *   pnpm seed:no-intake --number 9100        # start ticket numbers at 9100
@@ -49,7 +49,7 @@ import {
 } from "./seed-lib";
 
 const DEFAULT_COUNT = 1;
-const DEFAULT_ARCHETYPE = "tree";
+const DEFAULT_ARCHETYPE = "child";
 
 const BASE = resolveBase(flags(process.argv.slice(2)));
 const client = makeClient(BASE);

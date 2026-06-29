@@ -50,7 +50,7 @@ async function streamWords(line: string, onDelta: (chunk: string) => void): Prom
 
 /** f(intake, archetype) → an NL movement score, generated at persona-set. Stub when no key/on error. */
 export async function generateFirstPass(visitor: VisitorRecord): Promise<ChoreoScore> {
-  const archetype = visitor.archetype ?? "tree";
+  const archetype = visitor.archetype ?? "child"; // single-persona show (was "tree")
   if (!visitor.survey) return { score: "" };
   if (!config.openaiApiKey) return stubFirstPass(visitor.survey, archetype);
   try {

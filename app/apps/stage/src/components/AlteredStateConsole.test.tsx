@@ -15,6 +15,20 @@ test("clicking a preset loads its verbatim values", () => {
   expect(next.effects.egoDissolution).toBe(true);
 });
 
+test("only the recommended levers are shown", () => {
+  render(<AlteredStateConsole tuning={DEFAULT_TUNING} onChange={vi.fn()} connected />);
+
+  // dead / de-recommended controls are no longer rendered
+  expect(screen.queryByText("cognitionFlexibility")).toBeNull();
+  expect(screen.queryByText("memoryBlend")).toBeNull();
+  expect(screen.queryByText("driftIntensity")).toBeNull();
+  expect(screen.queryByText(/outputMangle/)).toBeNull();
+  expect(screen.queryByText("apply to seeds transform")).toBeNull();
+
+  // kept sliders: 5 sampling + semanticDrift + hallucinationFactor
+  expect(screen.getAllByRole("slider")).toHaveLength(7);
+});
+
 test("editing a sampling slider detaches to custom", () => {
   const onChange = vi.fn();
   render(<AlteredStateConsole tuning={DEFAULT_TUNING} onChange={onChange} connected />);

@@ -285,8 +285,8 @@ export function Channel() {
             needsPermission={mic.needsPermission}
             onEnableLabels={mic.enableLabels}
           />
-          <button className="end end-session" onClick={endSession} title="End this visitor's channeling session">
-            <span aria-hidden="true">⏏</span> End session
+          <button className="end end-session" onClick={endSession} title="End this visitor's channeling session" style={{ cursor: 'pointer' }}>
+            End session
           </button>
         </header>
 

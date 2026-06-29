@@ -134,7 +134,8 @@ export function Console() {
                 onChange={(e) => void api.setPersona(v.id, e.target.value).then(refresh)}
               >
                 <option value="" disabled>set persona…</option>
-                {ARCHETYPES.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                {/* single-persona show: only the child is offered */}
+                {ARCHETYPES.filter((a) => a.id === "child").map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
               </select>
               <button className="choice" onClick={() => void api.dispatch.repool(v.id).then(refresh)}>re-pool</button>
               <button className="end" onClick={() => void api.dispatch.remove(v.id).then(refresh)}>remove</button>

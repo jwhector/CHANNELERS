@@ -41,7 +41,7 @@ const { get, post } = makeClient(BASE);
 async function main() {
   const f = flags(process.argv.slice(2));
 
-  const archetype = f.archetype ?? "tree";
+  const archetype = f.archetype ?? "child"; // single-persona show (was "tree")
   if (!ARCHETYPES.some((a) => a.id === archetype)) {
     const ids = ARCHETYPES.map((a) => a.id).join(", ");
     throw new Error(`unknown archetype "${archetype}" — choose one of: ${ids}`);

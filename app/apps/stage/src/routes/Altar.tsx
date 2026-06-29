@@ -169,7 +169,8 @@ export function Gate({ visitor, connected, showCamera = true }: { visitor: Visit
 
       <h3>2 · Choose the oracle</h3>
       <div className="choices oracle-choices">
-        {ARCHETYPES.map((a) => (
+        {/* single-persona show: only the child is offered (revert: drop the filter) */}
+        {ARCHETYPES.filter((a) => a.id === "child").map((a) => (
           <button
             key={a.id}
             type="button"

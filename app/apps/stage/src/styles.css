@@ -261,6 +261,9 @@ pre {
 .as-val { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
 .as-check { display: flex; align-items: center; gap: 6px; padding: 3px 0; color: var(--ink); cursor: pointer; }
 .altered-state h4 .as-check { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--dim); font-weight: 400; }
+.as-field { display: grid; gap: 1px; padding: 2px 0; }
+.as-hint { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.4; opacity: 0.8; text-transform: none; letter-spacing: 0; }
+.as-presets-hint { margin-top: -6px; }
 
 /* /station — per-station performer arrival-confirm view */
 .stationops .ops-group { margin: 1.5rem 0; }
